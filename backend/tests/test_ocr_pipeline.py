@@ -1,0 +1,110 @@
+from __future__ import annotations
+
+import io
+
+import pytest
+from PIL import Image
+
+from backend.app.ocr_pipeline import (
+    OCRInputError,
+    OCRRawResult,
+    OCRWord,
+    extract_institution_fields,
+    process_institution_document,
+)
+
+
+def image_bytes(format_name: str = "PNG", size: tuple[int, int] = (80, 60)) -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", size, "white").save(buffer, format=format_name)
+    return buffer.getvalue()
+
+
+class FakeEngine:
+    def __init__(self, words: tuple[OCRWord, ...]):
+        self.words = words
+        self.calls = 0
+
+    def recognize(self, image_bytes: bytes) -> OCRRawResult:
+        self.calls += 1
+        return OCRRawResult(self.words, "fake-test-engine", "1.0")
+
+
+def test_extracts_only_context_labelled_institution_fields():
+    fields = extract_institution_fields(
+        "Institution Name: Example Technical Institute\n"
+        "Certificate No: CERT-2026/0042\n"
+        "Issue Date: 2026-04-30\n"
+        "Valid Until: 2027-04-30\n"
+        "Academic Year: 2026/2027",
+        confidence=0.88,
+    )
+    assert fields["institution_name"].value == "Example Technical Institute"
+    assert fields["certificate_number"].value == "CERT-2026/0042"
+    assert fields["issue_date"].value == "2026-04-30"
+    assert fields["valid_until"].value == "2027-04-30"
+    assert fields["academic_year"].value == "2026-2027"
+    assert fields["institution_name"].confidence == 0.88
+    assert fields["institution_name"].evidence_text.startswith("Institution Name:")
+
+
+@pytest.mark.parametrize("ambiguous", ["30/04/2026", "04/30/2026", "2026-02-30", "April 2026"])
+def test_ambiguous_or_invalid_dates_are_not_guessed(ambiguous):
+    fields = extract_institution_fields(f"Valid Until: {ambiguous}", confidence=0.9)
+    assert "valid_until" not in fields
+
+
+def test_personal_identity_fields_are_not_extracted():
+    fields = extract_institution_fields(
+        "Name: Example Person\nDOB: 2000-01-01\n"
+        "Student ID: 1234567890\nInstitution Name: Example College"
+    )
+    assert set(fields) == {"institution_name"}
+    assert "name" not in fields
+    assert "dob" not in fields
+    assert "student_id" not in fields
+
+
+def test_pipeline_validates_image_and_preserves_source_hash_and_review_gate():
+    payload = image_bytes()
+    engine = FakeEngine((OCRWord("Institution", 0.9), OCRWord("Name:", 0.9), OCRWord("Example", 0.9), OCRWord("College", 0.9)))
+    result = process_institution_document(payload, engine)
+    assert engine.calls == 1
+    assert result.engine == "fake-test-engine"
+    assert result.source_sha256 is not None and len(result.source_sha256) == 64
+    assert result.requires_human_review is True
+    assert result.fields == {}
+    assert any("manually" in warning for warning in result.warnings)
+
+
+def test_pipeline_rejects_non_image_bytes_before_calling_engine():
+    engine = FakeEngine(())
+    with pytest.raises(OCRInputError):
+        process_institution_document(b"not an image", engine)
+    assert engine.calls == 0
+
+
+def test_pipeline_rejects_unsupported_image_format():
+    engine = FakeEngine(())
+    payload = image_bytes("BMP")
+    with pytest.raises(OCRInputError, match="Unsupported"):
+        process_institution_document(payload, engine)
+    assert engine.calls == 0
+
+
+def test_engine_failure_is_not_silently_converted_to_success():
+    class BrokenEngine:
+        def recognize(self, image_bytes: bytes) -> OCRRawResult:
+            raise RuntimeError("engine unavailable")
+
+    with pytest.raises(RuntimeError, match="engine unavailable"):
+        process_institution_document(image_bytes(), BrokenEngine())
+
+
+def test_empty_engine_name_is_rejected():
+    class UnnamedEngine:
+        def recognize(self, image_bytes: bytes) -> OCRRawResult:
+            return OCRRawResult((), " ")
+
+    with pytest.raises(ValueError, match="non-empty"):
+        process_institution_document(image_bytes(), UnnamedEngine())
