@@ -89,3 +89,25 @@ The reported deadline **28 October 2026, 11:59 PM IST** is **unconfirmed**. The 
 **SIH problem statement/deadline: official verification blocked.**
 
 This report is a dated research snapshot. Update it only when new evidence is found, and preserve prior findings and hashes so changes are auditable.
+
+
+## Addendum — 2026-10-23 follow-up verification
+
+### Newly verified retrievals
+
+1. **Official revised scrutiny document located and opened:** https://www.aicte.gov.in/sites/default/files/Revised%20set%20of%20Documents.pdf. The PDF has 5 pages and contains lists by category, including Change of Site/Location, Closure of Institution, Conversion categories, Twinning & Collaboration, New Institution and New Level/New Programme. The viewer does not expose clear publication/effective-date metadata in the extracted text. Retrieval is confirmed; applicability to EOA and supersession status are not.
+2. **Official APH directly opened:** https://www.aicte.gov.in/sites/default/files/APH%20Final.pdf. Its front matter identifies “Approval Process Handbook 2024-25 to 2026-27.” Official publication history is also corroborated by the Government Press Information Bureau release dated 6 December 2023: https://www.pib.gov.in/PressReleasePage.aspx?PRID=1983013&lang=2&reg=48.
+3. **SIH26261:** A third-party mirror reproduces the problem statement and shows a 28 October 2026 deadline, but the official SIH listing was not retrieved/read directly. Treat every such detail as mirror-reported, not officially confirmed.
+
+### Gate disposition after follow-up
+
+- 1 April 2024 revised-scrutiny document: **retrieval gap closed; legal/applicability reconciliation still open**.
+- Official APH 2024–27: **retrieved**; amendment completeness still open.
+- SIH official statement/deadline/theme: **unresolved**.
+- 2026–27 addendum/corrigendum finality and effective date: **unresolved**.
+- Annexure-2 §2.1 pagination and Clause 7.17: **unresolved pending direct visual/official-clause reconciliation**.
+- NBA validity wording for AY 2026–27: **unresolved**.
+- AICTE API/integration availability: **not researched/confirmed; no absence claim**.
+- Third-party code/data reuse licensing and history risks: **unresolved**.
+
+This is an evidence update, not a regulatory opinion. Do not activate an EOA checklist from these findings alone.
