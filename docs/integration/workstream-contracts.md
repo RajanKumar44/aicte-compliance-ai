@@ -4,13 +4,41 @@
 on `research/grounded-foundation` plus the audit branch, **not** a claim that three
 applications exist.
 
-**Ownership documents on PR #4:** `WORKSTREAMS.md`, `frontend/README.md`,
-`backend/WORKSTREAM.md` and `ai/README.md` are proposed in
-[PR #4](https://github.com/rajaryan1111/aicte-compliance-ai/pull/4) (branch
-`docs/three-person-workstream-split`, still open). This file deliberately does **not**
-duplicate or replace them, so that both changes can land without conflicting. Until
-PR #4 merges, the repository has no `frontend/` or `ai/` directory; OCR lives in
-`backend/`.
+## Document authority
+
+Two documents describe the same split. To avoid two competing ownership contracts:
+
+| Document | Authority | Location |
+|---|---|---|
+| `WORKSTREAMS.md` (+ `frontend/README.md`, `backend/WORKSTREAM.md`, `ai/README.md`) | **Authoritative for ownership, folder boundaries and non-overlap rules** | [PR #4](https://github.com/rajaryan1111/aicte-compliance-ai/pull/4), branch `docs/three-person-workstream-split` |
+| This file | **Authoritative for integration contracts, per-workstream commands and gate status** | This branch (PR #5) |
+
+Precedence: on ownership questions `WORKSTREAMS.md` wins; on contract, command and
+readiness-gate questions this file wins. Either may be changed only through a separate
+integration PR agreed by all three owners. Neither document grants production readiness.
+
+**Neither document is yet on `research/grounded-foundation`.** `WORKSTREAMS.md`,
+`frontend/` and `ai/` exist only in PR #4; until that merges, this file restates the
+ownership facts so a contributor is not blocked, and the repository has no `frontend/`
+or `ai/` directory. Nothing here duplicates PR #4's files, so the two PRs merge without
+conflict (verified with a read-only `git merge-tree` check).
+
+## Required ownership facts and where they are recorded
+
+| # | Fact | Recorded in |
+|---|---|---|
+| 1 | Frontend owns `frontend/` | `WORKSTREAMS.md` ownership table; "Ownership proposal" below |
+| 2 | Backend / Platform owns `backend/` | same |
+| 3 | AI / OCR owns `ai/` | same |
+| 4 | OCR code stays in `backend/` until a separately reviewed migration PR | `WORKSTREAMS.md` rule 4; `ai/README.md`; "Where OCR code lives" below |
+| 5 | The three workstreams are not three completed applications | `WORKSTREAMS.md` status line; "What exists today" below |
+| 6 | Contributor names stay unassigned until explicitly provided | `WORKSTREAMS.md`; "Ownership proposal" below |
+| 7 | `docs/`, `.github/`, root config, dependency manifests and shared contracts need coordination | `WORKSTREAMS.md` rule 3; "Shared surfaces" below |
+| 8 | Independent development uses isolated branches and separate PRs | `WORKSTREAMS.md` rule 5; "Branch, commit and review convention" below |
+| 9 | No contributor edits another workstream's folder | `WORKSTREAMS.md` rules 1–2; ownership table below |
+| 10 | Cross-folder wiring happens only in a separate integration PR | `WORKSTREAMS.md` rules 4 and integration process; contract sections below |
+| 11 | API contracts, error formats, evidence/provenance fields and synthetic examples are agreed before integration | `WORKSTREAMS.md` rule 6; "Proposed contracts" below |
+| 12 | No placeholder functionality implying security, compliance or persistence | `WORKSTREAMS.md` rule 8; `backend/WORKSTREAM.md`; "Where OCR code lives" below |
 
 ## What exists today
 
@@ -113,6 +141,7 @@ assertions, not proof). Supersession and retirement are not implemented.
 
 | Contract | Needed decision |
 |---|---|
+| Error/response format (4xx body shape, error codes, validation messages) | Needs owner agreement; FastAPI defaults currently apply and no shared error schema exists |
 | Document upload endpoint | Requires auth/RBAC, tenant isolation, private storage, malware scanning, size/page limits, retention; blocked |
 | Persistence schema | `docs/canonical/backend-schema.md` is a proposal; DB/ORM not chosen |
 | Findings/evidence payload shared with the frontend | Needs owner agreement on codes, statuses and evidence shape |

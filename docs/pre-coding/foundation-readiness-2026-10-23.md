@@ -4,8 +4,7 @@
 **Default branch:** `main` at `968ddcf7a4fb1cd1e1d8d4bb73e0b7fc10b44bcf` (unchanged)
 **Foundation branch:** `research/grounded-foundation` at
 `014403a36bb91eebf1ebca3fdc1733ee91082db2` (PR #1, open, unmerged)
-**Audit base:** `b8e1643d4cf5dc79aaa626cf5c38c67a5047af2b` (PR #5 head at the start of
-this pass)
+**Audit base:** `0cff85a7c3d0eef9c352ae07e6668e9741dfc907`
 **Scope:** rule-governance and OCR verification, documentation/CI evidence, development
 environment reproducibility, three-workstream preparation, security/regulatory gate.
 **Data:** synthetic fixtures only. No AICTE rule was defined, activated or evaluated.
@@ -15,14 +14,14 @@ documents remain as history.
 
 ## 1. Repository state observed
 
-| Ref | SHA | Notes |
-|---|---|---|
-| `main` | `968ddcf` | default branch, untouched by this pass |
-| `research/grounded-foundation` | `014403a` | PR #1 head, base `main` |
-| `review/cross-repo-integration-audit` | `5922eca` | PR #2 head, base research branch |
-| `feature/ocr-regression-hardening` | `184d678` | PR #3 head, base research branch |
-| `docs/three-person-workstream-split` | `ed5a41a` | PR #4 head, base research branch |
-| `arena/97cf136c-aicte-compliance-ai` | see §10 | PR #5 head (this audit) |
+| Ref | SHA | PR | State |
+|---|---|---|---|
+| `main` | `968ddcf` | — | default branch, untouched |
+| `research/grounded-foundation` | `014403a` | #1 (base `main`) | open, draft |
+| `review/cross-repo-integration-audit` | `5922eca` | #2 (base research) | open, draft |
+| `feature/ocr-regression-hardening` | `184d678` | #3 (base research) | open, draft |
+| `docs/three-person-workstream-split` | `ed5a41a` | #4 (base research) | open, draft |
+| `arena/97cf136c-aicte-compliance-ai` | `0cff85a` | #5 (base research) | open, draft (restored 2026-10-23) |
 
 All four sub-PRs were cut from `9157374`, one docs-only commit behind the research
 branch head, so their diffs are unaffected by the base moving forward; they should be
@@ -103,13 +102,38 @@ English/Hindi evaluation exists.
 
 CI evidence, verified against exact head SHAs through the GitHub API:
 
-| PR | Head SHA | Check-runs on that SHA |
+| PR | Head SHA | Check-runs on that exact SHA |
 |---|---|---|
 | #1 | `014403a` | `backend-tests` success, `optional-ocr-integration` success (runs 39868597925 push, 39868604125 PR) |
-| #2 | `5922eca` | **none** |
+| #2 | `5922eca` | **none** — no workflow run exists for this head |
 | #3 | `184d678` | `backend-tests` success, `optional-ocr-integration` success (run 39865712934) |
-| #4 | `ed5a41a` | **none** |
-| #5 | `b8e1643` | `backend-tests` success, `optional-ocr-integration` success (run 39869707696) |
+| #4 | `ed5a41a` | **none** — no workflow run exists for this head |
+| #5 | `0cff85a` | `backend-tests` success, `optional-ocr-integration` success (run 39871758137) |
+
+Why #2 and #4 have no checks: `pull_request.branches` filters the **base** branch, and
+the workflow version used for a same-repository pull request comes from the head. Their
+heads still carry the old `branches: ["main"]` workflow, so no job is scheduled; PR #3
+and PR #5 carry the fix and therefore do get checks against the research base. The fix
+only reaches #2/#4 when their own branches are rebased onto a base (or a head) that
+contains it — which requires pushing to those branches.
+
+PR #3's description said "Automated test execution is pending" and that checks "may not
+auto-trigger"; that is stale for head `184d678`, which has passing checks
+(run 39865712934). PR #1's description cites run #56 (`f160abc`) and the 54-test suite
+of that era while its actual head `014403a` has newer passing runs. Both descriptions
+were corrected on 2026-10-23 to cite only exact-head runs, without importing test counts
+from another commit.
+
+### Overlapping changes between PR #3 and PR #5
+
+Both branches independently implement OCR hardening in
+`backend/app/ocr_pipeline.py` and `backend/tests/test_ocr_pipeline.py`. A read-only
+`git merge-tree` between the two heads reports **content conflicts in both files**.
+The `.github/workflows/backend-tests.yml` change is byte-identical in both, so that file
+does not conflict. This duplication is a real deviation from the plan: one of the two
+must be chosen as the implementation (PR #5's is a superset with stricter engine-output
+validation), and the other rebased or closed by its owner. Neither PR was merged,
+retargeted or closed by this pass.
 
 PR #3's description says "Automated test execution is pending; no pass claim is made"
 and its safety note says checks "may not auto-trigger" — both are stale for head
@@ -196,6 +220,17 @@ deployment remain **NO-GO**.
    behind and duplicate the workflow-trigger line and OCR limits).
 6. A durable, authorized, audited rule-publication workflow (supersede/retire, audit
    events) before the gate is used for anything other than synthetic tests.
+
+## 8a. Separate readiness gates
+
+These are distinct gates; passing tests closes only the first two.
+
+| Gate | Verdict | Basis |
+|---|---|---|
+| Ready for planning | **Yes** | Ownership, contracts, commands and open decisions are recorded (`docs/integration/workstream-contracts.md`); no owner decision is pre-empted |
+| Ready for isolated implementation | **Yes, with coordination** | Each workstream can work in its own folder on its own branch; contributors are still unnamed and the shared contracts in §"Proposed contracts" are unagreed |
+| Ready for integration | **No** | No API/schema contract is agreed, no frontend or `ai/` code exists, and PR #3/#5 conflict on the same files |
+| Ready for production | **No** | Every control in §7 is unimplemented; regulatory and OCR-accuracy gates are open |
 
 ## 9. What this pass did not do
 
