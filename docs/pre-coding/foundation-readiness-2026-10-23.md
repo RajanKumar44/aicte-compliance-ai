@@ -4,13 +4,21 @@
 **Default branch:** `main` at `968ddcf7a4fb1cd1e1d8d4bb73e0b7fc10b44bcf` (unchanged)
 **Foundation branch:** `research/grounded-foundation` at
 `014403a36bb91eebf1ebca3fdc1733ee91082db2` (PR #1, open, unmerged)
-**Audit base:** `0cff85a7c3d0eef9c352ae07e6668e9741dfc907`
+**Audit base (current):** `5bd260f7bf809883f311447ca15182ddc248085f` (PR #5 head)
 **Scope:** rule-governance and OCR verification, documentation/CI evidence, development
 environment reproducibility, three-workstream preparation, security/regulatory gate.
 **Data:** synthetic fixtures only. No AICTE rule was defined, activated or evaluated.
 
 This record supersedes current-status and CI claims in earlier documents; those
 documents remain as history.
+
+**Correction trail (not a rewrite of history).** The findings in §2–§4 were produced
+against audit base `0cff85a7c3d0eef9c352ae07e6668e9741dfc907`, whose CI evidence is
+run `39871758137`. PR #5 then advanced to `5bd260f7bf809883f311447ca15182ddc248085f`
+(CI run `39872841910`) with a **documentation-only** commit. This document was updated
+on 2026-10-23 to name the current head, without relabelling the earlier pass as if it
+had been verified later than it was. `0cff85a` and run `39871758137` are retained below
+as explicitly historical evidence only.
 
 ## 1. Repository state observed
 
@@ -21,7 +29,7 @@ documents remain as history.
 | `review/cross-repo-integration-audit` | `5922eca` | #2 (base research) | open, draft |
 | `feature/ocr-regression-hardening` | `184d678` | #3 (base research) | open, draft |
 | `docs/three-person-workstream-split` | `ed5a41a` | #4 (base research) | open, draft |
-| `arena/97cf136c-aicte-compliance-ai` | `0cff85a` | #5 (base research) | open, draft (restored 2026-10-23) |
+| `arena/97cf136c-aicte-compliance-ai` | `5bd260f` | #5 (base research) | open, draft (`0cff85a` is the previous head, see §4) |
 
 All four sub-PRs were cut from `9157374`, one docs-only commit behind the research
 branch head, so their diffs are unaffected by the base moving forward; they should be
@@ -43,7 +51,7 @@ Behaviour confirmed by execution:
 - a failed activation leaves registry state unchanged;
 - no rule instance exists in `backend/app/`, and no evaluator exists.
 
-**Defects found and fixed in this pass** (all previously produced the wrong failure
+**Defects found and fixed in this audit pass (`338df56`, `0cff85a`)** (all previously produced the wrong failure
 mode rather than silently activating — the gate failed closed but noisily and
 inconsistently):
 
@@ -69,7 +77,7 @@ oversized word, 1,000 × 90-char words and 300,000 one-character words are all b
 reversed/equal/multi-year academic-year rejection, duplicate-label determinism,
 date-contradiction warnings, and decode-vs-engine error separation.
 
-**Defects found and fixed in this pass:**
+**Defects found and fixed in this audit pass (`338df56`, `0cff85a`):**
 
 | # | Defect | Evidence | Fix |
 |---|---|---|---|
@@ -108,7 +116,22 @@ CI evidence, verified against exact head SHAs through the GitHub API:
 | #2 | `5922eca` | **none** — no workflow run exists for this head |
 | #3 | `184d678` | `backend-tests` success, `optional-ocr-integration` success (run 39865712934) |
 | #4 | `ed5a41a` | **none** — no workflow run exists for this head |
-| #5 | `0cff85a` | `backend-tests` success, `optional-ocr-integration` success (run 39871758137) |
+| #5 | `5bd260f` | `backend-tests` success, `optional-ocr-integration` success (run 39872841910) |
+
+**Commit scope of the current head.** `5bd260f` is a **documentation-only** commit: it
+changes exactly two files — `docs/integration/workstream-contracts.md` (+36/−7) and
+`docs/pre-coding/foundation-readiness-2026-10-23.md` (+49/−14), 85 insertions and 21
+deletions in total — with no application, workflow or dependency change. The rule-gate and OCR code fixes described in §2 and §3
+are **not** part of that commit; they live in its ancestry — `0cff85a` (Tesseract
+engine-output contract), `338df56` (rule gate and engine boundary hardening) and
+`b8e1643` (first gate/OCR hardening pass). The aggregate diff between this branch and
+`014403a` therefore spans several commits and must not be described as the latest
+commit's own diff.
+
+**Historical CI evidence for the previous head.** Run `39871758137` executed on
+`0cff85a7c3d0eef9c352ae07e6668e9741dfc907` (`backend-tests` and
+`optional-ocr-integration` both successful). It is retained as history for that SHA only
+and is not evidence for `5bd260f`.
 
 Why #2 and #4 have no checks: `pull_request.branches` filters the **base** branch, and
 the workflow version used for a same-repository pull request comes from the head. Their
@@ -116,6 +139,13 @@ heads still carry the old `branches: ["main"]` workflow, so no job is scheduled;
 and PR #5 carry the fix and therefore do get checks against the research base. The fix
 only reaches #2/#4 when their own branches are rebased onto a base (or a head) that
 contains it — which requires pushing to those branches.
+
+**Unresolved owner action (recorded, not performed):** rebasing `review/cross-repo-integration-audit`
+(`5922eca`) and `docs/three-person-workstream-split` (`ed5a41a`) onto the research base,
+so their heads pick up the workflow fix and their exact-head CI can run. A read-only
+`git merge-tree` check shows both rebase cleanly onto `014403a` with no conflicts. This
+session may only push to the PR #5 branch, so it did not rebase, retarget or force-push
+either branch.
 
 PR #3's description said "Automated test execution is pending" and that checks "may not
 auto-trigger"; that is stale for head `184d678`, which has passing checks
@@ -135,12 +165,14 @@ must be chosen as the implementation (PR #5's is a superset with stricter engine
 validation), and the other rebased or closed by its owner. Neither PR was merged,
 retargeted or closed by this pass.
 
-PR #3's description says "Automated test execution is pending; no pass claim is made"
-and its safety note says checks "may not auto-trigger" — both are stale for head
-`184d678`, which has passing checks. PR #1's description cites run #56
-(`f160abc`) as its validation evidence while its head `014403a` has newer passing runs,
-and its stated counts (54 passed, 1 skipped) describe the older suite. These are other
-contributors' PR descriptions; they are recorded here rather than edited.
+**Decision required from the owner (not made here):** choose whether PR #5's
+engine-output contract supersedes PR #3's OCR hardening, or whether PR #3 should land
+first and PR #5 be rebased onto it. Evidence for the comparison: PR #5 head `5bd260f`
+contains the stricter `text`/`conf` column contract, metadata-alignment checks and
+confidence rejection covered by `backend/tests/test_ocr_adapter_engine.py` (57 tests);
+PR #3 head `184d678` carries the text-size cap, academic-year validity and
+duplicate-label fixtures with its own tests. Deciding this requires an owner to compare
+the two implementations and then push to the losing branch.
 
 Workflow review: `pull_request` triggers on `main` and
 `research/grounded-foundation` on the audit branches only (the base branch still
