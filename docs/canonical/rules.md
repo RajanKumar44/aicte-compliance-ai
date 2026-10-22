@@ -1,0 +1,59 @@
+# Compliance Rules — Source-Governed Catalogue
+
+**Status:** provisional policy; EOA checklist is not frozen.
+
+## Rule admission gate
+A rule may be activated only when the record includes:
+- Stable rule ID (never reuse retired IDs).
+- Title and plain-language explanation.
+- Source document, issuer, version, URL, clause and page.
+- Publication date, effective dates and supersession relationship.
+- Application type, academic year and applicability conditions.
+- Required inputs and their provenance.
+- Deterministic logic and documented interpretation.
+- Evidence requirements and limitations.
+- Output status, severity and reviewer action.
+- Positive, negative, boundary and exception tests.
+- Reviewer/approver and review timestamp.
+
+Rules without verified regulatory support must be labelled reasonable consistency checks, not statutory requirements.
+
+## Provisional status vocabulary
+| Status | Meaning |
+|---|---|
+| passed | Deterministic local check passed for available inputs; not proof of authenticity. |
+| mandatory_missing | A source-backed unconditional requirement is missing. |
+| conditional_missing | A verified condition applies and its required document is missing. |
+| trigger_unevaluable | Applicability cannot be determined from reliable inputs. |
+| present_unreadable | File exists but extraction failed or was insufficient. |
+| expired | Parsed validity date fails the approved validity rule. |
+| inconsistent_fields | Extracted or normalized fields conflict. |
+| authenticity_concern | Preliminary indicator fired; not proof of forgery. |
+| verification_not_attempted | No external check was performed. |
+| verification_unavailable | Authorized source was attempted but could not be reached. |
+| verification_inconclusive | Source responded but did not resolve the question. |
+| externally_verified | Authorized authoritative source returned a result supporting the exact recorded claim. |
+| human_review_required | A human must resolve ambiguity or inspect evidence. |
+| not_applicable | Verified rule does not apply to this application. |
+| simulated | Demo-only result; never represent as a live external check. |
+
+## Safety and interpretation
+- A missing required document is a completeness finding, not a fraud finding.
+- OCR text and confidence are observations, not proof the text is true.
+- A hash identifies bytes; it does not prove authenticity.
+- Metadata or visual anomalies are indicators only.
+- A signature check reports cryptographic integrity/trust-chain facts, not substantive truth.
+- A QR code resolving to a URL does not prove the destination is authoritative.
+- Fuzzy name matching alone must not establish identity.
+- An unreadable date must not be treated as a pass.
+- An unevaluable condition must not silently become not applicable.
+- No automated finding may make the final AICTE approval/rejection decision.
+
+## Date policy
+The expiry boundary and authoritative evaluation timezone remain unresolved in the research dossiers. Before activation, settle them from authoritative instructions or approve a clearly labelled product policy. Test the day before, exact boundary, day after, invalid date, missing date and ambiguous OCR date.
+
+## Versioning and reproducibility
+Each validation run records exact rule-version IDs and source versions. Rule edits create a new version; they never rewrite past runs. Re-uploading a file creates a new document version and validation run, preserving earlier evidence and findings.
+
+## Research leads — not an activated checklist
+The dossiers discuss Affidavit 2, TER payment receipt, building approval alternatives, structural stability, fire safety, satellite location maps, audited accounts, accreditation and other category-dependent documents. Because retrieval claims conflict and the 1 April 2024 scrutiny circular remains unread, these are research leads until the source register is closed. Do not encode them as universally mandatory from this list.
