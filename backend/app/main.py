@@ -10,14 +10,14 @@ app = FastAPI(
         "Prototype for application validation and compliance assistance. "
         "Results are advisory and use synthetic demonstration data."
     ),
-    version="0.2.0",
+    version="0.3.0",
 )
 
 
 class ValidationRequest(BaseModel):
     institution_id: str = Field(min_length=1, max_length=100)
     application_type: Literal["eoa", "new_program", "intake_change"]
-    required_documents: list[str] = Field(default_factory=list)
+    required_documents: list[str] = Field(min_length=1)
     submitted_documents: list[str] = Field(default_factory=list)
     expiry_dates: dict[str, date] = Field(default_factory=dict)
 
@@ -82,16 +82,19 @@ def validate_application(request: ValidationRequest) -> dict:
         "status": (
             "attention_required"
             if needs_attention
-            else "checklist_complete"
+            else "preliminary_checks_passed"
         ),
+        "validation_scope": "caller_supplied_checklist_only",
         "missing_documents": missing,
         "expired_documents": expired,
         "findings": findings,
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "source": "synthetic_demo_input",
         "notice": (
-            "Preliminary validation only. Expiry checks use supplied dates; "
-            "the system has not authenticated the documents or independently "
-            "verified their contents. Findings require appropriate review."
+            "Preliminary validation only. This endpoint evaluates only the "
+            "checklist and dates supplied in the request; it does not load an "
+            "authoritative AICTE ruleset. A passing result does not establish "
+            "regulatory compliance or document authenticity. Expiry checks "
+            "use supplied dates and require appropriate review."
         ),
     }
