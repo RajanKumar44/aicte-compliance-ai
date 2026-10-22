@@ -50,6 +50,13 @@ Do not copy real identity documents, live photos, personal information, student 
 6. Before production use, review dependency and model licenses, language-pack availability, privacy/data residency and a labelled synthetic benchmark.
 7. No regulatory rule is activated by this integration.
 
+## CI evidence
+
+GitHub Actions run [#56](https://github.com/rajaryan1111/aicte-compliance-ai/actions/runs/39864149659) completed successfully:
+- Backend suite: **54 passed, 1 skipped in 0.60s**. The skipped test is the optional Tesseract smoke test in the base job.
+- Optional OCR integration: **1 passed in 0.54s** with Tesseract installed; uses a generated synthetic English image.
+This confirms the tests and a basic English engine smoke test, not production accuracy or Hindi OCR accuracy.
+
 ## Current outcome
 
-The backend has a callable OCR pipeline and a local-only CLI plus a dedicated CI smoke test for the real Tesseract engine. The public API does not expose OCR because secure upload/storage/auth are not implemented. The CI smoke test only proves basic engine execution against synthetic English text, not accuracy on real institutional documents or Hindi-language performance. The CLI has newly added unit tests; their latest CI result is pending. Do not claim production readiness from unit tests alone.
+The backend has a callable OCR pipeline and local-only CLI. The public API does not expose OCR because secure upload/storage/auth are not implemented. The smoke test is not a representative accuracy benchmark. Do not claim production readiness.
