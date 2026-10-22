@@ -34,3 +34,11 @@ Before a rule is activated, record:
 ## Current decision
 
 **Do not freeze the EOA checklist yet.** The official handbook is available, but the applicable Annexure-2 and subsequent scrutiny/corrigendum trail have not been fully reconciled in this pass. Treat candidate document lists in the research dossiers as leads, not active requirements.
+
+
+## Addendum — 2026-10-23 verification pass
+
+- **AICTE revised scrutiny list:** The official AICTE-hosted PDF is now directly retrievable: [Revised set of Documents for scrutiny for various categories under chapter I & II](https://www.aicte.gov.in/sites/default/files/Revised%20set%20of%20Documents.pdf). The opened PDF is 5 pages and its text includes category-specific document lists (including Closure, Change of Site/Location, Twinning & Collaboration, New Institution and New Level/New Programme). This closes the earlier *retrieval* gap for this file, but the PDF text exposed in the viewer does not itself establish a visible publication date, issue metadata, complete relationship to EOA, or whether later instructions supersede individual entries. Do not automatically treat its category lists as an EOA checklist.
+- **Base handbook:** The official [AICTE Approval Process Handbook 2024–25 to 2026–27](https://www.aicte.gov.in/sites/default/files/APH%20Final.pdf) is directly opened and identifies the applicable three-year handbook in its front matter. This does not by itself settle subsequent amendments.
+- **SIH problem statement:** Search located an up-to-date third-party mirror reproducing SIH26261 and a community GitHub index pointing to the official SIH directory. The official SIH directory was not retrieved/read directly in this pass. Therefore the full text, category/theme, constraints and deadline remain **not officially verified**; the mirror-reported 28 October 2026 deadline is not promoted to an official fact.
+- **2026–27 addendum/corrigendum, Clause 7.17/page discrepancy, NBA validity, API availability, reuse licensing:** remain unresolved pending primary evidence and/or technical/legal review.
