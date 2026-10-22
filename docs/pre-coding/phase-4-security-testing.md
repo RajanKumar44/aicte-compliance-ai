@@ -174,3 +174,10 @@ Added `backend/tests/test_validation_security.py` with eight API-level negative/
 A temporary isolated smoke harness using the source/test behavior copied from the inspected branch ran **22 checks successfully** with the environment's installed FastAPI/Pydantic/pytest stack. This is useful smoke evidence only: it was not a clean clone (network DNS resolution prevented cloning), it did not install the repository's exact pinned dependency manifest, and it is not a GitHub Actions run. Therefore do not record the repository CI gate as passed until the actual branch suite runs under the declared environment.
 
 Still not implemented: authentication, authorization/RBAC, tenant-isolated persistence, private upload/storage, malware scanning, audit persistence, retention/deletion controls, and security-critical cross-tenant negative tests. Phase 4 remains **PARTIAL / NOT PASSED**.
+
+
+## GitHub Actions result — verified 2026-10-23
+
+GitHub Actions run [#11](https://github.com/rajaryan1111/aicte-compliance-ai/actions/runs/39862501324) completed successfully on the research branch. The workflow installed the pinned runtime/test dependencies with Python 3.12.15 and ran `python -m pytest -q`; the log reports **22 passed in 0.53s**. Job conclusion: `success`. This supersedes the earlier “no run visible” note above.
+
+Scope limitation: these 22 tests cover API input validation and rule-catalogue metadata/lifecycle validation. They do **not** prove authentication, RBAC, tenant isolation, secure upload/storage, malware scanning, audit persistence, production retention, regulatory correctness, or deployment readiness. The workflow also emitted a deprecation warning for Node 20-era action versions (currently forced to Node 24); update/pin action versions as a separate CI hardening task.
