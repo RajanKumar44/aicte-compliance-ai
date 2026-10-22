@@ -41,3 +41,16 @@ Before parallel coding, agree the API schemas and finding contract. Protect main
 Phase 0 remains **open**. The source verification report is at [docs/research/official-source-verification-report.md](../research/official-source-verification-report.md). Closure requires: (1) retrieve and reconcile the complete 1 April 2024 scrutiny document; (2) establish official publication/finality/effective date of the 2026–27 addendum; (3) check Annexure-2 §2.1 pagination and Clause 7.17 directly in the official handbook PDF; (4) resolve the NBA-validity-through-30-April-2025 reference for AY 2026–27; (5) verify the official SIH statement and deadline; and (6) resolve reuse-repository licensing/authorship/data-history risks before copying anything. API availability remains unresearched, not disproven. No candidate document rule becomes active while these gates are open.
 
 **Current user instruction:** finish system preparation first. Do not start implementation or make further code changes as part of this preparation phase.
+
+
+## Pre-coding preparation phases — separate from the implementation phases above
+
+The five preparation phases are tracked in [docs/pre-coding/README.md](../pre-coding/README.md). They are not the same numbering as the delivery/implementation phases above.
+
+- Phase 1 — repository inventory and preparation: documented; implementation gaps remain.
+- Phase 2 — research system and source evidence: documented; regulatory verification remains open.
+- Phase 3 — technology option evaluation: documented; decisions are provisional, not locked.
+- Phase 4 — security and testing preparation: documented; controls/tests have not been implemented or verified by this document.
+- Phase 5 — coding-readiness gate: assessed **BLOCKED** pending evidence, approvals and clean setup/test verification.
+
+Do not interpret the existence of preparation documents as a GO decision. The official-source verification report remains authoritative for the currently known regulatory research gaps.
