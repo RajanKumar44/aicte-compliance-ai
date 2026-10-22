@@ -31,3 +31,6 @@
 
 ## Accessibility and usability
 Use keyboard-accessible controls, visible focus, semantic headings, descriptive errors, readable contrast, and status text in addition to icons/colour. Preserve form values after recoverable failures and make upload limits clear before submission.
+
+## Research-status communication — 2026-10-23
+Provide a visible distinction between verified primary-source requirements, source-reported claims, proposals and unresolved items. When the applicable EOA checklist is not closed, display that the checklist is provisional/not configured; do not render an empty list as complete. Any provisional document suggestions must link to their source and show limitations. Avoid presenting the reported 28 October 2026 SIH deadline or circulating 2026–27 amendments as officially confirmed.
