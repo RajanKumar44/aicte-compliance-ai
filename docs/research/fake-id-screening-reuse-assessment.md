@@ -5,12 +5,12 @@ Date: 2026-10-23
 ## Source examined
 
 - Repository: https://github.com/rajaryan1111/fake-id-screening
-- Branch inspected: `main`
-- Source OCR files reviewed: `ai/ocr/preprocessing.py`, `normalizer.py`, `field_extractor.py`, `ocr_pipeline.py`, `ocr_service.py`, and `schemas.py`.
+- Branch inspected: main
+- Source OCR files reviewed: ai/ocr/preprocessing.py, normalizer.py, field_extractor.py, ocr_pipeline.py, ocr_service.py, and schemas.py.
 - Source README: https://github.com/rajaryan1111/fake-id-screening/blob/main/README.md
 - Source security policy: https://github.com/rajaryan1111/fake-id-screening/blob/main/SECURITY.md
 
-The source tree has no root `LICENSE` file. Public visibility is not permission to copy code/data. Confirm authorship, third-party notices, commit history and asset provenance before copying source wholesale. This is an engineering provenance gate, not legal advice.
+The source tree has no root LICENSE file. Public visibility is not permission to copy code/data. Confirm authorship, third-party notices, commit history and asset provenance before copying source wholesale. This is an engineering provenance gate, not legal advice.
 
 ## Candidate assessment
 
@@ -28,11 +28,12 @@ The source tree has no root `LICENSE` file. Public visibility is not permission 
 
 ## Implemented files
 
-- `backend/app/ocr_adapter.py`: typed advisory result and strict ISO date candidate parser.
-- `backend/app/ocr_pipeline.py`: image size/format/pixel limits, optional Tesseract adapter, grayscale/autocontrast/upscale preprocessing, English and selected Hindi context labels, source SHA-256 and mandatory human-review warnings.
-- `backend/requirements-ocr.txt`: optional Python OCR dependencies, kept out of base requirements. Tesseract binary and required language packs must be installed separately. For Hindi OCR, use language code `hin+eng` only after installing both packs.
-- `backend/tests/test_ocr_adapter.py`, `backend/tests/test_ocr_pipeline.py`, `backend/tests/test_ocr_fixture_corpus.py`, and `backend/tests/fixtures/institution_ocr_cases.jsonl`: tests and a small synthetic-only corpus; not production training data.
-- `backend/tests/test_ocr_engine_integration.py`: synthetic image smoke test run in a CI job with Tesseract installed.
+- backend/app/ocr_adapter.py: typed advisory result and strict ISO date candidate parser.
+- backend/app/ocr_pipeline.py: image size/format/pixel limits, optional Tesseract adapter, grayscale/autocontrast/upscale preprocessing, English and selected Hindi context labels, source SHA-256 and mandatory human-review warnings.
+- backend/app/ocr_cli.py: local-only CLI to run the pipeline on a selected local image and emit advisory JSON; it does not upload or persist files.
+- backend/requirements-ocr.txt: optional Python OCR dependencies, kept out of base requirements. Tesseract binary and required language packs must be installed separately. For Hindi OCR, use language code hin+eng only after installing both packs.
+- backend/tests/test_ocr_adapter.py, backend/tests/test_ocr_pipeline.py, backend/tests/test_ocr_cli.py, backend/tests/test_ocr_fixture_corpus.py, and backend/tests/fixtures/institution_ocr_cases.jsonl: synthetic-only regression tests/corpus, not production training data.
+- backend/tests/test_ocr_engine_integration.py: synthetic image smoke test run in a CI job with Tesseract installed.
 - No OCR route was added to the public API; authentication, tenant-scoped persistence, private storage and malware scanning are not implemented, so exposing document upload now would be unsafe.
 
 ## Data safety
@@ -51,4 +52,4 @@ Do not copy real identity documents, live photos, personal information, student 
 
 ## Current outcome
 
-The backend has a callable OCR pipeline and a dedicated CI smoke test for the real Tesseract engine. The public API does not expose OCR because secure upload/storage/auth are not implemented. The CI smoke test only proves basic engine execution against synthetic English text, not accuracy on real institutional documents or Hindi-language performance. Do not claim production readiness from unit tests alone.
+The backend has a callable OCR pipeline and a local-only CLI plus a dedicated CI smoke test for the real Tesseract engine. The public API does not expose OCR because secure upload/storage/auth are not implemented. The CI smoke test only proves basic engine execution against synthetic English text, not accuracy on real institutional documents or Hindi-language performance. The CLI has newly added unit tests; their latest CI result is pending. Do not claim production readiness from unit tests alone.
