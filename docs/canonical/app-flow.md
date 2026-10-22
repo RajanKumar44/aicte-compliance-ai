@@ -35,3 +35,6 @@
 
 ## Failure states
 Upload rejected, extraction failed, partial extraction, unsupported format, rule trigger unevaluable, provider timeout and permission denied must be visible, actionable states—not silently converted into success.
+
+## Research-dependent checklist behaviour — 2026-10-23
+If the 1 April 2024 scrutiny circular, applicable current amendments or academic-year applicability are unresolved, the applicant must see a clear “checklist not yet verified/configured” notice. Do not present the provisional document list in the source verification report as a complete current checklist. Keep any exploratory checklist visibly provisional and prevent it from generating an adverse outcome. SIH deadline and theme details are also unverified and should not be presented as confirmed product facts.
