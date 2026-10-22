@@ -88,3 +88,8 @@ The official AICTE revised-scrutiny PDF and APH PDF have now been retrieved dire
 Additional evidence: eight API input-hardening tests were added to `backend/tests/test_validation_security.py`. A local isolated smoke harness reported 22 passing checks across copied validation and rule-catalogue behavior. Network DNS failure prevented a clean clone, and the repository's pinned dependencies / actual GitHub Actions run were not verified. This does **not** satisfy G7/G8.
 
 Research remains blocked on official SIH statement verification, addendum finality/effective date, EOA applicability and cross-reference reconciliation, NBA criterion, and reuse-license review. Phase 3 has a recommended portable baseline but not all owner-dependent vendor/operational approvals. Production security controls are still absent. The verdict remains **NO-GO for production, real documents, activated regulatory rules or external integrations**.
+
+
+## CI evidence update — 2026-10-23
+
+The backend test workflow now has a completed successful run: [GitHub Actions run #11](https://github.com/rajaryan1111/aicte-compliance-ai/actions/runs/39862501324), job conclusion `success`, log result **22 passed in 0.53s** under Python 3.12.15. This closes the narrow test-execution evidence gap for the current API/rule-catalogue tests. It does not close the separate clean developer setup gate, security implementation gates, regulatory evidence gates or licensing review. Phase 5 remains **BLOCKED / NO-GO** for production or rule activation.
