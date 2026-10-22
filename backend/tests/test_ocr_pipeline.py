@@ -30,7 +30,7 @@ class FakeEngine:
         return OCRRawResult(self.words, "fake-test-engine", "1.0")
 
 
-def test_extracts_only_context_labelled_institution_fields():
+def test_extracts_context_labelled_english_institution_fields():
     fields = extract_institution_fields(
         "Institution Name: Example Technical Institute\n"
         "Certificate No: CERT-2026/0042\n"
@@ -48,6 +48,17 @@ def test_extracts_only_context_labelled_institution_fields():
     assert fields["institution_name"].confidence == 0.88
     assert fields["institution_name"].page_number == 2
     assert fields["institution_name"].evidence_text.startswith("Institution Name:")
+
+
+def test_extracts_supported_hindi_institution_fields():
+    fields = extract_institution_fields(
+        "संस्थान का नाम: उदाहरण तकनीकी संस्थान\n"
+        "प्रमाणपत्र संख्या: CERT-2026-0042\n"
+        "शैक्षणिक वर्ष: 2026-2027"
+    )
+    assert fields["institution_name"].value == "उदाहरण तकनीकी संस्थान"
+    assert fields["certificate_number"].value == "CERT-2026-0042"
+    assert fields["academic_year"].value == "2026-2027"
 
 
 @pytest.mark.parametrize("ambiguous", ["30/04/2026", "04/30/2026", "2026-02-30", "April 2026"])
