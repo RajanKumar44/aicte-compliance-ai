@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import math
 import re
 from dataclasses import dataclass
 from typing import Protocol
@@ -17,6 +18,7 @@ from backend.app.ocr_adapter import OCRDocumentResult, OCRField, parse_iso_date_
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_IMAGE_PIXELS = 30_000_000
+MAX_OCR_TEXT_CHARS = 100_000
 SUPPORTED_FORMATS = {"JPEG", "PNG", "TIFF", "WEBP"}
 
 
@@ -26,10 +28,30 @@ class OCRInputError(ValueError):
 
 @dataclass(frozen=True)
 class OCRWord:
+    """One engine word. Invalid engine output is rejected, never re-scaled."""
+
     text: str
     confidence: float
     page_number: int = 1
     line_number: int = 1
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.text, str):
+            raise TypeError("OCR word text must be a string")
+        if isinstance(self.confidence, bool) or not isinstance(
+            self.confidence, (int, float)
+        ):
+            raise TypeError("OCR word confidence must be a finite number in [0.0, 1.0]")
+        if not math.isfinite(float(self.confidence)):
+            raise ValueError("OCR word confidence must be a finite number in [0.0, 1.0]")
+        if not 0.0 <= float(self.confidence) <= 1.0:
+            raise ValueError("OCR word confidence must be between 0.0 and 1.0")
+        for name, value in (
+            ("page_number", self.page_number),
+            ("line_number", self.line_number),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive 1-based integer")
 
 
 @dataclass(frozen=True)
@@ -38,6 +60,20 @@ class OCRRawResult:
     engine: str
     engine_version: str | None = None
     warnings: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.engine, str) or not self.engine.strip():
+            raise ValueError("OCR engine must return a non-empty name.")
+        if self.engine_version is not None and not isinstance(self.engine_version, str):
+            raise TypeError("engine_version must be a string or None")
+        object.__setattr__(self, "words", tuple(self.words))
+        object.__setattr__(self, "warnings", tuple(self.warnings))
+        for word in self.words:
+            if not isinstance(word, OCRWord):
+                raise TypeError("OCR result words must be OCRWord instances")
+        for warning in self.warnings:
+            if not isinstance(warning, str):
+                raise TypeError("OCR warnings must be strings")
 
 
 class RawOCREngine(Protocol):
@@ -71,13 +107,38 @@ def _validate_image_bytes(image_bytes: bytes) -> None:
         raise OCRInputError("Image could not be decoded safely.") from exc
 
 
+def _validate_confidence(confidence: float | None) -> float | None:
+    """Accept only a finite 0.0-1.0 confidence; never clamp silently."""
+    if confidence is None:
+        return None
+    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+        raise TypeError("confidence must be a finite number between 0.0 and 1.0")
+    value = float(confidence)
+    if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+        raise ValueError("confidence must be a finite number between 0.0 and 1.0")
+    return value
+
+
 def _normalised_confidence(words: tuple[OCRWord, ...]) -> float | None:
-    valid = [
-        max(0.0, min(1.0, word.confidence))
-        for word in words
-        if word.confidence >= 0
-    ]
-    return sum(valid) / len(valid) if valid else None
+    if not words:
+        return None
+    return sum(word.confidence for word in words) / len(words)
+
+
+def _date_consistency_warnings(fields: dict[str, OCRField]) -> list[str]:
+    """Flag cross-field date contradictions instead of guessing which is right."""
+    issue_field = fields.get("issue_date")
+    valid_field = fields.get("valid_until")
+    if not issue_field or not valid_field:
+        return []
+    issue_date = parse_iso_date_candidate(issue_field.value)
+    valid_date = parse_iso_date_candidate(valid_field.value)
+    if issue_date and valid_date and valid_date < issue_date:
+        return [
+            "Issue date is later than the valid-until date; treat both values as "
+            "unresolved and check the source document."
+        ]
+    return []
 
 
 def extract_institution_fields(
@@ -89,13 +150,25 @@ def extract_institution_fields(
 
     Dates are accepted only in strict ISO YYYY-MM-DD form. Ambiguous dates are
     left unresolved rather than guessing day/month order. Personal identity
-    fields are deliberately outside this extractor's scope.
+    fields are deliberately outside this extractor's scope. Inputs over
+    ``MAX_OCR_TEXT_CHARS`` and non-finite confidences raise instead of being
+    truncated or rescaled, so a caller cannot silently inflate a score.
     """
-    if not text or not text.strip():
+    if not isinstance(text, str):
+        raise TypeError("text must be a string")
+    if len(text) > MAX_OCR_TEXT_CHARS:
+        raise ValueError(
+            f"OCR text exceeds the {MAX_OCR_TEXT_CHARS}-character processing limit"
+        )
+    if not text.strip():
         return {}
-    if page_number < 1:
+    if (
+        isinstance(page_number, bool)
+        or not isinstance(page_number, int)
+        or page_number < 1
+    ):
         raise ValueError("page_number must be a positive 1-based integer")
-    confidence = None if confidence is None else max(0.0, min(1.0, confidence))
+    confidence = _validate_confidence(confidence)
     fields: dict[str, OCRField] = {}
     lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()]
     lines = [line for line in lines if line]
@@ -121,7 +194,13 @@ def extract_institution_fields(
                     continue
                 raw_value = parsed_date.isoformat()
             elif field_name == "academic_year":
-                raw_value = re.sub(r"\s+", "", raw_value).replace("/", "-")
+                normalized_year = re.sub(r"\s+", "", raw_value).replace("/", "-")
+                start_text, end_text = normalized_year.split("-")
+                start_year, end_year = int(start_text), int(end_text)
+                if end_year != start_year + 1:
+                    # Reversed, equal or multi-year spans are ambiguous: leave unresolved.
+                    continue
+                raw_value = normalized_year
             fields[field_name] = OCRField(
                 value=raw_value,
                 confidence=confidence,
@@ -168,9 +247,15 @@ class TesseractOCRAdapter:
                     )
                     if new_size[0] * new_size[1] <= MAX_IMAGE_PIXELS:
                         image = image.resize(new_size)
-                data = pytesseract.image_to_data(
-                    image, lang=self.language, config="--psm 6", output_type=Output.DICT
-                )
+        except Exception as exc:
+            # The byte-level check above is structural only; a full decode failure
+            # is invalid input, not an engine failure.
+            raise OCRInputError("Image could not be decoded safely.") from exc
+
+        try:
+            data = pytesseract.image_to_data(
+                image, lang=self.language, config="--psm 6", output_type=Output.DICT
+            )
         except Exception as exc:
             raise RuntimeError("Tesseract OCR failed; no result was produced.") from exc
 
@@ -185,7 +270,7 @@ class TesseractOCRAdapter:
                 conf = float(raw_conf) / 100.0
             except (TypeError, ValueError):
                 continue
-            if not word or conf < 0:
+            if not word or not math.isfinite(conf) or conf < 0:
                 continue
             try:
                 page_number = max(1, int(page_values[i])) if i < len(page_values) else 1
@@ -214,8 +299,16 @@ def process_institution_document(
     """Validate, OCR and extract institution-document fields for human review."""
     _validate_image_bytes(image_bytes)
     raw = engine.recognize(image_bytes)
+    if not isinstance(raw, OCRRawResult):
+        raise TypeError("OCR engine must return an OCRRawResult")
     if not raw.engine.strip():
         raise ValueError("OCR engine must return a non-empty name.")
+
+    total_text_chars = sum(len(word.text) + 1 for word in raw.words)
+    if total_text_chars > MAX_OCR_TEXT_CHARS:
+        raise ValueError(
+            f"OCR output exceeds the {MAX_OCR_TEXT_CHARS}-character processing limit"
+        )
 
     grouped: dict[tuple[int, int], list[OCRWord]] = {}
     for word in raw.words:
@@ -234,6 +327,7 @@ def process_institution_document(
             fields.setdefault(field_name, field)
 
     warnings = list(raw.warnings)
+    warnings.extend(_date_consistency_warnings(fields))
     if not fields:
         warnings.append(
             "No supported context-labelled institutional fields were extracted; "

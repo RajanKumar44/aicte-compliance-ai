@@ -18,6 +18,15 @@ A rule may be activated only when the record includes:
 
 Rules without verified regulatory support must be labelled reasonable consistency checks, not statutory requirements.
 
+**Implementation status (2026-10-22 audit):** `backend/app/rule_catalog.py` enforces the
+provenance and approval parts of this gate. An activation requires a verified source
+(document version, retrieval date, named reviewer and verification date), an
+attributable approval record, an effective date and positive/negative/boundary/exception
+tests. `RuleRegistry.activate` is the only transition to `ACTIVE` and refuses
+caller-declared `ACTIVE`, unverified or unapproved rules. No AICTE rule is defined or
+active, and no rule evaluator exists; the remaining admission-gate items above are still
+policy, not code.
+
 ## Provisional status vocabulary
 | Status | Meaning |
 |---|---|

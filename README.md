@@ -1,17 +1,83 @@
 # AICTE Compliance Assistant
 
-A prototype for preliminary AICTE application-checklist validation and advisory institutional-document OCR.
+A prototype for **preliminary checklist validation** and **advisory institutional-document
+OCR**. It does not authenticate documents, verify institutional status, or decide
+regulatory compliance.
 
-## Current scope
+## What is implemented
 
-- FastAPI validation checks only the checklist and dates supplied by the caller.
-- Optional local OCR extracts a small set of context-labelled fields for human review.
-- A rule-catalogue schema records proposed rule metadata; it does not activate or execute official AICTE requirements.
+### 1. Checklist validation — caller-supplied data only
+`POST /api/v1/validate` compares the `required_documents` / `submitted_documents`
+lists and `expiry_dates` supplied in the request. It returns missing and expired
+documents with `validation_scope: "caller_supplied_checklist_only"`.
 
-## Important limitations
+- The service loads no AICTE checklist and no rule set; the caller supplies both lists.
+- `preliminary_checks_passed` means only that the supplied lists agree. It is not a
+  compliance, eligibility, or authenticity finding.
 
-This prototype does **not** authenticate documents, establish regulatory compliance, or independently verify an institution's status. Regulatory applicability and source versions remain subject to official-source review. OCR output is advisory and must be checked against the original document.
+### 2. Advisory OCR — optional, local only
+`backend/app/ocr_pipeline.py` implements an engine-neutral OCR contract
+(`ocr_adapter.py`), an optional Tesseract adapter, field extraction for a small set
+of context-labelled institutional fields (English and selected Hindi labels), and a
+local CLI: `python -m backend.app.ocr_cli <image>`.
 
-Public document uploads and production use remain blocked until authentication/authorization, tenant isolation, private storage, malware scanning, persistent audit, retention/deletion controls, and the applicable official-source review are implemented and tested.
+Implemented input/output limits: 10 MiB compressed bytes, 30 megapixels,
+JPEG/PNG/TIFF/WEBP only, a 100,000-character aggregate OCR text budget, strict ISO
+`YYYY-MM-DD` dates (ambiguous formats stay unresolved), single-year academic sessions
+only, engine confidence confined to `0.0–1.0`, page/line/evidence provenance, source
+SHA-256, and `requires_human_review=True` on every result.
 
-See the open pull requests and research notes for implementation status, validation evidence, and remaining gates.
+- OCR output is evidence for a human reviewer, never proof of authenticity.
+- There is **no upload endpoint**, no persistence and no external call.
+- **No accuracy claim is made.** The fixture corpus is synthetic regression data, not a
+  labelled held-out benchmark; the Tesseract test is a synthetic smoke test.
+
+### 3. Rule catalogue and activation gate — no rules, no evaluator
+`backend/app/rule_catalog.py` defines metadata schemas plus a server-side activation
+gate. It is governance scaffolding, not a regulatory rules engine.
+
+- **No AICTE rule is defined, active, or executable** in this repository.
+- The gate requires a verified source (exact document version, retrieval date, named
+  reviewer and verification date), an attributable approval record with decision
+  `approved`, an `effective_from` date, and positive/negative/boundary/exception tests.
+- `RuleRegistry.activate` is the only transition to `ACTIVE`. It refuses
+  caller-declared `ACTIVE` states, unverified or unapproved rules, incomplete test
+  coverage, and conflicting duplicate versions.
+- No rule expression is executed anywhere; there is no evaluator to call.
+
+## Not implemented (planned, not claimed)
+
+Frontend application, `ai/` extraction service, authentication/authorization/RBAC,
+institution-level tenant isolation, private document storage, malware scanning,
+persistent audit logging, retention/deletion controls, PDF/scan ingestion, a rule
+evaluator, an official-source verification workflow, and any AICTE integration.
+
+## Production blockers
+
+Public document upload and any production use remain blocked until authentication and
+RBAC, tenant isolation, private storage, malware scanning, durable audit, retention
+and deletion controls, and official-source verification of applicable AICTE documents
+and amendments are implemented and security-tested. Testing uses synthetic data only;
+no real institutional or personal documents are stored.
+
+## Tests
+
+```bash
+python -m pip install -r backend/requirements-dev.txt
+python -m pytest -q
+```
+
+Optional real-engine smoke test (requires the Tesseract system binary and
+`backend/requirements-ocr.txt`):
+
+```bash
+python -m pip install -r backend/requirements-dev.txt -r backend/requirements-ocr.txt
+python -m pytest -q backend/tests/test_ocr_engine_integration.py
+```
+
+The `Backend tests` workflow runs the same suite on `main` and
+`research/grounded-foundation` (plus pull requests targeting either branch), with a
+separate job for the optional Tesseract smoke test. Passing synthetic tests does not
+establish OCR accuracy, regulatory correctness, or production readiness.
+
+See `docs/` for the research record, remaining gates.

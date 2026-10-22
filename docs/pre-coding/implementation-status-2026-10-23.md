@@ -49,6 +49,19 @@ This verifies the test suite and a basic English Tesseract smoke test. It does *
 
 **NO-GO for production, real institutional data, rule activation or external integrations.** The repository now has an optional OCR pipeline and local CLI, but regulatory reconciliation, licensing/provenance, representative OCR benchmarking, approved operational choices and production security are incomplete.
 
+## Correction — 2026-10-22 audit
+
+The run #56 evidence above executed on head `f160abc2f90b9f91409f52c4539ef4ec4ce1e396`,
+not on the branch head. Run
+[39868597925](https://github.com/rajaryan1111/aicte-compliance-ai/actions/runs/39868597925)
+(push) and run
+[39868604125](https://github.com/rajaryan1111/aicte-compliance-ai/actions/runs/39868604125)
+(pull request) cover the branch head `014403a36bb91eebf1ebca3fdc1733ee91082db2`, and
+both completed successfully. Test counts stated in this document describe the suite at
+`f160abc`. Later changes on the audit branch add regression tests; see
+[audit-2026-10-22.md](audit-2026-10-22.md) for the current evidence. Do not cite run #56
+as evidence for the branch head.
+
 ## Historical CI confirmation — 2026-10-23
 
 Earlier GitHub Actions run [#11](https://github.com/rajaryan1111/aicte-compliance-ai/actions/runs/39862501324) completed successfully with **22 passed in 0.53s**. The latest code-inclusive evidence is run #56 linked above.
