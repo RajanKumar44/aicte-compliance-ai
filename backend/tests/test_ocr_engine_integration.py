@@ -1,10 +1,16 @@
 import io
+import shutil
 
+import pytest
 from PIL import Image, ImageDraw, ImageFont
 
 from backend.app.ocr_pipeline import TesseractOCRAdapter
 
 
+@pytest.mark.skipif(
+    shutil.which("tesseract") is None,
+    reason="Tesseract is optional; the dedicated OCR CI job installs it.",
+)
 def test_tesseract_reads_synthetic_institution_document():
     image = Image.new("RGB", (1800, 500), "white")
     draw = ImageDraw.Draw(image)
