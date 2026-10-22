@@ -42,3 +42,8 @@
 - External check: not_attempted, simulated, unavailable, inconclusive, externally_verified, externally_failed.
 
 These are proposed product states, not AICTE-defined legal statuses. Final enum names should be aligned with API contracts before migration work.
+
+## Research provenance fields and lifecycle requirements — 2026-10-23
+For every source-backed rule version, persist source status, issuer, canonical URL, document title/version, publication/retrieval dates, exact clause and page, effective interval, applicability conditions, supersession link, review decision and evidence hash where available. Support provisional/in-review/inactive rules so unresolved source claims cannot be evaluated as active requirements. Preserve conflicting source records rather than overwriting them. For source verification attempts, retain attempt status and source/result metadata; do not mark a simulated or unattempted check externally verified. These are design requirements, not a finalized database migration.
+
+The current research leaves the 1 April 2024 scrutiny circular unread, the 2026–27 addendum's official status unresolved, the SIH listing/deadline unverified and the Clause 7.17 cross-reference unresolved. Schema and APIs must represent these uncertainties rather than encoding the candidate EOA document list as universal mandatory data.
