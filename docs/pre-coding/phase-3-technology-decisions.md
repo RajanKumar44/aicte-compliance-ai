@@ -115,3 +115,10 @@ To prevent analysis from blocking all non-regulatory engineering, the following 
 **Not safely finalizable from current repository evidence alone:** identity provider/vendor, hosting/region, object-storage vendor, data retention duration, external OCR processing, cost envelope, formal approver roles, and background queue. These depend on owner requirements, privacy/legal review, measured workload and credentials/contract availability. Do not silently pick vendors or claim an approval that has not been recorded. React + Vite remains a candidate only if the UI requirements and repo state confirm it is needed.
 
 **Phase 3 disposition:** core architecture direction recommended; vendor and operational ADRs remain OPEN. This phase cannot honestly be marked fully finalized until the unresolved decisions have named owners and accepted constraints.
+
+
+## Decision closure note — 2026-10-23
+
+For implementation planning, adopt the following **portable baseline recommendation** unless the project owner supplies a contrary constraint: keep FastAPI/Pydantic for the existing API; use PostgreSQL with SQLAlchemy/Alembic for shared relational state; store uploaded bytes in private object storage with database metadata and opaque keys; define an OCR adapter and select an engine only after a labelled synthetic English/Hindi benchmark; evaluate only reviewed, source-backed deterministic rule versions; and preserve human review as the authority for all outcomes. This recommendation does not mean these services are installed or deployed.
+
+Provider-specific decisions (identity vendor, hosting/region, object storage vendor, external OCR, retention, budget and formal approver assignments) cannot be responsibly marked final from repository evidence alone. They require owner requirements, privacy/legal review and provider/contract choices. **Phase 3 baseline direction is recorded; vendor/operational approval remains open.**
