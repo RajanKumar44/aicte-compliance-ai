@@ -14,15 +14,15 @@
 - Added an application-owned OCR result contract and optional Tesseract pipeline with image format/size/pixel checks, image enhancement, per-field confidence, page/evidence provenance, source hash, selected English/Hindi labels and mandatory human-review warnings.
 - Added a local-only OCR CLI for approved local/synthetic image files; it outputs advisory JSON and does not upload or persist files.
 - Added synthetic-only OCR regression fixtures and tests; no real student/institution records were copied.
-- Read back changed files from GitHub and verified the earlier workflow results described below.
+- Read back changed files from GitHub and verified CI results.
 
 ## OCR integration test evidence — 2026-10-23
 
-GitHub Actions run [#50](https://github.com/rajaryan1111/aicte-compliance-ai/actions/runs/39863940241) completed both jobs successfully for the OCR pipeline before the CLI was added:
-- Backend suite: **51 passed, 1 skipped in 0.50s**. The skip is the real-Tesseract smoke test in the base job, where Tesseract is intentionally optional.
-- Optional OCR integration: **1 passed in 0.38s** after installing Tesseract and optional Python dependencies; the smoke test uses a generated synthetic image.
+GitHub Actions run [#56](https://github.com/rajaryan1111/aicte-compliance-ai/actions/runs/39864149659) completed both jobs successfully:
+- Backend suite: **54 passed, 1 skipped in 0.60s**. The skip is the real-Tesseract smoke test in the base job, where Tesseract is intentionally optional.
+- Optional OCR integration: **1 passed in 0.54s** after installing Tesseract and optional Python dependencies; the smoke test uses a generated synthetic English image.
 
-The CLI and its new tests were added after that run, so the above counts do not include them. A new CI run is required before claiming the current branch is fully green. The existing evidence does not prove real institutional-document accuracy, Hindi OCR accuracy, production security or regulatory correctness. The small fixture corpus is regression data, not a representative benchmark.
+This verifies the test suite and a basic English Tesseract smoke test. It does **not** prove real institutional-document accuracy, Hindi OCR accuracy, production security or regulatory correctness. The small fixture corpus is regression data, not a representative benchmark.
 
 ## Not yet proven / unresolved
 
@@ -51,4 +51,4 @@ The CLI and its new tests were added after that run, so the above counts do not 
 
 ## Historical CI confirmation — 2026-10-23
 
-Earlier GitHub Actions run [#11](https://github.com/rajaryan1111/aicte-compliance-ai/actions/runs/39862501324) completed successfully with **22 passed in 0.53s**. The newer OCR pipeline expanded the suite; the latest CLI-inclusive test result must be taken from the newest workflow run.
+Earlier GitHub Actions run [#11](https://github.com/rajaryan1111/aicte-compliance-ai/actions/runs/39862501324) completed successfully with **22 passed in 0.53s**. The latest code-inclusive evidence is run #56 linked above.
