@@ -38,12 +38,14 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/requirements-ocr.txt
+          cache-dependency-path: |
+            backend/requirements-dev.txt
+            backend/requirements-ocr.txt
       - name: Install Tesseract system engine
         run: |
           sudo apt-get update
           sudo apt-get install --yes tesseract-ocr tesseract-ocr-eng
-      - name: Install optional OCR dependencies
-        run: python -m pip install -r backend/requirements-ocr.txt
+      - name: Install test and optional OCR dependencies
+        run: python -m pip install -r backend/requirements-dev.txt -r backend/requirements-ocr.txt
       - name: Run synthetic OCR engine smoke test
         run: python -m pytest -q backend/tests/test_ocr_engine_integration.py
