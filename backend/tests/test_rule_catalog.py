@@ -198,3 +198,26 @@ def test_approval_decision_enum_is_closed():
         RuleVersionDraft.model_validate(payload)
 
     assert ApprovalDecision.APPROVED.value == "approved"
+
+
+# --- regression tests added by the 2026-10-23 foundation audit -------------
+
+
+def test_active_rule_rejects_effective_date_before_source_publication():
+    payload = valid_rule_payload()
+    payload["lifecycle"] = "active"
+    payload["publication_date"] = "2026-06-01"
+    payload["effective_from"] = "2026-01-01"
+
+    with pytest.raises(ValidationError, match="publication_date"):
+        RuleVersionDraft.model_validate(payload)
+
+
+def test_non_active_rule_may_record_publication_without_effective_date():
+    payload = valid_rule_payload()
+    payload["publication_date"] = "2026-06-01"
+    payload["effective_from"] = None
+
+    rule = RuleVersionDraft.model_validate(payload)
+
+    assert rule.lifecycle is RuleLifecycle.DRAFT

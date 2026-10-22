@@ -11,6 +11,7 @@ import hashlib
 import io
 import math
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -210,6 +211,28 @@ def extract_institution_fields(
     return fields
 
 
+def _validated_engine_columns(data: object) -> dict[str, Sequence]:
+    """Validate the engine's column mapping before indexing it.
+
+    Optional engine output is untrusted: a missing/partial mapping must fail
+    loudly as an engine error rather than surfacing ``AttributeError`` or
+    silently producing an empty, success-shaped result.
+    """
+    if not isinstance(data, Mapping):
+        raise RuntimeError(
+            "Tesseract OCR returned malformed data; no result was produced."
+        )
+    columns: dict[str, Sequence] = {}
+    for key in ("text", "conf", "page_num", "line_num"):
+        value = data.get(key, ())
+        if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+            raise RuntimeError(
+                "Tesseract OCR returned malformed data; no result was produced."
+            )
+        columns[key] = value
+    return columns
+
+
 class TesseractOCRAdapter:
     """Lazy optional Tesseract adapter; requires Pillow, pytesseract and Tesseract."""
 
@@ -234,9 +257,11 @@ class TesseractOCRAdapter:
                 "OCR dependencies are optional. Install backend/requirements-ocr.txt."
             ) from exc
 
+        frame_count = 1
         try:
             with Image.open(io.BytesIO(image_bytes)) as source:
                 source.load()
+                frame_count = max(1, int(getattr(source, "n_frames", 1)))
                 image = ImageOps.grayscale(source)
                 image = ImageOps.autocontrast(image)
                 if min(image.size) < 700:
@@ -259,37 +284,50 @@ class TesseractOCRAdapter:
         except Exception as exc:
             raise RuntimeError("Tesseract OCR failed; no result was produced.") from exc
 
+        columns = _validated_engine_columns(data)
+        page_values = columns["page_num"]
+        line_values = columns["line_num"]
         words: list[OCRWord] = []
-        text_values = data.get("text", [])
-        confidences = data.get("conf", [])
-        page_values = data.get("page_num", [])
-        line_values = data.get("line_num", [])
-        for i, (raw_text, raw_conf) in enumerate(zip(text_values, confidences)):
-            word = str(raw_text).strip()
-            try:
-                conf = float(raw_conf) / 100.0
-            except (TypeError, ValueError):
-                continue
-            if not word or not math.isfinite(conf) or conf < 0:
-                continue
-            try:
-                page_number = max(1, int(page_values[i])) if i < len(page_values) else 1
-                line_number = max(1, int(line_values[i])) if i < len(line_values) else 1
-            except (TypeError, ValueError):
-                page_number, line_number = 1, 1
-            words.append(
-                OCRWord(
-                    text=word,
-                    confidence=max(0.0, min(1.0, conf)),
-                    page_number=page_number,
-                    line_number=line_number,
+        try:
+            for i, (raw_text, raw_conf) in enumerate(
+                zip(columns["text"], columns["conf"])
+            ):
+                word = str(raw_text).strip()
+                try:
+                    conf = float(raw_conf) / 100.0
+                except (TypeError, ValueError):
+                    continue
+                if not word or not math.isfinite(conf) or conf < 0:
+                    continue
+                try:
+                    page_number = max(1, int(page_values[i])) if i < len(page_values) else 1
+                    line_number = max(1, int(line_values[i])) if i < len(line_values) else 1
+                except (TypeError, ValueError, OverflowError):
+                    page_number, line_number = 1, 1
+                words.append(
+                    OCRWord(
+                        text=word,
+                        confidence=max(0.0, min(1.0, conf)),
+                        page_number=page_number,
+                        line_number=line_number,
+                    )
                 )
+        except (TypeError, ValueError, IndexError, AttributeError) as exc:
+            raise RuntimeError(
+                "Tesseract OCR returned malformed data; no result was produced."
+            ) from exc
+
+        warnings: list[str] = []
+        if frame_count > 1:
+            warnings.append(
+                f"Image contains {frame_count} frames/pages; only the first frame "
+                "was processed. Submit pages separately for complete coverage."
             )
         try:
             version = str(pytesseract.get_tesseract_version()).splitlines()[0]
         except Exception:
             version = None
-        return OCRRawResult(tuple(words), "tesseract", version)
+        return OCRRawResult(tuple(words), "tesseract", version, tuple(warnings))
 
 
 def process_institution_document(

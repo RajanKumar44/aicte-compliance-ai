@@ -99,3 +99,17 @@ def test_unsupported_format_is_rejected_without_engine_call():
         process_institution_document(image_bytes("GIF"), CountingEngine())
 
     assert CountingEngine.calls == 0
+
+
+def test_pdf_input_is_rejected_as_unsupported_before_engine_call():
+    class CountingEngine:
+        calls = 0
+
+        def recognize(self, image_bytes: bytes) -> OCRRawResult:
+            CountingEngine.calls += 1
+            return OCRRawResult((), "fake-test-engine")
+
+    with pytest.raises(OCRInputError):
+        process_institution_document(b"%PDF-1.4\n%synthetic\n", CountingEngine())
+
+    assert CountingEngine.calls == 0

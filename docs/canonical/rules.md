@@ -73,3 +73,21 @@ The detailed evidence and gaps are tracked in [the official-source verification 
 **No EOA checklist is approved by this update.** The AICTE Approval Process Handbook 2024–25 to 2026–27 is identified as the base source, but the 1 April 2024 revised-scrutiny document has not been retrieved/read in this research, the official status and effective date of the circulating 2026–27 addendum remain unverified, and the Annexure-2 §2.1 / Clause 7.17 cross-reference needs direct official-PDF review. The base handbook's NBA validity date ending 30 April 2025 also requires current applicability review. The extracted Affidavit 2, TER receipt, building approval, structural stability, fire safety, satellite map and audited-account items are research leads only; do not encode them as a universally mandatory active checklist.
 
 SIH26261 title, theme, team constraints and reported 28 October 2026 deadline were not verified directly from the official SIH portal in the research pass. The deadline is unconfirmed. No public AICTE API was established; API availability is **not researched/confirmed**, not a verified negative.
+
+## Gate hardening — 2026-10-23 audit
+
+`backend/app/rule_catalog.py` was re-verified and hardened after the 2026-10-22 pass:
+
+- tampered or partially constructed rule objects (for example via Pydantic
+  `model_construct`) now fail with `RuleActivationError` and a blocker message instead of
+  `AttributeError`/`TypeError`;
+- `RuleRegistry` stores and returns deep copies, so mutating a returned active object
+  cannot change registry state;
+- an `effective_from` date earlier than the rule's `publication_date` is refused in the
+  `ACTIVE` state and at the gate;
+- the gate's "supersede it" wording was corrected: supersession and retirement are
+  **not implemented** in this prototype.
+
+The gate is still prototype-only: process-local memory, no durable audit, no
+authenticated approver identity, no concurrency handling, no evaluator. No AICTE rule is
+defined or active.
