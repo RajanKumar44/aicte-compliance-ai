@@ -38,6 +38,7 @@ def test_extracts_only_context_labelled_institution_fields():
         "Valid Until: 2027-04-30\n"
         "Academic Year: 2026/2027",
         confidence=0.88,
+        page_number=2,
     )
     assert fields["institution_name"].value == "Example Technical Institute"
     assert fields["certificate_number"].value == "CERT-2026/0042"
@@ -45,6 +46,7 @@ def test_extracts_only_context_labelled_institution_fields():
     assert fields["valid_until"].value == "2027-04-30"
     assert fields["academic_year"].value == "2026-2027"
     assert fields["institution_name"].confidence == 0.88
+    assert fields["institution_name"].page_number == 2
     assert fields["institution_name"].evidence_text.startswith("Institution Name:")
 
 
@@ -65,16 +67,25 @@ def test_personal_identity_fields_are_not_extracted():
     assert "student_id" not in fields
 
 
-def test_pipeline_validates_image_and_preserves_source_hash_and_review_gate():
+def test_pipeline_preserves_line_boundaries_hash_and_human_review_gate():
     payload = image_bytes()
-    engine = FakeEngine((OCRWord("Institution", 0.9), OCRWord("Name:", 0.9), OCRWord("Example", 0.9), OCRWord("College", 0.9)))
+    engine = FakeEngine((
+        OCRWord("Institution", 0.9, 1, 1),
+        OCRWord("Name:", 0.9, 1, 1),
+        OCRWord("Example", 0.9, 1, 1),
+        OCRWord("College", 0.9, 1, 1),
+        OCRWord("Certificate", 0.8, 1, 2),
+        OCRWord("No:", 0.8, 1, 2),
+        OCRWord("CERT-001", 0.8, 1, 2),
+    ))
     result = process_institution_document(payload, engine)
     assert engine.calls == 1
     assert result.engine == "fake-test-engine"
     assert result.source_sha256 is not None and len(result.source_sha256) == 64
     assert result.requires_human_review is True
-    assert result.fields == {}
-    assert any("manually" in warning for warning in result.warnings)
+    assert result.fields["institution_name"].value == "Example College"
+    assert result.fields["certificate_number"].value == "CERT-001"
+    assert result.fields["certificate_number"].confidence == pytest.approx(0.8)
 
 
 def test_pipeline_rejects_non_image_bytes_before_calling_engine():
