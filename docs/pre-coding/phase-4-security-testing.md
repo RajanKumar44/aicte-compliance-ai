@@ -165,3 +165,12 @@ Security and testing preparation is documented. Controls are not claimed impleme
 A GitHub Actions workflow was added at [`.github/workflows/backend-tests.yml`](../../.github/workflows/backend-tests.yml) on `research/grounded-foundation`. It installs `backend/requirements-dev.txt` with Python 3.12 and runs `python -m pytest -q`, with read-only repository permissions and a 10-minute job timeout. The workflow file was read back from GitHub. **No associated workflow run or status check was visible at the time of this review**, so this is CI configuration added, not a passing test result.
 
 No authentication provider, server-side RBAC, tenant-bound database, upload endpoint, private object store, malware scanner, durable audit trail, or production secrets/retention configuration exists in the inspected prototype. Implementing those without approved identity, data lifecycle, hosting and operational constraints would risk creating false security. Phase 4 remains **NOT PASSED** until scoped controls are implemented and negative tests pass in an actual run.
+
+
+## Follow-up regression checks — 2026-10-23
+
+Added `backend/tests/test_validation_security.py` with eight API-level negative/normalization cases: whitespace-only institution ID, invalid application type, duplicates after normalization, duplicate submitted names, blank expiry keys, trimmed expiry keys, invalid expiry date, and explicit advisory/demo scope. The file was read back from GitHub.
+
+A temporary isolated smoke harness using the source/test behavior copied from the inspected branch ran **22 checks successfully** with the environment's installed FastAPI/Pydantic/pytest stack. This is useful smoke evidence only: it was not a clean clone (network DNS resolution prevented cloning), it did not install the repository's exact pinned dependency manifest, and it is not a GitHub Actions run. Therefore do not record the repository CI gate as passed until the actual branch suite runs under the declared environment.
+
+Still not implemented: authentication, authorization/RBAC, tenant-isolated persistence, private upload/storage, malware scanning, audit persistence, retention/deletion controls, and security-critical cross-tenant negative tests. Phase 4 remains **PARTIAL / NOT PASSED**.
