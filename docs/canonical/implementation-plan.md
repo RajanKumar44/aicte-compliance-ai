@@ -79,3 +79,15 @@ Agree API contracts and the finding schema before parallel work. Integrate conti
 - Reviewer decisions are human-attributed and auditable.
 - Historical runs retain document and rule versions.
 - Demo uses synthetic data and disclaims official AICTE status.
+
+## Research evidence update — 2026-10-23
+The report [official-source-verification-report.md](../research/official-source-verification-report.md) has been added under `docs/research/`. Phase 0 is still blocked; use this exact closure list before freezing rules:
+- [ ] Retrieve/read the complete 1 April 2024 revised-scrutiny document and reconcile its applicability.
+- [ ] Verify official publication, finality and effective date of the circulating 2026–27 addendum/corrigendum.
+- [ ] Check Annexure-2 §2.1 pagination and Clause 7.17 against the official handbook PDF.
+- [ ] Resolve the clause referring to NBA validity through 30 April 2025 for AY 2026–27.
+- [ ] Verify SIH26261's official problem statement, theme, constraints and deadline. The reported 28 October 2026 deadline is not confirmed.
+- [ ] Research AICTE API/authorized integration availability; currently not researched/confirmed, not a verified “no API” conclusion.
+- [ ] Resolve licensing/authorship and personal-data/history risks in fake-id-screening before any code/data reuse.
+
+The document list extracted from the base handbook remains provisional. Do not activate it or claim the EOA checklist is complete. No coding, dependency installation, implementation, merge or deployment is authorized by this research update.
