@@ -12,16 +12,17 @@
 - Updated the source register, reconciliation, official-source verification report, Phase 3 decision record and Phase 5 readiness assessment.
 - Added .github/workflows/backend-tests.yml to run repository tests with Python 3.12 and a separate optional OCR integration smoke test.
 - Added an application-owned OCR result contract and optional Tesseract pipeline with image format/size/pixel checks, image enhancement, per-field confidence, page/evidence provenance, source hash, selected English/Hindi labels and mandatory human-review warnings.
+- Added a local-only OCR CLI for approved local/synthetic image files; it outputs advisory JSON and does not upload or persist files.
 - Added synthetic-only OCR regression fixtures and tests; no real student/institution records were copied.
-- Read back changed files from GitHub and verified the workflow results described below.
+- Read back changed files from GitHub and verified the earlier workflow results described below.
 
 ## OCR integration test evidence — 2026-10-23
 
-GitHub Actions run [#50](https://github.com/rajaryan1111/aicte-compliance-ai/actions/runs/39863940241) completed both jobs successfully:
+GitHub Actions run [#50](https://github.com/rajaryan1111/aicte-compliance-ai/actions/runs/39863940241) completed both jobs successfully for the OCR pipeline before the CLI was added:
 - Backend suite: **51 passed, 1 skipped in 0.50s**. The skip is the real-Tesseract smoke test in the base job, where Tesseract is intentionally optional.
 - Optional OCR integration: **1 passed in 0.38s** after installing Tesseract and optional Python dependencies; the smoke test uses a generated synthetic image.
 
-This verifies the test suite and a basic English Tesseract smoke test. It does **not** prove real institutional-document accuracy, Hindi OCR accuracy, production security or regulatory correctness. The small fixture corpus is regression data, not a representative benchmark.
+The CLI and its new tests were added after that run, so the above counts do not include them. A new CI run is required before claiming the current branch is fully green. The existing evidence does not prove real institutional-document accuracy, Hindi OCR accuracy, production security or regulatory correctness. The small fixture corpus is regression data, not a representative benchmark.
 
 ## Not yet proven / unresolved
 
@@ -34,7 +35,7 @@ This verifies the test suite and a basic English Tesseract smoke test. It does *
 7. Representative labelled/held-out synthetic English-Hindi benchmark and accuracy thresholds.
 8. Production security: no authentication/RBAC, tenant isolation, private document storage, malware scanning, durable audit trail or retention/deletion controls.
 9. Clean-install reproducibility, dependency review and explicit human go/no-go approval.
-10. OCR is callable as a Python pipeline but intentionally is **not exposed through an upload API** until the security boundary above exists.
+10. OCR is callable through a Python pipeline and local CLI but intentionally is **not exposed through an upload API** until the security boundary above exists.
 
 ## Decisions
 
@@ -46,8 +47,8 @@ This verifies the test suite and a basic English Tesseract smoke test. It does *
 
 ## Current gate
 
-**NO-GO for production, real institutional data, rule activation or external integrations.** The repository now has an optional OCR pipeline and passing CI evidence, but regulatory reconciliation, licensing/provenance, representative OCR benchmarking, approved operational choices and production security are incomplete.
+**NO-GO for production, real institutional data, rule activation or external integrations.** The repository now has an optional OCR pipeline and local CLI, but regulatory reconciliation, licensing/provenance, representative OCR benchmarking, approved operational choices and production security are incomplete.
 
 ## Historical CI confirmation — 2026-10-23
 
-Earlier GitHub Actions run [#11](https://github.com/rajaryan1111/aicte-compliance-ai/actions/runs/39862501324) completed successfully with **22 passed in 0.53s**. The newer OCR pipeline has since expanded the suite; use the latest run linked above for current test evidence.
+Earlier GitHub Actions run [#11](https://github.com/rajaryan1111/aicte-compliance-ai/actions/runs/39862501324) completed successfully with **22 passed in 0.53s**. The newer OCR pipeline expanded the suite; the latest CLI-inclusive test result must be taken from the newest workflow run.
