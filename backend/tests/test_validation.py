@@ -29,7 +29,7 @@ def test_missing_document_is_flagged():
     assert result["missing_documents"] == ["accreditation_certificate"]
 
 
-def test_complete_checklist():
+def test_preliminary_checks_do_not_claim_official_compliance():
     response = client.post(
         "/api/v1/validate",
         json={
@@ -41,8 +41,25 @@ def test_complete_checklist():
     )
 
     assert response.status_code == 200
-    assert response.json()["status"] == "checklist_complete"
-    assert response.json()["missing_documents"] == []
+    result = response.json()
+    assert result["status"] == "preliminary_checks_passed"
+    assert result["validation_scope"] == "caller_supplied_checklist_only"
+    assert "does not establish regulatory compliance" in result["notice"]
+    assert result["missing_documents"] == []
+
+
+def test_empty_required_document_list_is_rejected():
+    response = client.post(
+        "/api/v1/validate",
+        json={
+            "institution_id": "SYNTH-EMPTY",
+            "application_type": "eoa",
+            "required_documents": [],
+            "submitted_documents": [],
+        },
+    )
+
+    assert response.status_code == 422
 
 
 def test_expired_document_is_flagged():
