@@ -107,3 +107,11 @@ References: https://fastapi.tiangolo.com/deployment/concepts/, https://vite.dev/
 | ADR-006 | Background processing | Add worker/queue only if measured need justifies it | Provisional |
 
 No ADR is marked LOCKED. Final selection requires evidence, explicit approval and a documented rollback/migration path.
+
+## Decision record — safe baseline vs. decisions that cannot yet be locked
+
+To prevent analysis from blocking all non-regulatory engineering, the following **architecture baseline is recommended for the prototype**: retain FastAPI/Pydantic for the API already present; use PostgreSQL for shared relational production data with SQLAlchemy/Alembic migrations; keep uploaded documents in private object storage and metadata/hashes/opaque keys in the database; use a source-versioned deterministic evaluator with all unverified rules inactive; keep OCR behind an adapter and choose an engine only after a labelled synthetic English/Hindi benchmark; treat all AI/OCR findings as advisory and require human review. This is a coherent recommended baseline, not evidence of deployed infrastructure.
+
+**Not safely finalizable from current repository evidence alone:** identity provider/vendor, hosting/region, object-storage vendor, data retention duration, external OCR processing, cost envelope, formal approver roles, and background queue. These depend on owner requirements, privacy/legal review, measured workload and credentials/contract availability. Do not silently pick vendors or claim an approval that has not been recorded. React + Vite remains a candidate only if the UI requirements and repo state confirm it is needed.
+
+**Phase 3 disposition:** core architecture direction recommended; vendor and operational ADRs remain OPEN. This phase cannot honestly be marked fully finalized until the unresolved decisions have named owners and accepted constraints.
