@@ -62,3 +62,6 @@ All authorization must be enforced by the backend, including institution-level r
 - Verification of subsequent amendments and exact EOA DSC requirements.
 - Resolution of licensing/authorship before reusing code from fake-id-screening.
 - OCR engine/version selection via a labelled synthetic-data bake-off.
+
+## Research update — 2026-10-23
+The official-source verification report is recorded at [docs/research/official-source-verification-report.md](../research/official-source-verification-report.md), with the supporting source register and reconciliation memo alongside it. The regulatory checklist is **not complete**: the 1 April 2024 revised-scrutiny document has been identified but its contents were not retrieved; the official status/effective date of the circulating 2026–27 addendum is unresolved; SIH26261 and its reported 28 October 2026 deadline were not directly verified on the official portal; and the Annexure-2 §2.1 / Clause 7.17 cross-reference needs checking against the official PDF. Keep the checklist unavailable or explicitly provisional until those gates close. Do not describe the reported deadline as confirmed.
