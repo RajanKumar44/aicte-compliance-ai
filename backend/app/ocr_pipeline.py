@@ -4,6 +4,13 @@ This application-owned module does not import the fake-id-screening repository.
 OCR output is evidence for human review, never proof of authenticity/compliance.
 Install backend/requirements-ocr.txt and the Tesseract system binary to use the
 optional Tesseract adapter.
+
+Engine responses are untrusted. The adapter requires the ``text`` and ``conf``
+columns (equal-length sequences), optionally accepts aligned ``page_num`` /
+``line_num`` metadata, and raises ``RuntimeError`` for structural violations
+instead of returning a success-shaped partial result. Individual words whose
+confidence is not a finite 0-100 Tesseract percentage are dropped, never
+clamped. See ``_validated_engine_columns`` and ``_parse_engine_confidence``.
 """
 from __future__ import annotations
 
@@ -211,26 +218,95 @@ def extract_institution_fields(
     return fields
 
 
+REQUIRED_ENGINE_COLUMNS = ("text", "conf")
+OPTIONAL_ENGINE_COLUMNS = ("page_num", "line_num")
+MAX_ENGINE_CONFIDENCE_PERCENT = 100.0
+
+
+def _engine_error(message: str = "no result was produced") -> RuntimeError:
+    return RuntimeError(f"Tesseract OCR returned malformed data; {message}.")
+
+
+def _require_sequence(data: Mapping, key: str, *, required: bool) -> Sequence | None:
+    if key not in data:
+        if required:
+            raise _engine_error(f"required column '{key}' is missing")
+        return None
+    value = data[key]
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        raise _engine_error(f"column '{key}' is not a sequence")
+    return value
+
+
 def _validated_engine_columns(data: object) -> dict[str, Sequence]:
     """Validate the engine's column mapping before indexing it.
 
-    Optional engine output is untrusted: a missing/partial mapping must fail
-    loudly as an engine error rather than surfacing ``AttributeError`` or
-    silently producing an empty, success-shaped result.
+    Contract for the Tesseract ``Output.DICT`` mapping (treat as untrusted):
+
+    * **Required:** ``text`` and ``conf``. Both must be present, be sequences
+      (not strings/bytes), and have the same length. A missing required column,
+      or mismatched required lengths, is malformed output and raises
+      ``RuntimeError`` — mismatches are never silently truncated by ``zip``.
+    * **Optional:** ``page_num`` and ``line_num``. They may be absent entirely,
+      in which case every word defaults to page 1 / line 1. If present they must
+      be sequences and must line up with ``text``; a partial metadata column
+      would misattribute page/line provenance, so it raises instead of being
+      defaulted or truncated.
+
+    A structurally valid empty result (present required columns with zero
+    entries) is legitimate and returns empty columns; it is distinguishable from
+    malformed output because malformed output raises.
     """
     if not isinstance(data, Mapping):
-        raise RuntimeError(
-            "Tesseract OCR returned malformed data; no result was produced."
-        )
+        raise _engine_error("engine response is not a column mapping")
+
     columns: dict[str, Sequence] = {}
-    for key in ("text", "conf", "page_num", "line_num"):
-        value = data.get(key, ())
-        if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
-            raise RuntimeError(
-                "Tesseract OCR returned malformed data; no result was produced."
-            )
-        columns[key] = value
+    for key in REQUIRED_ENGINE_COLUMNS:
+        columns[key] = _require_sequence(data, key, required=True)  # type: ignore[assignment]
+    for key in OPTIONAL_ENGINE_COLUMNS:
+        optional = _require_sequence(data, key, required=False)
+        if optional is not None:
+            columns[key] = optional
+
+    text_length = len(columns["text"])
+    if len(columns["conf"]) != text_length:
+        raise _engine_error(
+            "required columns 'text' and 'conf' have different lengths"
+        )
+    for key in OPTIONAL_ENGINE_COLUMNS:
+        if key in columns and len(columns[key]) != text_length:
+            raise _engine_error(f"column '{key}' does not align with 'text'")
     return columns
+
+
+def _parse_engine_confidence(value: object) -> float | None:
+    """Convert a Tesseract 0-100 percentage to 0.0-1.0; None if unusable.
+
+    The adapter never clamps or inflates: a value above 100, a negative value,
+    NaN/infinity, a boolean or a non-numeric value is discarded with its word
+    entry so a malformed engine score cannot be presented as high confidence.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    try:
+        percent = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(percent):
+        return None
+    if not 0.0 <= percent <= MAX_ENGINE_CONFIDENCE_PERCENT:
+        return None
+    return percent / MAX_ENGINE_CONFIDENCE_PERCENT
+
+
+def _metadata_at(values: Sequence | None, index: int) -> int:
+    """Return 1-based page/line metadata, defaulting to 1 when unusable."""
+    if values is None:
+        return 1
+    try:
+        return max(1, int(values[index]))
+    except (TypeError, ValueError, OverflowError, IndexError):
+        return 1
 
 
 class TesseractOCRAdapter:
@@ -285,37 +361,32 @@ class TesseractOCRAdapter:
             raise RuntimeError("Tesseract OCR failed; no result was produced.") from exc
 
         columns = _validated_engine_columns(data)
-        page_values = columns["page_num"]
-        line_values = columns["line_num"]
+        page_values = columns.get("page_num")
+        line_values = columns.get("line_num")
         words: list[OCRWord] = []
-        try:
-            for i, (raw_text, raw_conf) in enumerate(
-                zip(columns["text"], columns["conf"])
-            ):
-                word = str(raw_text).strip()
-                try:
-                    conf = float(raw_conf) / 100.0
-                except (TypeError, ValueError):
-                    continue
-                if not word or not math.isfinite(conf) or conf < 0:
-                    continue
-                try:
-                    page_number = max(1, int(page_values[i])) if i < len(page_values) else 1
-                    line_number = max(1, int(line_values[i])) if i < len(line_values) else 1
-                except (TypeError, ValueError, OverflowError):
-                    page_number, line_number = 1, 1
-                words.append(
-                    OCRWord(
-                        text=word,
-                        confidence=max(0.0, min(1.0, conf)),
-                        page_number=page_number,
-                        line_number=line_number,
-                    )
+        for index, (raw_text, raw_conf) in enumerate(
+            zip(columns["text"], columns["conf"], strict=True)
+        ):
+            # Non-string text is a schema violation, never stringified into
+            # plausible-looking text such as "None" or "123".
+            if not isinstance(raw_text, str):
+                raise _engine_error(
+                    f"column 'text' contains a non-string value at index {index}"
                 )
-        except (TypeError, ValueError, IndexError, AttributeError) as exc:
-            raise RuntimeError(
-                "Tesseract OCR returned malformed data; no result was produced."
-            ) from exc
+            word = raw_text.strip()
+            if not word:
+                continue
+            confidence = _parse_engine_confidence(raw_conf)
+            if confidence is None:
+                continue
+            words.append(
+                OCRWord(
+                    text=word,
+                    confidence=confidence,
+                    page_number=_metadata_at(page_values, index),
+                    line_number=_metadata_at(line_values, index),
+                )
+            )
 
         warnings: list[str] = []
         if frame_count > 1:

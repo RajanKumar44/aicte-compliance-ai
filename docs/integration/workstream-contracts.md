@@ -88,6 +88,14 @@ OCRDocumentResult` with `fields: dict[str, OCRField]` (`value`, `confidence`,
 WEBP, 100,000-character aggregate OCR text, finite `0.0–1.0` confidence, strict ISO
 dates. `parse_iso_date_candidate` never guesses day/month order.
 
+Engine output boundary (Tesseract `Output.DICT`): `text` and `conf` are required
+columns and must be equal-length sequences; `page_num`/`line_num` are optional
+(default 1) but must align with `text` when present. Missing required columns, length
+mismatches and non-string text raise `RuntimeError("Tesseract OCR returned malformed
+data; ...")`; a structurally valid empty result stays empty; invalid per-word confidence
+(non-numeric, non-finite, boolean, outside 0–100) drops that word rather than being
+clamped.
+
 Not implemented: PDF input, multi-frame coverage (first frame only, warned), bounding
 boxes, persistent storage, any network call.
 

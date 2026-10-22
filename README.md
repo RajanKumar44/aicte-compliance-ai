@@ -35,6 +35,14 @@ SHA-256, and `requires_human_review=True` on every result.
   from the first frame only and now report a warning; submit pages separately. Bounding
   boxes are not recorded. Hindi coverage is label extraction plus synthetic text
   fixtures only — the optional engine test is English.
+- Engine output is validated before use. `text` and `conf` are **required** columns and
+  must be equal-length sequences; `page_num`/`line_num` are optional (default 1) but must
+  align with `text` if present. A missing required column, a length mismatch, or a
+  non-string `text` value raises an engine error instead of yielding a success-shaped
+  partial result, and text values are never stringified. A structurally valid empty
+  result stays valid. A per-word confidence that is non-numeric, non-finite, boolean, or
+  outside the Tesseract 0–100 percentage range is **dropped, never clamped or
+  inflated**; valid values are scaled to the `0.0–1.0` contract.
 
 ### 3. Rule catalogue and activation gate — no rules, no evaluator
 `backend/app/rule_catalog.py` defines metadata schemas plus a server-side activation
