@@ -51,7 +51,7 @@ def _validate_image_bytes(image_bytes: bytes) -> None:
     if len(image_bytes) > MAX_UPLOAD_BYTES:
         raise OCRInputError("Image exceeds the 10 MiB processing limit.")
     try:
-        from PIL import Image, UnidentifiedImageError
+        from PIL import Image
     except ImportError as exc:
         raise RuntimeError(
             "OCR image support is optional. Install backend/requirements-ocr.txt."
@@ -68,7 +68,6 @@ def _validate_image_bytes(image_bytes: bytes) -> None:
     except OCRInputError:
         raise
     except Exception as exc:
-        # Includes decoder errors and Pillow decompression-bomb errors.
         raise OCRInputError("Image could not be decoded safely.") from exc
 
 
@@ -86,10 +85,11 @@ def extract_institution_fields(
     confidence: float | None = None,
     page_number: int = 1,
 ) -> dict[str, OCRField]:
-    """Extract context-labelled institution document fields, not personal IDs.
+    """Extract context-labelled institution fields in English or Hindi.
 
     Dates are accepted only in strict ISO YYYY-MM-DD form. Ambiguous dates are
-    left unresolved rather than guessing day/month order.
+    left unresolved rather than guessing day/month order. Personal identity
+    fields are deliberately outside this extractor's scope.
     """
     if not text or not text.strip():
         return {}
@@ -101,12 +101,12 @@ def extract_institution_fields(
     lines = [line for line in lines if line]
 
     patterns: tuple[tuple[str, re.Pattern[str]], ...] = (
-        ("institution_name", re.compile(r"^(?:name of institution|institution name|name of college|college name)\s*[:\-]\s*(.{3,160})$", re.I)),
-        ("certificate_number", re.compile(r"^(?:certificate no\.?|certificate number|reference no\.?|reference number|document no\.?)\s*[:\-]\s*([A-Z0-9][A-Z0-9/._\-]{1,79})$", re.I)),
-        ("application_reference", re.compile(r"^(?:application ref(?:erence)?|application id|application no\.?)\s*[:\-]\s*([A-Z0-9][A-Z0-9/._\-]{1,79})$", re.I)),
-        ("issue_date", re.compile(r"^(?:date of issue|issued on|issue date)\s*[:\-]\s*(.+)$", re.I)),
-        ("valid_until", re.compile(r"^(?:valid until|valid up to|valid upto|valid till|expiry date|expires on)\s*[:\-]\s*(.+)$", re.I)),
-        ("academic_year", re.compile(r"^(?:academic year|academic session)\s*[:\-]\s*((?:20\d{2})\s*[-/]\s*(?:20\d{2}))$", re.I)),
+        ("institution_name", re.compile(r"^(?:name of institution|institution name|name of college|college name|संस्थान का नाम|संस्था का नाम|महाविद्यालय का नाम|कॉलेज का नाम)\s*[:\-]\s*(.{3,160})$", re.I)),
+        ("certificate_number", re.compile(r"^(?:certificate no\.?|certificate number|reference no\.?|reference number|document no\.?|प्रमाणपत्र संख्या|प्रमाणपत्र क्रमांक|संदर्भ संख्या|दस्तावेज़ संख्या)\s*[:\-]\s*([A-Z0-9][A-Z0-9/._\-]{1,79})$", re.I)),
+        ("application_reference", re.compile(r"^(?:application ref(?:erence)?|application id|application no\.?|आवेदन संदर्भ|आवेदन संख्या|आवेदन क्रमांक)\s*[:\-]\s*([A-Z0-9][A-Z0-9/._\-]{1,79})$", re.I)),
+        ("issue_date", re.compile(r"^(?:date of issue|issued on|issue date|जारी करने की तिथि|जारी दिनांक|निर्गमन तिथि)\s*[:\-]\s*(.+)$", re.I)),
+        ("valid_until", re.compile(r"^(?:valid until|valid up to|valid upto|valid till|expiry date|expires on|वैधता तक|समाप्ति तिथि|अंतिम वैधता तिथि)\s*[:\-]\s*(.+)$", re.I)),
+        ("academic_year", re.compile(r"^(?:academic year|academic session|शैक्षणिक वर्ष|शैक्षिक सत्र)\s*[:\-]\s*((?:20\d{2})\s*[-/]\s*(?:20\d{2}))$", re.I)),
     )
 
     for line in lines:
@@ -160,7 +160,6 @@ class TesseractOCRAdapter:
                 source.load()
                 image = ImageOps.grayscale(source)
                 image = ImageOps.autocontrast(image)
-                # Upscale small scans without exceeding the configured pixel cap.
                 if min(image.size) < 700:
                     scale = min(2.0, 700 / max(1, min(image.size)))
                     new_size = (
@@ -173,7 +172,6 @@ class TesseractOCRAdapter:
                     image, lang=self.language, config="--psm 6", output_type=Output.DICT
                 )
         except Exception as exc:
-            # Do not silently convert engine/decode failures into a successful empty result.
             raise RuntimeError("Tesseract OCR failed; no result was produced.") from exc
 
         words: list[OCRWord] = []
@@ -228,9 +226,7 @@ def process_institution_document(
         grouped.setdefault((word.page_number, word.line_number), []).append(word)
 
     fields: dict[str, OCRField] = {}
-    all_words: list[OCRWord] = []
     for (page_number, _line_number), line_words in sorted(grouped.items()):
-        all_words.extend(line_words)
         line_text = " ".join(word.text for word in line_words)
         line_confidence = _normalised_confidence(tuple(line_words))
         extracted = extract_institution_fields(line_text, line_confidence, page_number)
