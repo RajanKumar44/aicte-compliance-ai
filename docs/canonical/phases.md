@@ -36,3 +36,8 @@ Gate: claims about accuracy/performance are supported by recorded measurements.
 - Frontend/review: applicant/reviewer/admin screens, evidence display, workflow and demo.
 
 Before parallel coding, agree the API schemas and finding contract. Protect main; work in feature branches and merge only after review and tests.
+
+## Updated Phase 0 gate — research snapshot 2026-10-23
+Phase 0 remains **open**. The source verification report is at [docs/research/official-source-verification-report.md](../research/official-source-verification-report.md). Closure requires: (1) retrieve and reconcile the complete 1 April 2024 scrutiny document; (2) establish official publication/finality/effective date of the 2026–27 addendum; (3) check Annexure-2 §2.1 pagination and Clause 7.17 directly in the official handbook PDF; (4) resolve the NBA-validity-through-30-April-2025 reference for AY 2026–27; (5) verify the official SIH statement and deadline; and (6) resolve reuse-repository licensing/authorship/data-history risks before copying anything. API availability remains unresearched, not disproven. No candidate document rule becomes active while these gates are open.
+
+**Current user instruction:** finish system preparation first. Do not start implementation or make further code changes as part of this preparation phase.
