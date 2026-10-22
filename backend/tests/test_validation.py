@@ -43,3 +43,47 @@ def test_complete_checklist():
     assert response.status_code == 200
     assert response.json()["status"] == "checklist_complete"
     assert response.json()["missing_documents"] == []
+
+
+def test_expired_document_is_flagged():
+    response = client.post(
+        "/api/v1/validate",
+        json={
+            "institution_id": "SYNTH-003",
+            "application_type": "eoa",
+            "required_documents": ["accreditation_certificate"],
+            "submitted_documents": ["accreditation_certificate"],
+            "expiry_dates": {
+                "accreditation_certificate": "2000-01-01"
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "attention_required"
+    assert result["expired_documents"] == ["accreditation_certificate"]
+
+    finding = result["findings"][0]
+    assert finding["code"] == "DOCUMENT_EXPIRED"
+    assert finding["evidence"]["expiry_date"] == "2000-01-01"
+
+
+def test_future_expiry_date_is_not_flagged():
+    response = client.post(
+        "/api/v1/validate",
+        json={
+            "institution_id": "SYNTH-004",
+            "application_type": "eoa",
+            "required_documents": ["undertaking"],
+            "submitted_documents": ["undertaking"],
+            "expiry_dates": {
+                "undertaking": "2099-12-31"
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["expired_documents"] == []
+    assert result["findings"] == []
