@@ -51,3 +51,9 @@ They conflict on whether the complete current EOA document matrix was retrieved 
 - Verify EOA-specific DSC/signatory requirements.
 - Resolve reuse-repository licence and data-history risks.
 - Benchmark OCR candidates on a labelled synthetic institutional-document set.
+
+## Addendum — 2026-10-23 primary-source retrieval update
+
+The official AICTE-hosted 5-page [Revised set of Documents for scrutiny for various categories under chapter I & II](https://www.aicte.gov.in/sites/default/files/Revised%20set%20of%20Documents.pdf) was successfully opened and text-extracted. This changes the prior status from “document not retrieved” to “document retrieved; scope and authority still need reconciliation.” The list is category-oriented and includes multiple categories; it is not, on its face, a complete EOA-specific checklist. No requirement is activated merely because it appears in that PDF.
+
+The official [APH 2024–25 to 2026–27 PDF](https://www.aicte.gov.in/sites/default/files/APH%20Final.pdf) was also directly opened. SIH26261 was found in a third-party mirror, but the official SIH listing was not directly read. Thus this pass narrows the research gap but does not close the SIH verification gate. The 2026–27 addendum's official finality/effective date, Clause 7.17 cross-reference, Annexure-2 page discrepancy, NBA validity criterion, AICTE integration availability and reuse-license questions remain unresolved. Candidate rules remain inactive.
