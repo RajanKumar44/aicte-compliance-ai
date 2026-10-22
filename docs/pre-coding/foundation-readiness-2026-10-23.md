@@ -128,6 +128,20 @@ engine-output contract), `338df56` (rule gate and engine boundary hardening) and
 `014403a` therefore spans several commits and must not be described as the latest
 commit's own diff.
 
+**Standing rule — this document cannot name the head that contains it.** Each
+documentation-only commit advances the PR #5 head and therefore invalidates any SHA this
+file names as "current". Read the table above as *the head verified when this section
+was written*, not as a permanent fact, and re-check the run list before quoting it.
+Known documentation-only commits on this branch, each verified on its own SHA:
+
+| Commit | Own diff | CI run on that SHA |
+|---|---|---|
+| `5bd260f` | 2 docs files, +85/−21 | `39872841910` — `backend-tests` success, `optional-ocr-integration` success |
+| the correction commit that added this table | this file only, documentation | verified separately at push time; its SHA and run are recorded in the audit report rather than here |
+
+No application, workflow or dependency file has changed on this branch since
+`0cff85a`.
+
 **Historical CI evidence for the previous head.** Run `39871758137` executed on
 `0cff85a7c3d0eef9c352ae07e6668e9741dfc907` (`backend-tests` and
 `optional-ocr-integration` both successful). It is retained as history for that SHA only
