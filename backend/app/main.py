@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 from typing import Literal
 
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 app = FastAPI(
     title="AICTE Compliance Assistant",
@@ -10,8 +10,20 @@ app = FastAPI(
         "Prototype for application validation and compliance assistance. "
         "Results are advisory and use synthetic demonstration data."
     ),
-    version="0.3.0",
+    version="0.3.1",
 )
+
+
+def _clean_document_names(value: object) -> object:
+    """Normalize document identifiers and reject blanks/duplicates."""
+    if not isinstance(value, list):
+        return value
+    if any(not isinstance(item, str) or not item.strip() for item in value):
+        raise ValueError("Document names must be non-empty strings.")
+    cleaned = [item.strip() for item in value]
+    if len(set(cleaned)) != len(cleaned):
+        raise ValueError("Document names must not contain duplicates.")
+    return cleaned
 
 
 class ValidationRequest(BaseModel):
@@ -20,6 +32,34 @@ class ValidationRequest(BaseModel):
     required_documents: list[str] = Field(min_length=1)
     submitted_documents: list[str] = Field(default_factory=list)
     expiry_dates: dict[str, date] = Field(default_factory=dict)
+
+    @field_validator("institution_id")
+    @classmethod
+    def normalize_institution_id(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("institution_id must not be blank.")
+        return value
+
+    @field_validator("required_documents", "submitted_documents", mode="before")
+    @classmethod
+    def normalize_document_names(cls, value: object) -> object:
+        return _clean_document_names(value)
+
+    @field_validator("expiry_dates", mode="before")
+    @classmethod
+    def normalize_expiry_date_keys(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        normalized: dict[object, object] = {}
+        for key, expiry in value.items():
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError("Expiry-date document names must be non-empty strings.")
+            clean_key = key.strip()
+            if clean_key in normalized:
+                raise ValueError("Expiry-date document names must not contain duplicates.")
+            normalized[clean_key] = expiry
+        return normalized
 
 
 @app.get("/health")
