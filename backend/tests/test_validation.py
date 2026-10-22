@@ -62,6 +62,50 @@ def test_empty_required_document_list_is_rejected():
     assert response.status_code == 422
 
 
+def test_blank_document_names_are_rejected():
+    response = client.post(
+        "/api/v1/validate",
+        json={
+            "institution_id": "SYNTH-BLANK",
+            "application_type": "eoa",
+            "required_documents": ["   "],
+            "submitted_documents": [],
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_duplicate_document_names_are_rejected():
+    response = client.post(
+        "/api/v1/validate",
+        json={
+            "institution_id": "SYNTH-DUP",
+            "application_type": "eoa",
+            "required_documents": ["undertaking", "undertaking"],
+            "submitted_documents": [],
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_document_names_are_trimmed_consistently():
+    response = client.post(
+        "/api/v1/validate",
+        json={
+            "institution_id": " SYNTH-TRIM ",
+            "application_type": "eoa",
+            "required_documents": [" undertaking "],
+            "submitted_documents": ["undertaking"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["institution_id"] == "SYNTH-TRIM"
+    assert response.json()["missing_documents"] == []
+
+
 def test_expired_document_is_flagged():
     response = client.post(
         "/api/v1/validate",
@@ -70,9 +114,7 @@ def test_expired_document_is_flagged():
             "application_type": "eoa",
             "required_documents": ["accreditation_certificate"],
             "submitted_documents": ["accreditation_certificate"],
-            "expiry_dates": {
-                "accreditation_certificate": "2000-01-01"
-            },
+            "expiry_dates": {"accreditation_certificate": "2000-01-01"},
         },
     )
 
@@ -94,9 +136,7 @@ def test_future_expiry_date_is_not_flagged():
             "application_type": "eoa",
             "required_documents": ["undertaking"],
             "submitted_documents": ["undertaking"],
-            "expiry_dates": {
-                "undertaking": "2099-12-31"
-            },
+            "expiry_dates": {"undertaking": "2099-12-31"},
         },
     )
 
