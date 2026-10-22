@@ -36,3 +36,12 @@
 ## Current gate
 
 **NO-GO for production, real institutional data, rule activation or external integrations.** The repo is better documented and has CI configuration, but Phase 3 vendor decisions, Phase 4 implemented controls/test evidence and Phase 5 approval are not complete. A safe next step is to resolve owner-dependent decisions, then implement and test the smallest security boundary before expanding the product.
+
+## Update — regression tests and environment limitation
+
+- Added `backend/tests/test_validation_security.py` with eight input-validation/advisory-scope regression tests.
+- Ran an isolated smoke harness that copied the inspected API and rule-catalogue behavior: **22 checks passed** using the runtime's installed FastAPI/Pydantic/pytest packages.
+- Attempted a shallow clone of the actual branch to run the repository suite and install `backend/requirements-dev.txt`; the environment could not resolve `github.com` (DNS failure). Thus the exact repository suite, pinned dependencies and GitHub Actions result remain unverified. Do not represent the 22-check isolated harness as a full repository/CI pass.
+- GitHub Actions workflow exists in the branch, but no run/status check was visible through the available check. The PR remains draft/open and unmerged.
+
+**Revised gate:** progress on tests, but still **NO-GO** for production. Actual CI run, approved operational choices, authoritative rule reconciliation, license review and implementation of authentication/tenant isolation/storage/audit remain mandatory.
