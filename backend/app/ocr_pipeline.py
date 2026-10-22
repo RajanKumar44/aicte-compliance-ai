@@ -1,9 +1,9 @@
 """Optional OCR pipeline for institutional compliance documents.
 
-This module is application-owned and does not import the fake-id-screening repo.
-OCR output is an evidence aid only; it never authenticates documents or decides
-regulatory compliance. Install backend/requirements-ocr.txt and the Tesseract
-system binary to use TesseractOCRAdapter.
+This application-owned module does not import the fake-id-screening repository.
+OCR output is evidence for human review, never proof of authenticity/compliance.
+Install backend/requirements-ocr.txt and the Tesseract system binary to use the
+optional Tesseract adapter.
 """
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ class OCRWord:
     text: str
     confidence: float
     page_number: int = 1
+    line_number: int = 1
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,7 @@ class OCRRawResult:
 
 class RawOCREngine(Protocol):
     def recognize(self, image_bytes: bytes) -> OCRRawResult:
-        """Recognize text from validated image bytes; no regulatory decisions."""
+        """Recognize text from validated image bytes; make no compliance decision."""
 
 
 def _validate_image_bytes(image_bytes: bytes) -> None:
@@ -66,23 +67,34 @@ def _validate_image_bytes(image_bytes: bytes) -> None:
             image.verify()
     except OCRInputError:
         raise
-    except (UnidentifiedImageError, OSError, ValueError) as exc:
+    except Exception as exc:
+        # Includes decoder errors and Pillow decompression-bomb errors.
         raise OCRInputError("Image could not be decoded safely.") from exc
 
 
 def _normalised_confidence(words: tuple[OCRWord, ...]) -> float | None:
-    valid = [max(0.0, min(1.0, word.confidence)) for word in words if word.confidence >= 0]
+    valid = [
+        max(0.0, min(1.0, word.confidence))
+        for word in words
+        if word.confidence >= 0
+    ]
     return sum(valid) / len(valid) if valid else None
 
 
-def extract_institution_fields(text: str, confidence: float | None = None) -> dict[str, OCRField]:
-    """Extract only context-labelled institutional document fields.
+def extract_institution_fields(
+    text: str,
+    confidence: float | None = None,
+    page_number: int = 1,
+) -> dict[str, OCRField]:
+    """Extract context-labelled institution document fields, not personal IDs.
 
-    Ambiguous dates are intentionally left unresolved. No student name, DOB,
-    face, identity number, or authenticity score is extracted by this module.
+    Dates are accepted only in strict ISO YYYY-MM-DD form. Ambiguous dates are
+    left unresolved rather than guessing day/month order.
     """
     if not text or not text.strip():
         return {}
+    if page_number < 1:
+        raise ValueError("page_number must be a positive 1-based integer")
     confidence = None if confidence is None else max(0.0, min(1.0, confidence))
     fields: dict[str, OCRField] = {}
     lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()]
@@ -113,7 +125,7 @@ def extract_institution_fields(text: str, confidence: float | None = None) -> di
             fields[field_name] = OCRField(
                 value=raw_value,
                 confidence=confidence,
-                page_number=1,
+                page_number=page_number,
                 evidence_text=line[:500],
             )
     return fields
@@ -136,7 +148,7 @@ class TesseractOCRAdapter:
             raise OCRInputError("Image exceeds the configured processing limit.")
         try:
             import pytesseract
-            from PIL import Image, ImageOps, UnidentifiedImageError
+            from PIL import Image, ImageOps
             from pytesseract import Output
         except ImportError as exc:
             raise RuntimeError(
@@ -148,35 +160,48 @@ class TesseractOCRAdapter:
                 source.load()
                 image = ImageOps.grayscale(source)
                 image = ImageOps.autocontrast(image)
-                # Upscale small scans, with a bounded output size.
+                # Upscale small scans without exceeding the configured pixel cap.
                 if min(image.size) < 700:
                     scale = min(2.0, 700 / max(1, min(image.size)))
-                    new_size = (max(1, int(image.width * scale)), max(1, int(image.height * scale)))
+                    new_size = (
+                        max(1, int(image.width * scale)),
+                        max(1, int(image.height * scale)),
+                    )
                     if new_size[0] * new_size[1] <= MAX_IMAGE_PIXELS:
                         image = image.resize(new_size)
                 data = pytesseract.image_to_data(
-                    image,
-                    lang=self.language,
-                    config="--psm 6",
-                    output_type=Output.DICT,
+                    image, lang=self.language, config="--psm 6", output_type=Output.DICT
                 )
-        except OCRInputError:
-            raise
-        except (UnidentifiedImageError, OSError, ValueError) as exc:
-            raise OCRInputError("Image could not be decoded safely.") from exc
         except Exception as exc:
-            # Do not swallow an engine failure and present an empty successful result.
+            # Do not silently convert engine/decode failures into a successful empty result.
             raise RuntimeError("Tesseract OCR failed; no result was produced.") from exc
 
         words: list[OCRWord] = []
-        for raw_text, raw_conf in zip(data.get("text", []), data.get("conf", [])):
+        text_values = data.get("text", [])
+        confidences = data.get("conf", [])
+        page_values = data.get("page_num", [])
+        line_values = data.get("line_num", [])
+        for i, (raw_text, raw_conf) in enumerate(zip(text_values, confidences)):
             word = str(raw_text).strip()
             try:
                 conf = float(raw_conf) / 100.0
             except (TypeError, ValueError):
                 continue
-            if word and conf >= 0:
-                words.append(OCRWord(text=word, confidence=max(0.0, min(1.0, conf))))
+            if not word or conf < 0:
+                continue
+            try:
+                page_number = max(1, int(page_values[i])) if i < len(page_values) else 1
+                line_number = max(1, int(line_values[i])) if i < len(line_values) else 1
+            except (TypeError, ValueError):
+                page_number, line_number = 1, 1
+            words.append(
+                OCRWord(
+                    text=word,
+                    confidence=max(0.0, min(1.0, conf)),
+                    page_number=page_number,
+                    line_number=line_number,
+                )
+            )
         try:
             version = str(pytesseract.get_tesseract_version()).splitlines()[0]
         except Exception:
@@ -193,9 +218,25 @@ def process_institution_document(
     raw = engine.recognize(image_bytes)
     if not raw.engine.strip():
         raise ValueError("OCR engine must return a non-empty name.")
-    text = " ".join(word.text for word in raw.words)
-    confidence = _normalised_confidence(raw.words)
-    fields = extract_institution_fields(text, confidence)
+
+    grouped: dict[tuple[int, int], list[OCRWord]] = {}
+    for word in raw.words:
+        if not word.text.strip() or word.confidence < 0:
+            continue
+        if word.page_number < 1 or word.line_number < 1:
+            continue
+        grouped.setdefault((word.page_number, word.line_number), []).append(word)
+
+    fields: dict[str, OCRField] = {}
+    all_words: list[OCRWord] = []
+    for (page_number, _line_number), line_words in sorted(grouped.items()):
+        all_words.extend(line_words)
+        line_text = " ".join(word.text for word in line_words)
+        line_confidence = _normalised_confidence(tuple(line_words))
+        extracted = extract_institution_fields(line_text, line_confidence, page_number)
+        for field_name, field in extracted.items():
+            fields.setdefault(field_name, field)
+
     warnings = list(raw.warnings)
     if not fields:
         warnings.append(
