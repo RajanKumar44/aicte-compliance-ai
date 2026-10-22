@@ -46,3 +46,10 @@
 - No autonomous official approval/rejection.
 - No opaque fraud score as the sole reason for an adverse outcome.
 - No production deployment with real sensitive documents before security/privacy review.
+
+## Research-driven architecture constraints — 2026-10-23
+- Treat the AICTE handbook as an identified base source, not a complete current rulebook. The 1 April 2024 scrutiny document and 2026–27 addendum status remain unresolved.
+- Rule ingestion must preserve source status (verified, source-reported, provisional, unresolved), retrieval date, document/version, exact clause/page, effective interval and reviewer decision. Never activate unresolved rules.
+- The external-verification adapter contract must distinguish not attempted, unavailable, inconclusive, simulated and externally verified; “verified” requires an authorized authoritative source supporting the exact claim.
+- No official SIH portal access, AICTE API or private integration is established by the current research. Do not architect around assumed access; adapters remain optional and explicitly unavailable until verified.
+- The candidate fake-id-screening repository remains off-limits for code/data reuse until licensing/authorship and personal-data/history risks are resolved.
