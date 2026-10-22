@@ -159,3 +159,9 @@ Reference: https://pip.pypa.io/en/stable/topics/repeatable-installs/
 ## Phase 4 outcome
 
 Security and testing preparation is documented. Controls are not claimed implemented or verified. Upload thresholds, OCR engine, Python version, lock strategy, retention policy and production providers remain subject to evidence and approval.
+
+## Follow-up implementation evidence — 2026-10-23
+
+A GitHub Actions workflow was added at [`.github/workflows/backend-tests.yml`](../../.github/workflows/backend-tests.yml) on `research/grounded-foundation`. It installs `backend/requirements-dev.txt` with Python 3.12 and runs `python -m pytest -q`, with read-only repository permissions and a 10-minute job timeout. The workflow file was read back from GitHub. **No associated workflow run or status check was visible at the time of this review**, so this is CI configuration added, not a passing test result.
+
+No authentication provider, server-side RBAC, tenant-bound database, upload endpoint, private object store, malware scanner, durable audit trail, or production secrets/retention configuration exists in the inspected prototype. Implementing those without approved identity, data lifecycle, hosting and operational constraints would risk creating false security. Phase 4 remains **NOT PASSED** until scoped controls are implemented and negative tests pass in an actual run.
