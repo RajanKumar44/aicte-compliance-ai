@@ -81,3 +81,10 @@ These instructions must be executed from a clean environment and results recorde
 The official AICTE revised-scrutiny PDF and APH PDF have now been retrieved directly. This closes a retrieval subtask, not the regulatory-verification gate: applicability, supersession/amendments and specific cross-references remain unresolved, and the official SIH problem-statement page was not directly verified. A backend CI workflow has been proposed/added on the research branch to produce test evidence; until a workflow run is observed and all tests pass, G8 remains BLOCKED. CI alone does not establish tenant isolation or production security. No actual authentication, RBAC, tenant-bound persistence, private upload pipeline, malware scanning, audit trail, or database migration system is present in the inspected implementation. These remain explicit implementation gates.
 
 **Updated verdict: BLOCKED — not safe to declare coding-ready or production-secure.** Small, isolated, non-regulatory prototype changes may be reviewed under a tightly scoped implementation plan, but any rule activation, real institutional documents, external integration or production deployment remains gated.
+
+
+## Reassessment — after validation regression work, 2026-10-23
+
+Additional evidence: eight API input-hardening tests were added to `backend/tests/test_validation_security.py`. A local isolated smoke harness reported 22 passing checks across copied validation and rule-catalogue behavior. Network DNS failure prevented a clean clone, and the repository's pinned dependencies / actual GitHub Actions run were not verified. This does **not** satisfy G7/G8.
+
+Research remains blocked on official SIH statement verification, addendum finality/effective date, EOA applicability and cross-reference reconciliation, NBA criterion, and reuse-license review. Phase 3 has a recommended portable baseline but not all owner-dependent vendor/operational approvals. Production security controls are still absent. The verdict remains **NO-GO for production, real documents, activated regulatory rules or external integrations**.
