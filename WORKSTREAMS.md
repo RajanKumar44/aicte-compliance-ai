@@ -85,6 +85,41 @@ another workstream's directory; adding real institutional or personal documents;
 committing secrets or `.env` files; activating a regulatory rule; adding a public upload
 route; weakening a test to make CI pass; merging your own PR without owner review.
 
+## Automated ownership check
+
+Ownership is enforced by a script, not only by this document:
+
+```bash
+python tools/check_ownership.py --workstream backend \
+  --base origin/research/grounded-foundation
+```
+
+Exit `0` means every changed path is yours, or is shared and declared. Exit `1` lists the
+offending paths; exit `2` means a bad argument or an unusable base ref. Workstreams are
+`frontend`, `backend`, `ai` and `integration`. `--declare-shared <path>` is how a deliberate
+shared change is recorded (repeatable); a declaration is an assertion for review, not proof
+that the other owners agreed.
+
+What it enforces:
+
+| Change | Allowed for | Notes |
+|---|---|---|
+| `frontend/**` | `frontend`, or `integration` with a declaration | |
+| `backend/**`, `ai/**` | the owning workstream | |
+| `backend/app/ocr_*`, `backend/tests/test_ocr_*`, `backend/tests/fixtures/institution_ocr_cases.jsonl` | `backend` only | `ai` may propose, never land alone |
+| `docs/**`, `.github/**`, `tools/**`, root files (`README.md`, `WORKSTREAMS.md`, `pyproject.toml`, `.gitignore`, `.env.example`, `.python-version`) | any workstream **with** `--declare-shared`; `integration` freely | separate proposal/integration PR |
+| unrecognised root paths | treated as shared | do not rely on being unlisted |
+
+**Integration guard tests.** Three tests live under `backend/tests/` because that is the only
+directory pytest collects, but they are owned by the integration workstream, not by B:
+`test_ci_configuration.py`, `test_docs_links.py`, `test_ownership_boundaries.py`. A change to
+any of them is reported as a violation for every workstream, so a backend PR cannot quietly
+weaken the checks that police backend PRs. Changing them requires the integration PR.
+
+The script checks **paths, not intent**: it cannot tell that frontend logic was placed in
+`frontend/` badly, and it cannot verify that a declaration was actually reviewed. Review
+still does that work.
+
 ## Shared files and how they are coordinated
 
 Shared files are the ones that break two people at once. Rule: **one nominated owner per

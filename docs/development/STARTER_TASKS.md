@@ -133,6 +133,9 @@ fields — the request model is documented in `API_CONTRACT.md`.
 any field the contract marks blocked; presenting the deterministic checklist result as a
 compliance decision.
 
+**Ownership check.** `python tools/check_ownership.py --workstream frontend --base origin/research/grounded-foundation`
+must exit 0 (every path under `frontend/`).
+
 **PR base / order.** `research/grounded-foundation`, independent, can open first.
 
 ---
@@ -182,6 +185,10 @@ lands, install it explicitly (local only, no dependency change):
 python -m pip install ruff==0.13.2
 ```
 
+**Ownership check.** `python tools/check_ownership.py --workstream backend --base origin/research/grounded-foundation`
+must exit 0. If it reports `docs/development/API_CONTRACT.md`, you touched a shared file: either
+drop that line (when the file is absent from your base) or declare it and get review.
+
 **Dependencies.** None. Do this before the frontend's first real UI PR so the shape is frozen.
 
 **Prohibited.** `.github/`; dependency changes; `backend/app/ocr_*.py`; the error envelope
@@ -228,6 +235,10 @@ Use the explicit path until a shared-config change is separately reviewed and ap
 - Negative cases exist, and their false-positive count is printed, not omitted.
 - A failing case is reported as a failure; nothing is dropped from the denominator.
 - Runs with `backend/requirements-dev.txt` alone — no ML/OCR dependency added.
+
+**Ownership check.** `python tools/check_ownership.py --workstream ai --base origin/research/grounded-foundation`
+must exit 0. It is expected to flag any `backend/**` path — that is the point: do not edit
+backend OCR code in this task.
 
 **Dependencies.** None to start. Shared-config change (`pyproject.toml`) is out of scope here.
 

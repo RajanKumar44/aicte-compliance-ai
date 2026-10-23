@@ -4,9 +4,13 @@
 
 ## Ownership
 
-- Workstream: <!-- frontend | backend | ai-ocr | shared | docs -->
+- Workstream: <!-- frontend | backend | ai-ocr | integration -->
 - Owned paths touched: <!-- e.g. backend/app/main.py -->
 - Shared surfaces touched (needs cross-workstream review): <!-- none | .github/… | docs/… | root config | API_CONTRACT.md -->
+- Ownership check: <!-- paste the command and its result, e.g.
+  `python tools/check_ownership.py --workstream backend --base origin/research/grounded-foundation`
+  -> ownership OK, 3 changed path(s) -->
+- Declared shared paths (if any) and who reviewed them: <!-- none | docs/development/API_CONTRACT.md (reviewed by B) -->
 
 ## Verification
 
@@ -30,6 +34,8 @@ Do not paste a pass from another commit or another PR. A skipped test is not a p
 ## Checklist
 
 - [ ] Changes stay inside owned paths (see `WORKSTREAMS.md`)
+- [ ] `python tools/check_ownership.py --workstream <yours> --base origin/research/grounded-foundation`
+      exits 0, and every `--declare-shared` path was actually reviewed
 - [ ] New behaviour has a test; fixed defect has a regression test
 - [ ] No secrets, `.env`, real institutional/personal documents, caches or binaries added
 - [ ] No AICTE rule activated; no regulatory requirement invented

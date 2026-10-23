@@ -145,6 +145,11 @@ python -m pytest -q                  # base: 54 passed, 1 skipped; after PR #5: 
   start (see [`STARTER_TASKS.md`](STARTER_TASKS.md#read-this-before-you-branch--the-coordination-docs-are-not-on-the-base-yet)).
 - Do not create `WORKSTREAMS.md`, `docs/development/*`, `frontend/README.md` or
   `ai/README.md` on your branch; PR #4 and PR #5 own those paths.
+- Run the ownership check before your first commit and again before pushing:
+  `python tools/check_ownership.py --workstream <yours> --base origin/research/grounded-foundation`.
+  It exits 0 when every changed path is yours (or shared and declared). **⚠️ documented**:
+  `tools/` exists only on this unmerged branch, so the command becomes available once PR #5
+  lands, or immediately if you read the file from the PR head.
 
 ## Setup
 
@@ -241,6 +246,7 @@ missing; say so explicitly in your PR.
 ## Commit and push
 
 ```bash
+python tools/check_ownership.py --workstream backend --base origin/research/grounded-foundation
 git status --short                       # inspect before staging
 git add backend/app/main.py backend/tests/test_api_contract.py   # explicit paths
 git diff --cached                        # review exactly what will be committed
