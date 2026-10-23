@@ -1,7 +1,8 @@
 # API and integration contract
 
-**Contract version:** `0.1.0-draft` (unversioned in the code; see
-[Versioning](#versioning-and-compatibility)).
+**Contract version:** `0.1.0-draft`. The application itself reports version `0.3.1` in
+`/openapi.json`; the two are not the same thing — see
+[Versioning](#versioning-and-compatibility).
 
 Every item below is labelled:
 
@@ -71,6 +72,17 @@ Evidence shapes:
 - `MISSING_DOCUMENT` → `{"source": "submitted_document_list", "observed": "not_submitted"}`
 - `DOCUMENT_EXPIRED` → `{"source": "synthetic_demo_input", "expiry_date": "YYYY-MM-DD", "evaluation_date": "YYYY-MM-DD"}`
 
+**Response models — implemented.** Since this version the endpoints declare Pydantic
+response models (`HealthResponse`, `ValidationResponse`, `Finding` in
+`backend/app/main.py`), so the schema is enforced at runtime and published in
+`/openapi.json`. Key order in the JSON above is the field order in `ValidationResponse`
+and is part of what consumers see.
+
+Backward compatibility was verified, not assumed: fixtures captured **before** the models
+were added (`frontend/fixtures/*.json`) still replay byte-identically against the running
+app (`python frontend/tools/verify_fixtures.py`), and `ValidationResponse.model_validate(body)`
+round-trips. Contract tests: `backend/tests/test_api_contract.py`.
+
 **Semantics that must not drift**
 
 - `preliminary_checks_passed` means only that the supplied lists agree. It is not
@@ -82,6 +94,17 @@ Evidence shapes:
 
 Observed: `422` with FastAPI's `{"detail": [{"type", "loc", "msg", "input", "ctx"}]}`.
 
+Three shapes are pinned by tests and fixtures:
+
+| Trigger | `detail[].type` | Example `loc` |
+|---|---|---|
+| required field absent | `missing` | `["body","application_type"]` |
+| wrong enum value | `literal_error` | `["body","application_type"]` |
+| blank id, duplicate/blank document names, list shorter than 1 | `value_error` | `["body","required_documents"]` |
+
+`detail[].input` echoes the offending value, so **never log an error body verbatim** once
+real institution data is accepted — it is caller data. Today only synthetic data is used.
+
 A stable application error envelope is **proposed** and needs agreement before the
 frontend codes against error bodies:
 
@@ -90,7 +113,12 @@ frontend codes against error bodies:
 ```
 
 Until that is agreed, the frontend must treat 4xx bodies as opaque and display the
-`status_code` plus a generic message. Do not parse `detail[].msg`.
+`status_code` plus a generic message. Do not parse `detail[].msg` for logic; map
+`detail[].loc` to form fields only if you also handle an unknown `loc` gracefully.
+
+There is **no** authentication, rate limiting, request-size limit or CORS configuration on
+either endpoint. That is acceptable only because the service evaluates caller-supplied
+JSON and stores nothing — it does not make the endpoints safe to expose.
 
 ## Implemented OCR contract (Python, not HTTP)
 
