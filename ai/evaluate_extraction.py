@@ -145,10 +145,10 @@ def load_corpus(path: Path = CORPUS_PATH) -> list[dict[str, Any]]:
 def evaluate_case(case: dict[str, Any]) -> CaseResult:
     expected = dict(case["expected"])
     try:
-        extracted = {
-            name: field.value
-            for name, field in extract_institution_fields(case["text"]).items()
-        }
+        extracted = {}
+        for name, field in extract_institution_fields(case["text"]).items():
+            if field.value is not None:
+                extracted[name] = field.value
         error = None
     except Exception as exc:  # noqa: BLE001 - a raising case is a failure, not a skip
         extracted, error = {}, f"{type(exc).__name__}: {exc}"
@@ -164,7 +164,7 @@ def evaluate_case(case: dict[str, Any]) -> CaseResult:
 
 def score(results: list[CaseResult]) -> dict[str, Any]:
     per_field: dict[str, FieldScore] = defaultdict(FieldScore)
-    wrong_values: list[dict[str, str]] = []
+    wrong_values: list[dict[str, str | None]] = []
 
     for result in results:
         for name, expected_value in result.expected.items():
@@ -238,9 +238,10 @@ def run(corpus_path: Path = CORPUS_PATH) -> dict[str, Any]:
     return report
 
 
-def _print_human(report: dict[str, Any]) -> None:
-    print(BANNER)
-    print()
+def _print_human(report: dict[str, Any], *, show_banner: bool = True) -> None:
+    if show_banner:
+        print(BANNER)
+        print()
     print(f"corpus: {report['corpus']}  ({report['cases']} scored cases, "
           f"{len(report['known_gaps'])} known gaps reported separately)")
     print()
@@ -287,9 +288,21 @@ def _print_human(report: dict[str, Any]) -> None:
             print(f"    {gap['note']}")
 
 
+def run_corpora(corpus_paths: list[Path]) -> list[dict[str, Any]]:
+    """Evaluate each corpus independently; never combine their denominators."""
+    if not corpus_paths:
+        raise ValueError("at least one corpus path is required")
+    return [run(path) for path in corpus_paths]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Score synthetic OCR field extraction")
-    parser.add_argument("--corpus", type=Path, default=CORPUS_PATH)
+    parser.add_argument(
+        "--corpus",
+        type=Path,
+        action="append",
+        help="corpus to evaluate; repeat to report independent slices",
+    )
     parser.add_argument("--json", type=Path, help="also write the full report as JSON here")
     parser.add_argument("--quiet", action="store_true", help="print one summary line only")
     parser.add_argument(
@@ -299,30 +312,56 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    report = run(args.corpus)
+    reports = run_corpora(args.corpus or [CORPUS_PATH])
+    report = reports[0] if len(reports) == 1 else None
     if args.json:
-        args.json.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        payload: dict[str, Any]
+        if report is not None:
+            payload = report
+        else:
+            payload = {"banner": BANNER, "corpora": reports}
+        args.json.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     if args.quiet:
-        print(
-            f"synthetic corpus: {report['cases']} cases, "
-            f"exact-match {report['exact_match_count']}/{report['cases']}, "
-            f"micro F1 {report['micro']['f1']:.3f}, "
-            f"negative false positives {report['negative_false_positive_count']}, "
-            f"known gaps {len(report['known_gaps'])}"
-        )
+        for current in reports:
+            print(
+                f"synthetic corpus {current['corpus']}: {current['cases']} cases, "
+                f"exact-match {current['exact_match_count']}/{current['cases']}, "
+                f"micro F1 {current['micro']['f1']:.3f}, "
+                f"negative false positives {current['negative_false_positive_count']}, "
+                f"known gaps {len(current['known_gaps'])}"
+            )
     else:
-        _print_human(report)
+        print(BANNER)
+        print()
+        for index, current in enumerate(reports):
+            if index:
+                print("\n" + "=" * 80 + "\n")
+            _print_human(current, show_banner=False)
 
     if args.check:
-        if report["errors"]:
-            print("error: cases raised during extraction", file=sys.stderr)
-            return 1
-        if report["negative_false_positive_count"]:
-            print(
-                "error: negative cases produced spurious extractions; the extractor "
-                "must leave unresolved values unresolved",
-                file=sys.stderr,
-            )
+        failed = False
+        for current in reports:
+            if current["errors"]:
+                print(
+                    f"error: cases raised during extraction in {current['corpus']}",
+                    file=sys.stderr,
+                )
+                failed = True
+            if current["negative_false_positive_count"]:
+                print(
+                    f"error: negative cases produced spurious extractions in {current['corpus']}; "
+                    "the extractor must leave unresolved values unresolved",
+                    file=sys.stderr,
+                )
+                failed = True
+            if current["exact_match_count"] != current["cases"]:
+                print(
+                    f"error: scored cases did not match exactly in {current['corpus']}; "
+                    "unexpected extraction mismatches must be fixed or documented",
+                    file=sys.stderr,
+                )
+                failed = True
+        if failed:
             return 1
     return 0
 

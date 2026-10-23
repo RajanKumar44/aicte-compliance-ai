@@ -3,8 +3,10 @@
 **Owner:** workstream C — **contributor not yet named** (see
 [`../WORKSTREAMS.md`](../WORKSTREAMS.md)).
 **Boundary:** this contributor works only in `ai/` during independent development.
-**Status:** placeholder. No model, pipeline, dataset or evaluation result exists here. The
-working OCR implementation is still in `backend/` (see the OCR placement rule).
+**Status:** deterministic evaluation support is implemented here: a clean labelled corpus,
+a separate realistic OCR-corruption slice and a reproducible multi-corpus scorer. The
+working OCR implementation is still in `backend/` (see the OCR placement rule); no model
+or external provider is introduced by this work.
 
 ## Scope
 

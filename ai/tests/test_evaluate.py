@@ -31,10 +31,12 @@ from ai.evaluate_extraction import (  # noqa: E402
     evaluate_case,
     load_corpus,
     run,
+    run_corpora,
     score,
 )
 
 SCRIPT = REPO_ROOT / "ai" / "evaluate_extraction.py"
+CORRUPTION_CORPUS_PATH = REPO_ROOT / "ai" / "corpus" / "ocr_corruption_cases.jsonl"
 TEXT_FIELDS = {
     "institution_name",
     "certificate_number",
@@ -171,6 +173,36 @@ def test_corpus_categories_include_the_hard_scenarios():
         assert required in categories, f"missing corpus category {required}"
 
 
+def test_corruption_slice_is_labelled_and_keeps_negative_cases():
+    cases = load_corpus(CORRUPTION_CORPUS_PATH)
+    assert len(cases) == 24
+    assert {
+        case["category"] for case in cases
+    } == {
+        "ocr-inserted-newline",
+        "ocr-misread-label",
+        "ocr-latin-hindi-mix",
+        "ocr-column-order",
+    }
+    negatives = [case for case in cases if not case["expected"] and not case.get("known_gap")]
+    assert len(negatives) == 7
+    assert len(negatives) >= len(cases) // 4
+
+
+def test_multiple_corpora_are_scored_as_separate_slices():
+    reports = run_corpora([CORPUS_PATH, CORRUPTION_CORPUS_PATH])
+
+    assert [report["corpus"] for report in reports] == [
+        str(CORPUS_PATH.resolve().relative_to(REPO_ROOT)),
+        str(CORRUPTION_CORPUS_PATH.resolve().relative_to(REPO_ROOT)),
+    ]
+    assert [report["cases"] for report in reports] == [54, 12]
+    assert [report["exact_match_count"] for report in reports] == [54, 12]
+    assert reports[0]["negative_false_positive_count"] == 0
+    assert reports[1]["negative_false_positive_count"] == 0
+    assert len(reports[1]["known_gaps"]) == 12
+
+
 def test_corpus_contains_no_real_or_personal_data():
     text = CORPUS_PATH.read_text(encoding="utf-8")
     # Synthetic markers only; nothing that looks like a real identifier.
@@ -228,6 +260,33 @@ def test_cli_json_output_is_machine_readable(tmp_path: Path):
     assert "micro" in report and "per_field" in report and "known_gaps" in report
 
 
+def test_cli_reports_repeated_corpora_without_merging_them(tmp_path: Path):
+    output = tmp_path / "reports.json"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--corpus",
+            str(CORPUS_PATH),
+            "--corpus",
+            str(CORRUPTION_CORPUS_PATH),
+            "--json",
+            str(output),
+            "--quiet",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert len(report["corpora"]) == 2
+    assert [slice_report["cases"] for slice_report in report["corpora"]] == [54, 12]
+    assert completed.stdout.count("synthetic corpus") == 2
+
+
 def test_check_mode_fails_when_a_negative_case_extracts_something(tmp_path: Path):
     corpus = tmp_path / "bad.jsonl"
     corpus.write_text(
@@ -252,6 +311,32 @@ def test_check_mode_fails_when_a_negative_case_extracts_something(tmp_path: Path
     )
     assert completed.returncode == 1
     assert "must leave unresolved values unresolved" in completed.stderr
+
+
+def test_check_mode_fails_when_a_scored_case_mismatches(tmp_path: Path):
+    corpus = tmp_path / "mismatch.jsonl"
+    corpus.write_text(
+        json.dumps(
+            {
+                "case_id": "positive-mismatch",
+                "category": "clean-label-en",
+                "text": "Issue Date: 2026-04-30",
+                "expected": {"issue_date": "2027-04-30"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--corpus", str(corpus), "--check", "--quiet"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 1
+    assert "scored cases did not match exactly" in completed.stderr
 
 
 def test_load_corpus_rejects_duplicate_ids(tmp_path: Path):

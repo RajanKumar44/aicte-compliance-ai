@@ -10,8 +10,11 @@ labelled corpus. **It is not a benchmark and not an accuracy claim.** Read
 python -m pip install -r backend/requirements-dev.txt     # the only dependency set used
 python ai/evaluate_extraction.py                          # human-readable report
 python ai/evaluate_extraction.py --json report.json       # machine-readable
-python ai/evaluate_extraction.py --check                  # exit 1 on a spurious extraction
-python -m pytest -q ai/tests                              # 17 tests for corpus and scorer
+python ai/evaluate_extraction.py --check                  # exit 1 on any scored mismatch
+python ai/evaluate_extraction.py \
+  --corpus ai/corpus/extraction_cases.jsonl \
+  --corpus ai/corpus/ocr_corruption_cases.jsonl --check   # separate slice reports
+python -m pytest -q ai/tests                              # corpus and scorer tests
 ```
 
 The scorer imports `extract_institution_fields` from `backend.app.ocr_pipeline`
@@ -20,7 +23,10 @@ required — the input is text, so Tesseract is irrelevant here.
 
 ## What is measured
 
-Corpus: `ai/corpus/extraction_cases.jsonl` — 56 cases, 54 scored, 2 documented known gaps.
+Label corpus: `ai/corpus/extraction_cases.jsonl` — 56 cases, 54 scored, 2 documented known gaps.
+Corruption slice: `ai/corpus/ocr_corruption_cases.jsonl` — 24 cases, 12 scored, 12 documented
+known gaps. When more than one `--corpus` is supplied, the scorer reports each slice
+independently and never combines their denominators.
 
 | Category | Count | What it exercises |
 |---|---|---|
@@ -36,6 +42,15 @@ Corpus: `ai/corpus/extraction_cases.jsonl` — 56 cases, 54 scored, 2 documented
 | personal-data | 2 | applicant name and DOB must **not** be extracted |
 | table-like | 1 | spaced columns |
 | known-gap | 2 | behaviour the extractor is known to get wrong (see below) |
+
+The corruption slice categories are:
+
+| Category | Count | What it exercises |
+|---|---:|---|
+| ocr-inserted-newline | 6 | labels and values split across OCR lines |
+| ocr-misread-label | 6 | plausible character substitutions in labels |
+| ocr-latin-hindi-mix | 6 | Hindi labels with Latin values and mixed context |
+| ocr-column-order | 6 | flattened or reordered table-like output |
 
 Per case, each expected field is compared **exactly** (string equality after the
 extractor's own normalisation). Outcomes are true positives, false positives (wrong value
@@ -56,6 +71,18 @@ case exact-match:   54/54
 negative cases:     19, with a spurious extraction: 0
 known gaps:         2 (both still failing)
 ```
+
+The separate corruption slice currently reports:
+
+```
+corruption slice:    12 scored cases, exact-match 12/12
+negative cases:      7, with a spurious extraction: 0
+known gaps:          12 (all still failing)
+```
+
+The 12 corruption-slice known gaps are deliberately excluded from its scored denominator.
+They record recovery behaviour that is desirable but not implemented; they are not evidence
+that the current extractor handles those corruptions.
 
 **A perfect score here is expected and nearly meaningless.** The cases were written from
 the extractor's documented behaviour on clean synthetic text. What this proves is that the
@@ -98,13 +125,16 @@ not exist yet, so no percentage may be quoted anywhere.
 
 ## Adding cases
 
-1. Append one JSON object per line to `ai/corpus/extraction_cases.jsonl`:
+1. Append one JSON object per line to the appropriate corpus:
+   `ai/corpus/extraction_cases.jsonl` for clean label behaviour or
+   `ai/corpus/ocr_corruption_cases.jsonl` for realistic corruption:
    `{"case_id", "category", "notes", "text", "expected": {field: value, ...}}`.
    Use `"known_gap": true` only for behaviour you are deliberately documenting as broken.
 2. Never include a real institution, person, certificate number or document — synthetic
    markers only (`ai/tests/test_evaluate.py` enforces this).
-3. Run `python ai/evaluate_extraction.py`; a case that fails is a finding, not something to
-   delete.
+3. Run `python ai/evaluate_extraction.py --corpus <each corpus>`; a case that fails is a
+   finding, not something to delete. Use repeated `--corpus` arguments to compare slices,
+   not to create one merged score.
 4. Run `python -m pytest -q ai/tests`.
 
 Target the failure modes, not the count: duplicate near-identical clean-label cases add
