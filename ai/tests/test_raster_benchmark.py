@@ -17,19 +17,20 @@ import math
 import sys
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from ai.raster_benchmark import (  # noqa: E402
+from ai.raster_benchmark import (
     DATASET_LANG_TO_TESSERACT,
+    SUPPORTED_IMAGE_CORRUPTIONS,
     MockRasterOCREngine,
     RasterBenchmarkScorer,
     RasterDocumentGenerator,
     RealTesseractEngine,
-    SUPPORTED_IMAGE_CORRUPTIONS,
     apply_gaussian_blur,
     apply_jpeg_compression,
     apply_low_contrast,
@@ -41,7 +42,6 @@ from ai.raster_benchmark import (  # noqa: E402
     character_error_rate,
     word_error_rate,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test Pixel Transformations
@@ -583,7 +583,7 @@ class TestEnhancedReport:
         engine.engine_name = "tesseract"
 
         # Mock the extract_from_bytes to avoid needing real Tesseract
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
 
         mock_raw = MagicMock()
         mock_raw.words = []
@@ -793,3 +793,100 @@ class TestEngineErrorHandling:
         assert report["available"] is False
         assert "unavailable" in report["error"]
         assert report["total_cases"] == 2
+
+
+class TestFontGlyphCoverage:
+    """Regression tests for the tofu-font glyph-coverage check.
+
+    DevanagariMT.ttc face 0 contains digits but no Latin letters and renders
+    every missing letter as the same shared "tofu" box; using it for English
+    documents made every letter OCR as O/0 while digits stayed correct.  The
+    font loader must reject such fonts by probing rendered bitmaps.
+    """
+
+    SAMPLES = "ABCDEfgqr123"
+
+    def _render_char(self, font, ch):
+        from PIL import Image, ImageDraw
+
+        scratch = Image.new("L", (64, 64), 0)
+        ImageDraw.Draw(scratch).text((8, 8), ch, fill=255, font=font)
+        return scratch.tobytes()
+
+    def test_english_font_renders_latin_distinctly(self):
+        """_get_font('en') must return a font whose Latin glyphs are all distinct."""
+        from ai.raster_benchmark import _get_font
+
+        font = _get_font(24, "en")
+        bitmaps = [self._render_char(font, ch) for ch in self.SAMPLES]
+        assert all(any(b) for b in bitmaps), "glyph must not be empty"
+        assert len(set(bitmaps)) == len(self.SAMPLES), (
+            "distinct Latin characters must render as distinct glyphs (no tofu box)"
+        )
+
+    def test_hindi_font_renders_devanagari_and_latin(self):
+        """_get_font('hi') must cover Devanagari AND basic Latin on one line."""
+        from ai.raster_benchmark import _get_font
+
+        font = _get_font(24, "hi")
+        deva = [self._render_char(font, ch) for ch in "कखगसहड"]
+        # All-distinct characters: repeated characters legitimately render
+        # identical bitmaps, so the sample for the distinctness check must not
+        # contain duplicates (the same trap as the duplicated '2' in CERT2026).
+        latin = [self._render_char(font, ch) for ch in "CERT0185"]
+        assert len(set(deva)) == len(deva), "Devanagari glyphs must be distinct"
+        assert len(set(latin)) == len(latin), (
+            "mixed-line Latin (CERT/2026/...) values must render as distinct glyphs"
+        )
+
+    def test_font_probe_rejects_latin_tofu_font(self):
+        """The probe rejects DevanagariMT: it boxes every Latin letter identically.
+
+        This is the real font that produced the original defect (letters OCR'd
+        as O/0 while digits stayed correct) — used directly as evidence.
+        """
+        import os
+
+        from PIL import ImageFont
+
+        from ai.raster_benchmark import _LATIN_SAMPLE, _font_renders_sample
+
+        devanagari_mt = "/System/Library/Fonts/Supplemental/DevanagariMT.ttc"
+        if not os.path.isfile(devanagari_mt):
+            pytest.skip("DevanagariMT.ttc not present on this host")
+        font = ImageFont.truetype(devanagari_mt, 24)
+        assert _font_renders_sample(font, _LATIN_SAMPLE) is False
+
+    def test_font_probe_rejects_missing_devanagari(self):
+        """The probe rejects a Latin-only font as a provider for Devanagari."""
+        import os
+
+        from PIL import ImageFont
+
+        from ai.raster_benchmark import _DEVANAGARI_SAMPLE, _font_renders_sample
+
+        arial = "/System/Library/Fonts/Supplemental/Arial.ttf"
+        if not os.path.isfile(arial):
+            pytest.skip("Arial.ttf not present on this host")
+        font = ImageFont.truetype(arial, 24)
+        assert _font_renders_sample(font, _DEVANAGARI_SAMPLE) is False
+
+    def test_font_probe_accepts_real_font(self):
+        """A standard font passes the probe for its supported script."""
+        import os
+
+        from PIL import ImageFont
+
+        from ai.raster_benchmark import _LATIN_SAMPLE, _font_renders_sample
+
+        if not os.path.isfile(ARIAL_FOR_TESTS):
+            pytest.skip("no system font available for the positive probe")
+        font = ImageFont.truetype(ARIAL_FOR_TESTS, 24)
+        assert _font_renders_sample(font, _LATIN_SAMPLE) is True
+
+
+# First available font used for the positive-probe test across hosts.
+ARIAL_FOR_TESTS = [
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+][0]

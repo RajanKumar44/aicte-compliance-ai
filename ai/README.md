@@ -137,6 +137,14 @@ ruff check ai/
   when absent, the raster benchmark explicitly reports the missing prerequisite.
 - The synthetic document images use programmatic layouts and font rendering; they are not
   photographed real-world paper documents.
+- Font selection probes rendered glyph bitmaps (see `_font_renders_sample` in
+  `raster_benchmark.py`): fonts that substitute a shared "tofu" box for missing
+  characters — which once made every English letter OCR as O/0 while digits stayed
+  correct — are rejected, and a Devanagari-capable font is required for `hi`/`bilingual`.
+- Pillow on this host is built without libraqm (`PIL.features.check('raqm') == False`),
+  so Devanagari is rendered without complex-script shaping (conjuncts/matra ordering);
+  hi/bilingual transcription metrics are therefore a pessimistic lower bound, and
+  real-world Hindi accuracy remains unvalidated.
 - No held-out split exists for the text extraction corpus (cases were written alongside patterns).
 - Hindi coverage is limited to five label variants and rendered Devanagari fonts.
 

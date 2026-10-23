@@ -91,3 +91,24 @@ them; the evaluator's two earlier diagnostic defects (gap-exception visibility
 in human output, `--check --help` wording) were fixed separately in commit
 `0d92cc0` and are not backend-owned. The corpora are synthetic, hand-written
 cases: they prove per-case behavior, not real-world OCR accuracy.
+
+## New backend-owned finding (2026-10-24): test font path is not portable
+
+`backend/tests/test_ocr_engine_integration.py::
+test_tesseract_reads_synthetic_institution_document` loads a hardcoded Linux
+font path and therefore fails on any non-Linux host that has Tesseract
+installed (the test's own `skipif` then stops skipping).
+
+- Reproduce: `.venv/bin/python -m pytest -q backend/tests/
+test_ocr_engine_integration.py` on macOS with `tesseract` in PATH.
+- Expected: the test itself resolves a usable font (e.g. falls back to a
+  bundled/system font list) or skips when no supported font is available.
+- Actual: `PIL.ImageFont.truetype("/usr/share/fonts/truetype/dejavu/
+  DejaVuSans.ttf", 58)` raises `OSError: cannot open resource` (macOS has no
+  `/usr/share/fonts` truetype tree).
+- Severity: low (test-only, no production extraction behavior); it flips the
+  repository suite from `224 passed, 1 skipped` to `1 failed, 224 passed` on
+  macOS hosts, so CI parity depends on it.
+- Attribution: backend-owned file — not modified by the AI/OCR workstream.
+  Evidence recorded here because the failure invalidates the historical
+  `pytest -q` full-suite counts reported for this branch.

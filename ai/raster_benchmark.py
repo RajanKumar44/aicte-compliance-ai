@@ -60,11 +60,11 @@ DATASET_LANG_TO_TESSERACT: dict[str, str] = {
 
 _SYSTEM_FONT_CANDIDATES: list[str] = [
     # macOS system / supplemental fonts
-    "/System/Library/Fonts/Supplemental/DevanagariMT.ttc",
-    "/System/Library/Fonts/Supplemental/Devanagari Sangam MN.ttc",
     "/System/Library/Fonts/Supplemental/Arial.ttf",
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
     "/System/Library/Fonts/Helvetica.ttc",
+    "/System/Library/Fonts/Supplemental/Devanagari Sangam MN.ttc",
+    "/System/Library/Fonts/Supplemental/DevanagariMT.ttc",
     "/System/Library/Fonts/Geneva.ttf",
     # Linux font paths
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -72,24 +72,66 @@ _SYSTEM_FONT_CANDIDATES: list[str] = [
     "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
 ]
 
+# Probing samples used to verify a candidate font actually renders the
+# required script.  Some fonts (notably TTC faces such as Devanagari MT)
+# contain digits but lack Latin glyphs, substituting a shared "tofu" box for
+# every missing letter; rendering such a font silently corrupts the whole
+# benchmark, because every letter then OCRs as O/0 while digits stay correct.
+_LATIN_SAMPLE = "ABCDEfgHIJKLMqr"  # mixed shapes: round, straight, tall, short
+_DEVANAGARI_SAMPLE = "कखगसहडआ"
+
+
+def _font_renders_sample(font: ImageFont.FreeTypeFont | ImageFont.ImageFont, sample: str) -> bool:
+    """Return True when *font* renders every character of *sample* distinctly.
+
+    Each character is drawn onto a scratch image (the same draw path the
+    document renderer uses) and the bitmaps are compared.  A font that
+    substitutes one shared glyph for several distinct characters (the
+    classic tofu box) is rejected.  This is an empirical coverage check,
+    not a name heuristic.
+    """
+    bitmaps: list[bytes] = []
+    for ch in sample:
+        try:
+            scratch = Image.new("L", (64, 64), 0)
+            ImageDraw.Draw(scratch).text((8, 8), ch, fill=255, font=font)
+            data = scratch.tobytes()
+        except Exception:
+            return False
+        if not any(data):
+            return False
+        bitmaps.append(data)
+    # Distinct characters must not share one identical bitmap (tofu).
+    return len(set(bitmaps)) == len(bitmaps)
+
 
 def _get_font(size: int = 20, language: str = "en") -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Return a usable FreeType font or fallback to Pillow default."""
-    if language in ("hi", "bilingual"):
-        # Prioritize Devanagari or Unicode fonts
-        for path in _SYSTEM_FONT_CANDIDATES:
-            if os.path.isfile(path) and any(k in path.lower() for k in ["deva", "unicode"]):
-                try:
-                    return ImageFont.truetype(path, size)
-                except Exception:
-                    continue
+    """Return a usable FreeType font or fallback to Pillow default.
 
+    Candidates are probed in order and the first font that renders the
+    required script sample distinctly wins.  For ``hi``/``bilingual`` the
+    font must cover both Devanagari and basic Latin, because the synthetic
+    documents mix scripts on the same line (e.g. ``प्रमाणपत्र संख्या:
+    CERT/2026/0001``).
+    """
+    if language in ("hi", "bilingual"):
+        for path in _SYSTEM_FONT_CANDIDATES:
+            if not os.path.isfile(path):
+                continue
+            try:
+                font = ImageFont.truetype(path, size)
+            except Exception:
+                continue
+            if _font_renders_sample(font, _DEVANAGARI_SAMPLE) and _font_renders_sample(font, _LATIN_SAMPLE):
+                return font
     for path in _SYSTEM_FONT_CANDIDATES:
         if os.path.isfile(path):
             try:
-                return ImageFont.truetype(path, size)
+                font = ImageFont.truetype(path, size)
             except Exception:
                 continue
+            if _font_renders_sample(font, _LATIN_SAMPLE):
+                return font
 
     return ImageFont.load_default()
 
