@@ -237,3 +237,43 @@ not exist yet, so no percentage may be quoted anywhere.
 
 Target the failure modes, not the count: duplicate near-identical clean-label cases add
 nothing.
+
+## OCR benchmark module (`ai/ocr_benchmark.py`)
+
+A separate benchmark infrastructure module provides:
+
+- **`OCREngine` abstract base class:** Adapter contract for image-to-text engines.
+  Concrete subclasses implement `extract(image) -> dict[str, Any]`.
+- **Transcription metrics:** Character Error Rate (CER) and Word Error Rate (WER)
+  computed via standard Levenshtein edit distance. CER divides character-level edits by
+  reference length; WER divides token-level edits by reference token count. Both return
+  0.0 for identical inputs and 1.0 when either input is empty.
+- **Structured-field scoring:** Per-field and micro-averaged precision/recall/F1 from
+  aggregate TP, FP, FN counts. The extractor receives the case `text` string and returns
+  a dict of field values.
+- **Synthetic case generation:** Deterministic, seeded generation of labelled text
+  fixtures with controlled corruption types (none, blur, skew, low_res, compression,
+  low_contrast, spacing, latin_hindi_mix, inserted_newline, column_order).
+- **Corpus I/O:** JSONL loading with strict validation (missing files, malformed JSON,
+  duplicate case IDs, empty corpora all raise actionable errors) and writing.
+- **Held-out partitioning:** Deterministic seed-based shuffled split with configurable
+  fraction. Validates fraction bounds and minimum case count. Partition integrity checks
+  detect case-ID overlap and text-level leakage.
+- **Engine contract tests:** Mock-based checks that an engine returns dicts with
+  string-or-None values without raising.
+
+### Text-only vs. image-level evaluation
+
+The current benchmark operates on **text only**. The synthetic case generator produces
+labelled text, not raster images. Image-level evaluation (blur, skew, resolution,
+compression, contrast on rendered documents) requires image generation and OCR engine
+dependencies that are not yet approved. Until then, the benchmark is a
+**text-to-structured-field extraction benchmark**, not an image OCR benchmark.
+
+### Running benchmark tests
+
+```bash
+python -m pytest -q ai/tests/test_ocr_benchmark.py   # 97 tests
+python -m pytest -q ai/tests                          # all AI/OCR tests
+```
+

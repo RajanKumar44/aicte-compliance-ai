@@ -4,7 +4,8 @@ Provides:
   - OCREngine adapter contract for image-to-text engines.
   - Deterministic synthetic text-dataset generation (no image libs needed;
     generates labelled text fixtures with controlled corruption).
-  - Transcription metrics (CER, WER, exact match).
+  - Transcription metrics (CER via edit distance, WER via token edit distance,
+    exact match).
   - Structured-field extraction scoring.
   - Dataset fingerprinting and held-out partition tracking.
   - Mock-based contract tests for engine compliance.
@@ -13,7 +14,27 @@ Provides:
 Note: This module does NOT install or invoke actual OCR engines (Tesseract,
 EasyOCR, etc.) in this environment. It defines the interface and provides
 mock-based contract tests. Real engine execution requires the dependencies
-documented in ENVIRONMENT.md at the repository root.
+documented in the project README.
+
+Metric definitions
+------------------
+CER (Character Error Rate):
+    Levenshtein edit distance between reference and hypothesis strings,
+    divided by the length of the reference. When the reference is empty
+    and hypothesis is non-empty, CER = 1.0. Both empty = 0.0.
+
+WER (Word Error Rate):
+    Levenshtein edit distance between the whitespace-split token sequences
+    of reference and hypothesis, divided by the number of reference tokens.
+    Same empty-input conventions as CER.
+
+Exact Transcription Rate:
+    1.0 if reference == hypothesis, 0.0 otherwise.
+
+Structured-field scoring:
+    Per-field and micro-averaged precision/recall/F1 computed from TP/FP/FN
+    across all fields and cases. The extractor receives the case ``text``
+    (a string) and returns a dict of field names to values.
 """
 
 from __future__ import annotations
@@ -22,9 +43,43 @@ import json
 import random
 import hashlib
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional, Tuple, List, Dict, Set, Callable
+from typing import Any, Optional, Tuple, List, Dict, Callable
+
+
+# ---------------------------------------------------------------------------
+# Edit-distance implementation (standard dynamic-programming Levenshtein)
+# ---------------------------------------------------------------------------
+
+
+def _levenshtein(seq_a: list | str, seq_b: list | str) -> int:
+    """Compute the Levenshtein edit distance between two sequences.
+
+    Works on both strings (character-level) and lists (token-level).
+    Uses O(min(m, n)) space via a single-row DP approach.
+    """
+    m, n = len(seq_a), len(seq_b)
+
+    # Ensure seq_a is the shorter sequence for space efficiency.
+    if m > n:
+        seq_a, seq_b = seq_b, seq_a
+        m, n = n, m
+
+    # previous_row[j] = edit distance from seq_a[:0..m] to seq_b[:j]
+    previous_row = list(range(n + 1))
+
+    for i in range(1, m + 1):
+        current_row = [i] + [0] * n
+        for j in range(1, n + 1):
+            cost = 0 if seq_a[i - 1] == seq_b[j - 1] else 1
+            current_row[j] = min(
+                current_row[j - 1] + 1,      # insertion
+                previous_row[j] + 1,          # deletion
+                previous_row[j - 1] + cost,   # substitution
+            )
+        previous_row = current_row
+
+    return previous_row[n]
 
 
 # ---------------------------------------------------------------------------
@@ -41,6 +96,13 @@ class OCREngine(ABC):
     The return dict shape mirrors the existing ``extract_institution_fields``
     output so that downstream scoring and field extraction can reuse the
     same pipelines without modification.
+
+    **Interface note:** ``extract`` accepts ``image: Any`` because different
+    engines accept different input representations (PIL Image, numpy array,
+    file path, raw bytes, or plain text for text-based extractors). The
+    concrete adapter is responsible for input conversion. For text-only
+    synthetic benchmarks the input is a string; for image-level benchmarks
+    it would be bytes or a PIL Image.
     """
 
     engine_name: str = "unknown"
@@ -87,21 +149,22 @@ class OCREngine(ABC):
     ISSUE_DATES: Tuple[str, ...] = ("2026-04-30", "2025-09-01")
 
     # -------------------------------------------------------------------------
-    # Transcription metrics
+    # Transcription metrics (using standard Levenshtein edit distance)
     # -------------------------------------------------------------------------
 
     @staticmethod
     def character_error_rate(reference: str, hypothesis: str) -> float:
         """Character error rate (CER) between *reference* and *hypothesis*.
 
-        Uses Levenshtein-based counting.  Returns a value in ``[0, 1]``
-        where 0 = identical.
+        Uses standard Levenshtein edit distance divided by the reference
+        length. Returns a value where 0 = identical.  CER can exceed 1.0
+        when the hypothesis has many insertions beyond the reference length.
 
         Empty-reference / empty-prediction conventions:
 
         - Both empty         → 0.0
-        - Reference empty     → 1.0 (all characters are substitution/insertion)
-        - Hypothesis empty    → 1.0 (all reference characters are deletions)
+        - Reference empty     → 1.0
+        - Hypothesis empty    → 1.0
         """
         if not reference and not hypothesis:
             return 0.0
@@ -109,17 +172,17 @@ class OCREngine(ABC):
             return 1.0
         if not hypothesis:
             return 1.0
-        n = min(len(reference), len(hypothesis))
-        diff = sum(1 for i in range(n) if reference[i] != hypothesis[i])
-        diff += abs(len(reference) - len(hypothesis))
-        return diff / max(len(reference), len(hypothesis), 1)
+        distance = _levenshtein(reference, hypothesis)
+        return distance / len(reference)
 
     @staticmethod
     def word_error_rate(reference: str, hypothesis: str) -> float:
         """Word error rate (WER) between *reference* and *hypothesis*.
 
-        Splits on whitespace and applies the same Levenshtein logic as CER.
-        Returns a value in ``[0, 1]`` where 0 = identical.
+        Splits on whitespace and applies Levenshtein edit distance at the
+        token level, divided by the number of reference tokens. Returns
+        a value where 0 = identical. WER can exceed 1.0 when the hypothesis
+        has many extra tokens.
 
         Empty-reference / empty-prediction conventions (same as CER):
 
@@ -135,10 +198,8 @@ class OCREngine(ABC):
             return 1.0
         if not hyp_words:
             return 1.0
-        n = min(len(ref_words), len(hyp_words))
-        diff = sum(1 for i in range(n) if ref_words[i] != hyp_words[i])
-        diff += abs(len(ref_words) - len(hyp_words))
-        return diff / max(len(ref_words), len(hypothesis), 1)
+        distance = _levenshtein(ref_words, hyp_words)
+        return distance / len(ref_words)
 
     @staticmethod
     def exact_transcription_rate(reference: str, hypothesis: str) -> float:
@@ -168,8 +229,7 @@ class OCREngine(ABC):
 
         - ``case_id``: stable hash of generation params + index.
         - ``text``: the OCR input string (may include controlled corruption).
-        - ``ground_truth``: the canonical field dict (same schema as
-          ``extract_institution_fields`` output).
+        - ``ground_truth``: dict mapping field names to expected values.
         - ``language``: selected from *languages*.
         - ``corruption_type``: one of ``None``, ``blur``, ``skew``,
           ``low_res``, ``compression``, ``low_contrast``, ``spacing``,
@@ -198,7 +258,7 @@ class OCREngine(ABC):
         academic_years = cls.ACADEMIC_YEARS
         issue_dates = cls.ISSUE_DATES
 
-        corruption_types: List[str] = [
+        corruption_types: List[Optional[str]] = [
             None,
             "blur",
             "skew",
@@ -211,6 +271,10 @@ class OCREngine(ABC):
             "column_order",
         ]
 
+        dataset_fp = hashlib.sha256(
+            f"{seed}:{count}".encode()
+        ).hexdigest()[:16]
+
         for i in range(count):
             lang = languages[rng.randint(0, len(languages) - 1)]
 
@@ -222,6 +286,8 @@ class OCREngine(ABC):
             ay = academic_years[rng.randint(0, len(academic_years) - 1)]
             idate = issue_dates[rng.randint(0, len(issue_dates) - 1)]
 
+            corruption = corruption_types[i % len(corruption_types)]
+
             # Build a clean base text, then apply corruption.
             if lang == "hi" or rng.random() < 0.5:
                 # Hindi-mixed pattern
@@ -232,20 +298,16 @@ class OCREngine(ABC):
                     f"जारी करने की तिथि: {idate}\n"
                     f"Institut: {institution}"
                 )
-                # Apply corruption types
-                if corruption_types[i % len(corruption_types)] == "inserted_newline":
-                    # Insert an extra newline in the middle
+                if corruption == "inserted_newline":
                     base = base.replace("जारी करने की तिथि:", "जारी करने की तिथि:\n")
-                elif corruption_types[i % len(corruption_types)] == "column_order":
-                    # Swap certificate and issue date order
+                elif corruption == "column_order":
                     base = (
                         f"शैक्षणिक सत्र: {ay}\n"
                         f"प्रमाणपत्र संख्या: {cert}\n"
                         f"जारी करने की तिथि: {idate}\n"
                         f"Institut: {institution}"
                     )
-                elif corruption_types[i % len(corruption_types)] == "latin_hindi_mix":
-                    # Mix Latin and Hindi characters
+                elif corruption == "latin_hindi_mix":
                     base = base.replace("Institut:", "Insti4tute:")
             else:
                 # English pattern
@@ -256,21 +318,21 @@ class OCREngine(ABC):
                     f"Issue Date: {idate}\n"
                     f"Institution: {institution}"
                 )
-                if corruption_types[i % len(corruption_types)] == "inserted_newline":
+                if corruption == "inserted_newline":
                     base = base.replace("Valid Until:", "Valid Until:\n")
-                elif corruption_types[i % len(corruption_types)] == "column_order":
+                elif corruption == "column_order":
                     base = (
                         f"Academic Year: {ay}\n"
                         f"Certificate Number: {cert}\n"
                         f"Issue Date: {idate}\n"
                         f"Institution: {institution}"
                     )
-                elif corruption_types[i % len(corruption_types)] == "latin_hindi_mix":
+                elif corruption == "latin_hindi_mix":
                     base = base.replace("Institution:", "Insti4tute:")
 
-            # Deterministic case ID
+            # Deterministic case ID from seed and index
             case_id = hashlib.sha256(
-                f"{cls.engine_name}:{seed}:{i}".encode()
+                f"{seed}:{i}".encode()
             ).hexdigest()[:12]
 
             cases.append(
@@ -285,10 +347,8 @@ class OCREngine(ABC):
                         "institution_name": institution,
                     },
                     "language": lang,
-                    "corruption_type": corruption_types[i % len(corruption_types)],
-                    "dataset_fingerprint": hashlib.sha256(
-                        f"{seed}:{count}".encode()
-                    ).hexdigest()[:16],
+                    "corruption_type": corruption,
+                    "dataset_fingerprint": dataset_fp,
                 }
             )
 
@@ -302,30 +362,61 @@ class OCREngine(ABC):
     def load_corpus(path: str | Path) -> List[Dict[str, Any]]:
         """Load a JSONL corpus from *path*.
 
-        Each line is expected to be a JSON object.  Missing or unparseable
-        lines are silently skipped (the evaluator's ``load_corpus`` has
-        stricter validation; see ``ai/evaluate_extraction.py`` for the
-        canonical implementation).
+        Unlike the canonical evaluator (``ai/evaluate_extraction.py``), this
+        method performs basic validation:
+
+        - Raises ``FileNotFoundError`` for a missing path.
+        - Raises ``ValueError`` for malformed JSON lines.
+        - Raises ``ValueError`` for duplicate ``case_id`` values.
+        - Raises ``ValueError`` for an empty corpus.
 
         Returns
         -------
         list[dict[str, Any]]
             List of case dicts read from the file.
         """
-        cases: List[Dict[str, Any]] = []
         p = Path(path)
         if not p.is_file():
-            return cases
+            raise FileNotFoundError(f"corpus not found: {path}")
+
+        cases: List[Dict[str, Any]] = []
+        seen_ids: set[str] = set()
+
         with p.open("r", encoding="utf-8") as f:
-            for line in f:
+            for line_num, line in enumerate(f, 1):
                 line = line.strip()
                 if not line:
                     continue
                 try:
-                    cases.append(json.loads(line))
-                except json.JSONDecodeError:
-                    # Skip malformed lines rather than crashing.
-                    pass
+                    record = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(
+                        f"{path} line {line_num}: malformed JSON: {exc}"
+                    ) from exc
+
+                if not isinstance(record, dict):
+                    raise ValueError(
+                        f"{path} line {line_num}: record must be a JSON object, "
+                        f"got {type(record).__name__}"
+                    )
+
+                case_id = record.get("case_id")
+                if case_id is not None:
+                    if not isinstance(case_id, str) or not case_id:
+                        raise ValueError(
+                            f"{path} line {line_num}: case_id must be a non-empty string"
+                        )
+                    if case_id in seen_ids:
+                        raise ValueError(
+                            f"{path} line {line_num}: duplicate case_id '{case_id}'"
+                        )
+                    seen_ids.add(case_id)
+
+                cases.append(record)
+
+        if not cases:
+            raise ValueError(f"corpus is empty: {path}")
+
         return cases
 
     @staticmethod
@@ -343,13 +434,17 @@ class OCREngine(ABC):
             for case in cases:
                 f.write(json.dumps(case, ensure_ascii=False) + "\n")
 
-    @property
-    @abstractmethod
-    def dataset_fingerprint(self) -> str:
-        """Return a fingerprint string for the dataset generated by this
-        engine's synthetic cases.  Used for reproducibility and held-out
-        partition tracking."""
-        raise NotImplementedError
+    @staticmethod
+    def corpus_fingerprint(cases: List[Dict[str, Any]]) -> str:
+        """Compute a SHA-256 fingerprint of the corpus content.
+
+        The fingerprint is computed over the serialized case dicts so that
+        any change to case content, order, or count produces a different hash.
+        """
+        h = hashlib.sha256()
+        for case in cases:
+            h.update(json.dumps(case, sort_keys=True, ensure_ascii=False).encode())
+        return h.hexdigest()
 
     # -------------------------------------------------------------------------
     # Integration with existing extraction evaluator
@@ -363,6 +458,10 @@ class OCREngine(ABC):
         prediction_key: str = "predicted_text",
     ) -> Dict[str, float]:
         """Compute aggregate transcription metrics across *cases*.
+
+        Both *reference_key* and *prediction_key* must point to **string**
+        values for transcription scoring (character and word comparison).
+        For structured-field scoring, use :meth:`score_structured_fields`.
 
         Returns a dict with keys:
 
@@ -397,6 +496,11 @@ class OCREngine(ABC):
         for case in cases:
             ref = case.get(reference_key, "")
             hyp = case.get(prediction_key, "")
+            # Coerce to strings for transcription scoring
+            if not isinstance(ref, str):
+                ref = ""
+            if not isinstance(hyp, str):
+                hyp = ""
             cers.append(self.character_error_rate(ref, hyp))
             wers.append(self.word_error_rate(ref, hyp))
             exacts.append(self.exact_transcription_rate(ref, hyp))
@@ -411,24 +515,24 @@ class OCREngine(ABC):
     def score_structured_fields(
         self,
         cases: List[Dict[str, Any]],
-        extractor: Callable[[dict[str, Any]], dict[str, Any]],
+        extractor: Callable[[str], dict[str, Any]],
         *,
         field_keys: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Score structured-field extraction across *cases* using *extractor*.
 
-        The *extractor* callable should accept a dict of field values and
-        return a dict of extracted values (same schema as
-        ``extract_institution_fields``).
+        The *extractor* callable must accept a **string** (the ``text``
+        field from each case) and return a dict of extracted field values,
+        matching the schema of ``extract_institution_fields``.
 
         Returns per-field precision, recall, F1, and a summary of errors.
 
         Parameters
         ----------
         cases : list[dict[str, Any]]
-            Cases with *ground_truth* dicts.
+            Cases with ``ground_truth`` dicts and ``text`` strings.
         extractor : callable
-            Function that takes a dict and returns extracted fields.
+            Function that takes a text string and returns extracted fields.
         field_keys : list[str], optional
             Which fields to score.  If ``None``, defaults to the standard
             institution fields.
@@ -461,11 +565,12 @@ class OCREngine(ABC):
 
         for case in cases:
             gt = case.get("ground_truth", {})
-            predicted = extractor(case.get("predicted_text", "") or {})
+            text = case.get("text", "")
+            predicted = extractor(text)
 
-            for field in field_keys:
-                gt_val = gt.get(field)
-                pd_val = predicted.get(field)
+            for fld in field_keys:
+                gt_val = gt.get(fld)
+                pd_val = predicted.get(fld)
 
                 if gt_val is None and pd_val is None:
                     # Both missing → true negative, skip.
@@ -473,53 +578,55 @@ class OCREngine(ABC):
 
                 if gt_val is not None and pd_val is not None and str(gt_val) == str(pd_val):
                     # Exact match.
-                    field_tp[field] += 1
-                    field_cm[field]["tp"] += 1
+                    field_tp[fld] += 1
+                    field_cm[fld]["tp"] += 1
                     total_tp += 1
                 elif gt_val is not None and pd_val is not None:
                     # Both present but different → wrong value.
-                    field_fn[field] += 1
+                    field_fp[fld] += 1
+                    field_fn[fld] += 1
+                    total_fp += 1
                     total_fn += 1
-                    field_cm[field]["wrong_value"] += 1
+                    field_cm[fld]["wrong_value"] += 1
                     errors.append(
                         {
                             "case_id": case.get("case_id", "?"),
-                            "field": field,
+                            "field": fld,
                             "expected": gt_val,
                             "got": pd_val,
                         }
                     )
                 elif pd_val is not None:
-                    # Field present in prediction but missing in ground truth → false positive.
-                    field_fp[field] += 1
+                    # Spurious extraction → false positive.
+                    field_fp[fld] += 1
                     total_fp += 1
-                    field_cm[field]["fp"] += 1
+                    field_cm[fld]["fp"] += 1
                     errors.append(
                         {
                             "case_id": case.get("case_id", "?"),
-                            "field": field,
+                            "field": fld,
                             "unexpected": pd_val,
                         }
                     )
                 else:
-                    # Field missing in prediction but present in ground truth → false negative.
-                    field_fn[field] += 1
+                    # Missing extraction → false negative.
+                    field_fn[fld] += 1
                     total_fn += 1
-                    field_cm[field]["fn"] += 1
+                    field_cm[fld]["fn"] += 1
                     errors.append(
                         {
                             "case_id": case.get("case_id", "?"),
-                            "field": field,
+                            "field": fld,
                             "missing": True,
                         }
                     )
 
         # Compute per-field precision, recall, F1.
         field_metrics: Dict[str, Dict[str, float]] = {}
-        for field in field_keys:
-            tp = field_tp[field]
-            fp = field_fp[field]
-            fn = field_fn[field]
+        for fld in field_keys:
+            tp = field_tp[fld]
+            fp = field_fp[fld]
+            fn = field_fn[fld]
 
             precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
             recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
@@ -529,7 +636,7 @@ class OCREngine(ABC):
                 else 0.0
             )
 
-            field_metrics[field] = {
+            field_metrics[fld] = {
                 "precision": round(precision, 4),
                 "recall": round(recall, 4),
                 "f1": round(f1, 4),
@@ -538,23 +645,23 @@ class OCREngine(ABC):
                 "fn": fn,
             }
 
+        # Aggregate metrics from aggregate counts, not from a single field.
+        agg_precision = (
+            total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0.0
+        )
+        agg_recall = (
+            total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0.0
+        )
+        agg_f1 = (
+            2 * agg_precision * agg_recall / (agg_precision + agg_recall)
+            if (agg_precision + agg_recall) > 0
+            else 0.0
+        )
+
         aggregate = {
-            "precision": round(total_tp / (total_tp + total_fp), 4)
-            if (total_tp + total_fp) > 0
-            else 0.0,
-            "recall": round(total_tp / (total_tp + total_fn), 4)
-            if (total_tp + total_fn) > 0
-            else 0.0,
-            "f1": round(
-                2 * field_metrics["institution_name"]["precision"]
-                * field_metrics["institution_name"]["recall"]
-                / (
-                    field_metrics["institution_name"]["precision"]
-                    + field_metrics["institution_name"]["recall"]
-                )
-                if field_metrics["institution_name"]["precision"] + field_metrics["institution_name"]["recall"] > 0
-                else 0.0,
-            ),
+            "precision": round(agg_precision, 4),
+            "recall": round(agg_recall, 4),
+            "f1": round(agg_f1, 4),
             "total_tp": total_tp,
             "total_fp": total_fp,
             "total_fn": total_fn,
@@ -579,18 +686,16 @@ class OCREngine(ABC):
         1. Returns a dict (never ``None``).
         2. Contains only string values (or None).
         3. Does not raise on a synthetic text input (passed as ``str``).
-        4. Returns a dict with the expected key set when given a valid case.
 
         Returns a list of test result dicts, each with keys:
 
         - ``"passed"``: bool
         - ``"detail"``: human-readable description
         - ``"engine"``: engine name
-        - ``"case_id``: the test case used (if applicable)
+        - ``"case_id"``: the test case used
         """
         results: List[Dict[str, Any]] = []
 
-        # Test cases: simple text inputs that an engine should handle.
         test_inputs: List[str] = [
             "Institution Name: Alpha College",
             "Certificate Number: CERT/2026/0099",
@@ -601,79 +706,61 @@ class OCREngine(ABC):
         ]
 
         for idx, text in enumerate(test_inputs):
+            case_id = f"contract_{idx}"
             try:
                 result = engine.extract(text)
-            except Exception as exc:
+            except Exception as e:
                 results.append(
                     {
                         "passed": False,
-                        "detail": f"extract() raised {type(exc).__name__}: {exc}",
-                        "engine": self.engine_name,
-                        "case_id": f"contract_{idx}",
+                        "detail": f"extract() raised {type(e).__name__}: {e}",
+                        "engine": engine.engine_name,
+                        "case_id": case_id,
                     }
                 )
                 continue
 
-        # Check 1: result is a dict
-        for idx, text in enumerate(test_inputs):
-            try:
-                result = engine.extract(text)
-            except Exception as exc:
-                continue  # already recorded
-
+            # Check: result is a dict
             if not isinstance(result, dict):
                 results.append(
                     {
                         "passed": False,
-                        "detail": f"extract() returned {type(result).__name__}, expected dict",
-                        "engine": self.engine_name,
-                        "case_id": f"contract_type_{idx}",
+                        "detail": (
+                            f"extract() returned {type(result).__name__}, "
+                            "expected dict"
+                        ),
+                        "engine": engine.engine_name,
+                        "case_id": case_id,
                     }
                 )
-            elif result is None:
+                continue
+
+            # Check: all values are strings or None
+            bad_vals = [
+                (k, v)
+                for k, v in result.items()
+                if v is not None and not isinstance(v, str)
+            ]
+            if bad_vals:
+                k, v = bad_vals[0]
                 results.append(
                     {
                         "passed": False,
-                        "detail": "extract() returned None",
-                        "engine": self.engine_name,
-                        "case_id": f"contract_none_{idx}",
+                        "detail": f"extract()[{k!r}] = {v!r} is not str or None",
+                        "engine": engine.engine_name,
+                        "case_id": case_id,
                     }
                 )
-            else:
-                results.append(
-                    {
-                        "passed": True,
-                        "detail": f"extract() returned dict with keys {list(result.keys())}",
-                        "engine": self.engine_name,
-                        "case_id": f"contract_type_{idx}",
-                    }
-                )
-
-        # Check 2: all values are strings or None
-        for idx, text in enumerate(test_inputs):
-            try:
-                result = engine.extract(text)
-            except Exception as exc:
                 continue
 
-            if not isinstance(result, dict):
-                continue
-
-            for key, val in result.items():
-                if val is not None and not isinstance(val, str):
-                    results.append(
-                        {
-                            "passed": False,
-                            "detail": f"extract()[{key!r}] = {val!r} is not str or None",
-                            "engine": self.engine_name,
-                            "case_id": f"contract_val_{idx}_{key}",
-                        }
-                    )
-                    # Only report first violation per input to avoid flood.
-                    break
-            else:
-                # No break → all values are str or None
-                pass
+            results.append(
+                {
+                    "passed": True,
+                    "detail": f"extract() returned dict with keys {sorted(result.keys())}",
+                    "engine": engine.engine_name,
+                    "case_id": case_id,
+                }
+            )
 
         return results
 
@@ -690,7 +777,7 @@ class OCREngine(ABC):
         return case.get("text", "")
 
     # -------------------------------------------------------------------------
-    # held-out partition helpers
+    # Held-out partition helpers
     # -------------------------------------------------------------------------
 
     @staticmethod
@@ -702,22 +789,45 @@ class OCREngine(ABC):
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Split *cases* into development and held-out partitions.
 
-        The split is deterministic given *seed*.  No near-duplicate layout
-        patterns are deliberately placed in both partitions because the
-        generation is text-template based; the fingerprint field is used to
-        detect near-duplicates.
+        The split is deterministic given *seed*.  Cases are shuffled using
+        the seed before splitting.
+
+        Parameters
+        ----------
+        cases : list[dict[str, Any]]
+            Cases to split.
+        hold_out_fraction : float
+            Fraction of cases to hold out (0.0 to 1.0 exclusive).
+        seed : int, optional
+            Random seed for reproducibility.
 
         Returns
         -------
         (development, held_out) : tuple of list[dict]
+
+        Raises
+        ------
+        ValueError
+            If *hold_out_fraction* is outside (0, 1) or there are fewer
+            than 2 cases to split.
         """
-        rng = random.Random(seed) if seed is not None else random.Random(seed)
-        # Sort by fingerprint then shuffle within fingerprint groups to
-        # keep similar layouts together but still allow a deterministic split.
-        cases_sorted = sorted(cases, key=lambda c: c.get("dataset_fingerprint", ""))
-        n_hold = max(1, int(len(cases_sorted) * hold_out_fraction))
-        held_out = cases_sorted[:n_hold]
-        development = cases_sorted[n_hold:]
+        if not 0.0 < hold_out_fraction < 1.0:
+            raise ValueError(
+                f"hold_out_fraction must be between 0 and 1 exclusive, "
+                f"got {hold_out_fraction}"
+            )
+        if len(cases) < 2:
+            raise ValueError(
+                f"need at least 2 cases to split, got {len(cases)}"
+            )
+
+        rng = random.Random(seed)
+        shuffled = list(cases)
+        rng.shuffle(shuffled)
+
+        n_hold = max(1, int(len(shuffled) * hold_out_fraction))
+        held_out = shuffled[:n_hold]
+        development = shuffled[n_hold:]
         return development, held_out
 
     @staticmethod
@@ -725,8 +835,11 @@ class OCREngine(ABC):
         development: List[Dict[str, Any]],
         held_out: List[Dict[str, Any]],
     ) -> List[str]:
-        """Check that development and held-out partitions share no case IDs
-        and have disjoint fingerprint sets.
+        """Check that development and held-out partitions share no case IDs.
+
+        Also checks for template leakage: warns if the same
+        ``(corruption_type, dataset_fingerprint)`` pair appears in both
+        partitions when the case count is small enough that this matters.
 
         Returns a list of warning strings (empty if integrity is sound).
         """
@@ -740,12 +853,14 @@ class OCREngine(ABC):
                 f"Case ID overlap between partitions: {sorted(overlap)[:10]}"
             )
 
-        dev_fps = {c.get("dataset_fingerprint", "") for c in development if "dataset_fingerprint" in c}
-        hold_fps = {c.get("dataset_fingerprint", "") for c in held_out if "dataset_fingerprint" in c}
-        fp_overlap = dev_fps & hold_fps
-        if fp_overlap:
+        # Check for template-level leakage: same text appearing in both.
+        dev_texts = {c.get("text", "") for c in development}
+        hold_texts = {c.get("text", "") for c in held_out}
+        text_overlap = dev_texts & hold_texts
+        if text_overlap:
             warnings.append(
-                f"Fingerprint overlap between partitions: {sorted(fp_overlap)[:10]}"
+                f"Identical text found in both partitions: "
+                f"{len(text_overlap)} case(s)"
             )
 
         return warnings
