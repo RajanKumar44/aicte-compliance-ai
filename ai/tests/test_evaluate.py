@@ -33,6 +33,7 @@ from ai.evaluate_extraction import (  # noqa: E402
     run,
     run_corpora,
     score,
+    _print_human as print_human,
 )
 
 SCRIPT = REPO_ROOT / "ai" / "evaluate_extraction.py"
@@ -424,3 +425,64 @@ def test_cli_output_is_deterministic_across_runs(tmp_path: Path):
         assert completed.returncode == 0, completed.stderr
     assert runs[0].stdout == runs[1].stdout
     assert first.read_bytes() == second.read_bytes()
+
+
+def test_human_report_shows_an_extraction_error_inside_a_known_gap(capsys):
+    """A raising gap case must not look like an ordinary mismatch in human output."""
+    report = {
+        "corpus": "synthetic",
+        "cases": 1,
+        "exact_match_count": 0,
+        "exact_match_rate": 0.0,
+        "per_field": {},
+        "micro": {"tp": 0, "fp": 0, "fn": 0, "wrong_value": 0,
+                  "precision": 0.0, "recall": 0.0, "f1": 0.0},
+        "negative_cases": 0,
+        "negative_false_positives": [],
+        "negative_false_positive_count": 0,
+        "wrong_values": [],
+        "errors": [],
+        "known_gaps": [{
+            "case_id": "GAP-RAISE-001",
+            "category": "ocr-misread-label",
+            "expected": {},
+            "extracted": {},
+            "exact_match": False,
+            "known_gap": True,
+            "error": "ValueError: OCR text exceeds the 100000-character processing limit",
+            "still_failing": True,
+            "note": "a gap that raises",
+        }],
+    }
+    print_human(report, show_banner=False)
+    out = capsys.readouterr().out
+    assert "GAP-RAISE-001: STILL FAILING" in out
+    assert "extraction raised: ValueError" in out
+    assert "a gap that raises" in out
+
+
+def test_check_mode_tolerates_errors_inside_documented_known_gaps(tmp_path: Path):
+    """Only scored cases may fail --check; documented gaps stay exempt."""
+    corpus = tmp_path / "gap-raise.jsonl"
+    corpus.write_text(
+        json.dumps(
+            {
+                "case_id": "GAP-RAISE-002",
+                "category": "ocr-misread-label",
+                "known_gap": True,
+                "notes": "a deliberate gap that raises during extraction",
+                "text": "x" * 100_001,
+                "expected": {"institution_name": "Example Technical Institute"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--corpus", str(corpus), "--check", "--quiet"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr

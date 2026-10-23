@@ -285,6 +285,8 @@ def _print_human(report: dict[str, Any], *, show_banner: bool = True) -> None:
         for gap in report["known_gaps"]:
             status = "STILL FAILING" if gap["still_failing"] else "FIXED — remove the known_gap flag"
             print(f"  {gap['case_id']}: {status}")
+            if gap.get("error"):
+                print(f"    extraction raised: {gap['error']}")
             print(f"    {gap['note']}")
 
 
@@ -308,7 +310,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="exit 1 if a negative case produces a spurious extraction or a case raises",
+        help="exit 1 on any scored mismatch: a negative case extracting a field, a "
+        "scored case raising, or a scored case not matching exactly; documented "
+        "known gaps are exempt",
     )
     args = parser.parse_args(argv)
 
