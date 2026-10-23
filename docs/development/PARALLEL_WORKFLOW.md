@@ -107,6 +107,30 @@ are real examples — change them to your task, keep the shape.
 
 Each directory gets its **own** `.venv` (a virtualenv is not shareable across worktrees and
 must not be committed; `.gitignore` covers it).
+**Check before you create.** ✅ verified on 2026-10-23 — `git worktree add` has a
+surprising failure mode that can leave a stray branch behind:
+
+```console
+$ git worktree add /tmp/p4/wt-frontend -b task/frontend-probe origin/research/grounded-foundation
+Preparing worktree (new branch 'task/frontend-probe')
+branch 'task/frontend-probe' set up to track 'origin/research/grounded-foundation'.
+fatal: '/tmp/p4/wt-frontend' already exists          # exit 128
+$ git branch --list 'task/frontend-probe'
+  task/frontend-probe                                # the branch WAS created
+```
+
+So, before creating anything:
+
+```bash
+git worktree list                 # is the directory already a worktree? reuse it
+git branch --list 'feature/*'     # does the branch already exist? pick another name
+git worktree add ../aicte-frontend -b feature/frontend-intake-fixtures origin/research/grounded-foundation
+```
+
+If a stray branch like the above appears, delete it only when you are certain it holds no
+work: `git branch -D task/frontend-probe` refuses if it is checked out somewhere. Never
+delete a branch you did not create.
+
 
 Removing a worktree when finished:
 
@@ -135,7 +159,7 @@ git log --oneline -1                 # must equal the base SHA you just recorded
 
 python3 -m venv .venv && . .venv/bin/activate
 python -m pip install -r backend/requirements-dev.txt
-python -m pytest -q                  # base: 54 passed, 1 skipped; after PR #5: 187 passed
+python -m pytest -q                  # base: 54 passed, 1 skipped; after PR #5: 205 passed (count grows with the PR)
 ```
 
 - **✅ verified** 2026-10-23: three worktrees created this way from `014403a`, each clean and on
@@ -161,7 +185,7 @@ state your worktree is in:
 | `pyproject.toml` (pytest config, ruff config) | absent | present |
 | `ruff` in `backend/requirements-dev.txt` | **absent** | present |
 | bare `pytest -q` | **fails** (8 collection errors) | works |
-| `python -m pytest -q` | works — 54 passed, 1 skipped | works — 187 passed, 1 skipped |
+| `python -m pytest -q` | works — 54 passed, 1 skipped | works — 205 passed, 1 skipped |
 | `backend/tests/test_ocr_adapter_engine.py`, `test_ocr_image_validation.py` | **absent** | present |
 
 Install (identical for all three workstreams):
@@ -209,7 +233,7 @@ ruff check backend/                                   # lint
 python -m compileall -q backend/app backend/tests     # import/compile check
 ```
 
-**✅ verified** on this branch: `187 passed, 1 skipped in 0.53s`; ruff `All checks passed!`;
+**✅ verified** on this branch: `205 passed, 1 skipped`; ruff `All checks passed!`;
 `compileall` exit 0. The skip is `test_ocr_engine_integration.py` (no Tesseract).
 
 On a worktree cut from the base branch: `54 passed, 1 skipped`, `compileall` exit 0,

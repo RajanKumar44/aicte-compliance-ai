@@ -159,7 +159,8 @@ change that makes the contract explicit and testable.
 **Acceptance criteria**
 
 - All existing tests pass unmodified (base: **54 passed, 1 skipped**; after PR #5:
-  **187 passed, 1 skipped**). No response body changes.
+  **205 passed, 1 skipped** on the PR #5 head at the time of writing — take the number from
+your own run, it grows as that PR gains tests). No response body changes.
 - A test fails if a top-level key is renamed, removed or added without updating the contract.
 - No new endpoint, auth, persistence, upload route or rule activation.
 - Lint is clean **for the files you touched**:

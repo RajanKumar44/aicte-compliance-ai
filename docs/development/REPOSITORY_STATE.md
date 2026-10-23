@@ -1,7 +1,7 @@
 # Repository state report
 
-**Observed:** 2026-10-23T05:0xZ (11:0x IST) — second observation pass
-**First pass:** 2026-10-22T23:58Z
+**Observed:** 2026-10-23T05:45Z (11:15 IST) — third observation pass
+**Earlier passes:** 2026-10-23T05:0xZ, 2026-10-22T23:58Z
 **Observer:** repository audit session on branch `arena/97cf136c-aicte-compliance-ai`
 **Method:** read-only inspection — `git status`, `git branch -avv`, `git ls-remote`,
 `gh pr list/api`, `gh api .../check-runs`, `gh api .../branches/<b>`,
@@ -33,7 +33,7 @@ commit that contains it.
 | `review/cross-repo-integration-audit` | `5922eca` | #2 | `research/grounded-foundation` |
 | `feature/ocr-regression-hardening` | `184d678` | #3 | `research/grounded-foundation` |
 | `docs/three-person-workstream-split` | `ed5a41a` | #4 | `research/grounded-foundation` |
-| `arena/97cf136c-aicte-compliance-ai` | `f96feee` at observation; advancing | #5 | `research/grounded-foundation` |
+| `arena/97cf136c-aicte-compliance-ai` | `d046ea1` at observation; advancing | #5 | `research/grounded-foundation` |
 
 PRs #2, #3 and #4 are all cut from `9157374`, one docs-only commit behind the research head
 `014403a`. The repository was previously observed as a shallow clone; `git fetch --unshallow`
@@ -60,7 +60,8 @@ No PR is merged or closed.
 | `5922eca` | #2 | **none** |
 | `184d678` | #3 | both success (run 39865712934) |
 | `ed5a41a` | #4 | **none** |
-| `f96feee` | #5 | both success (run 39875377670) |
+| `a7676db` | #5 | both success (run 39905353382) |
+| `d046ea1` | #5 | both success (run 39906339858) — 205 tests |
 | `968ddcf` | `main` | **none** — no workflow file exists on `main` |
 
 ### Why #2 and #4 have no runs, and what actually fixes it
@@ -150,7 +151,7 @@ Tesseract, then runs the engine smoke test).
 
 | Command | Result |
 |---|---|
-| `python -m pytest -q` | **187 passed, 1 skipped** |
+| `python -m pytest -q` | **205 passed, 1 skipped** |
 | `ruff check backend/` | all checks passed |
 | `python -m compileall -q backend/app backend/tests` | exit 0 |
 | relative markdown link check (test) | 0 broken links |
