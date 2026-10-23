@@ -24,6 +24,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from ai.raster_benchmark import (  # noqa: E402
+    DATASET_LANG_TO_TESSERACT,
     MockRasterOCREngine,
     RasterBenchmarkScorer,
     RasterDocumentGenerator,
@@ -308,3 +309,487 @@ class TestRasterBenchmarkCLI:
         # Verify image files
         saved_images = list(img_dir.glob("*.png"))
         assert len(saved_images) == 8  # 4 clean + 4 corrupted
+
+
+# ---------------------------------------------------------------------------
+# Test Line-Boundary Preservation in RealTesseractEngine
+# ---------------------------------------------------------------------------
+
+
+class TestLineBoundaryPreservation:
+    """Verify that RealTesseractEngine groups words by (page, line) for field extraction."""
+
+    @staticmethod
+    def _make_engine():
+        """Create a RealTesseractEngine with mocked availability (no real binary needed)."""
+        engine = RealTesseractEngine.__new__(RealTesseractEngine)
+        engine.language = "eng"
+        engine._available = True
+        engine.engine_version = "5.5.3"
+        engine._available_languages = {"eng"}
+        engine.engine_name = "tesseract"
+        return engine
+
+    def test_words_on_different_lines_produce_newline_text(self):
+        """Words on distinct line_numbers are joined by newlines, not spaces."""
+        from unittest.mock import MagicMock, patch
+
+        engine = self._make_engine()
+
+        # Mock OCRWord-like objects on two different lines
+        w1 = MagicMock(text="Institution", confidence=0.95, page_number=1, line_number=1)
+        w2 = MagicMock(text="Name:", confidence=0.95, page_number=1, line_number=1)
+        w3 = MagicMock(text="Alpha", confidence=0.9, page_number=1, line_number=1)
+        w4 = MagicMock(text="Certificate", confidence=0.95, page_number=1, line_number=2)
+        w5 = MagicMock(text="No:", confidence=0.95, page_number=1, line_number=2)
+        w6 = MagicMock(text="CERT/2026/0001", confidence=0.9, page_number=1, line_number=2)
+
+        mock_raw = MagicMock()
+        mock_raw.words = [w1, w2, w3, w4, w5, w6]
+
+        mock_adapter = MagicMock()
+        mock_adapter.recognize.return_value = mock_raw
+
+        with patch("backend.app.ocr_pipeline.TesseractOCRAdapter", return_value=mock_adapter), \
+             patch("backend.app.ocr_pipeline.extract_institution_fields", return_value={}) as mock_extract:
+            engine.extract_from_bytes(b"fake_image_bytes")
+
+        # Verify the text passed to extract_institution_fields has newlines
+        text_arg = mock_extract.call_args[0][0]
+        assert "\n" in text_arg
+        lines = text_arg.split("\n")
+        assert len(lines) == 2
+        assert lines[0] == "Institution Name: Alpha"
+        assert lines[1] == "Certificate No: CERT/2026/0001"
+
+    def test_multiple_fields_different_pages(self):
+        """Words on different pages are separated by newlines and sorted correctly."""
+        from unittest.mock import MagicMock, patch
+
+        engine = self._make_engine()
+
+        w1 = MagicMock(text="Page1Line1", confidence=0.9, page_number=1, line_number=1)
+        w2 = MagicMock(text="Page2Line1", confidence=0.9, page_number=2, line_number=1)
+        w3 = MagicMock(text="Page1Line2", confidence=0.9, page_number=1, line_number=2)
+
+        mock_raw = MagicMock()
+        mock_raw.words = [w1, w2, w3]
+
+        mock_adapter = MagicMock()
+        mock_adapter.recognize.return_value = mock_raw
+
+        with patch("backend.app.ocr_pipeline.TesseractOCRAdapter", return_value=mock_adapter), \
+             patch("backend.app.ocr_pipeline.extract_institution_fields", return_value={}) as mock_extract:
+            engine.extract_from_bytes(b"fake")
+
+        text_arg = mock_extract.call_args[0][0]
+        lines = text_arg.split("\n")
+        # Sorted by (page, line): (1,1), (1,2), (2,1)
+        assert len(lines) == 3
+        assert lines[0] == "Page1Line1"
+        assert lines[1] == "Page1Line2"
+        assert lines[2] == "Page2Line1"
+
+    def test_empty_ocr_output(self):
+        """Zero words → empty transcription and empty fields."""
+        from unittest.mock import MagicMock, patch
+
+        engine = self._make_engine()
+
+        mock_raw = MagicMock()
+        mock_raw.words = []
+
+        mock_adapter = MagicMock()
+        mock_adapter.recognize.return_value = mock_raw
+
+        with patch("backend.app.ocr_pipeline.TesseractOCRAdapter", return_value=mock_adapter), \
+             patch("backend.app.ocr_pipeline.extract_institution_fields", return_value={}) as mock_extract:
+            result = engine.extract_from_bytes(b"fake")
+
+        text_arg = mock_extract.call_args[0][0]
+        assert text_arg == ""
+        assert result["transcription"] == ""
+        assert result["fields"] == {}
+        assert result["confidence"] == 0.0
+
+    def test_language_override(self):
+        """The language keyword argument overrides the engine's default language."""
+        from unittest.mock import MagicMock, patch
+
+        engine = self._make_engine()
+
+        mock_raw = MagicMock()
+        mock_raw.words = []
+
+        mock_adapter = MagicMock()
+        mock_adapter.recognize.return_value = mock_raw
+
+        with patch("backend.app.ocr_pipeline.TesseractOCRAdapter", return_value=mock_adapter) as MockCls, \
+             patch("backend.app.ocr_pipeline.extract_institution_fields", return_value={}):
+            engine.extract_from_bytes(b"fake", language="hin")
+
+        MockCls.assert_called_once_with(language="hin")
+
+    def test_default_language_used_when_no_override(self):
+        """Without a language override, the engine's default language is used."""
+        from unittest.mock import MagicMock, patch
+
+        engine = self._make_engine()
+        engine.language = "eng+hin"
+
+        mock_raw = MagicMock()
+        mock_raw.words = []
+
+        mock_adapter = MagicMock()
+        mock_adapter.recognize.return_value = mock_raw
+
+        with patch("backend.app.ocr_pipeline.TesseractOCRAdapter", return_value=mock_adapter) as MockCls, \
+             patch("backend.app.ocr_pipeline.extract_institution_fields", return_value={}):
+            engine.extract_from_bytes(b"fake")
+
+        MockCls.assert_called_once_with(language="eng+hin")
+
+
+# ---------------------------------------------------------------------------
+# Test Language Mapping and Availability
+# ---------------------------------------------------------------------------
+
+
+class TestLanguageMapping:
+    def test_dataset_lang_to_tesseract_mapping(self):
+        assert DATASET_LANG_TO_TESSERACT["en"] == "eng"
+        assert DATASET_LANG_TO_TESSERACT["hi"] == "hin"
+        assert DATASET_LANG_TO_TESSERACT["bilingual"] == "eng+hin"
+
+    def test_has_language_single_pack(self):
+        engine = RealTesseractEngine.__new__(RealTesseractEngine)
+        engine._available = True
+        engine._available_languages = {"eng", "hin"}
+        assert engine.has_language("eng") is True
+        assert engine.has_language("hin") is True
+        assert engine.has_language("fra") is False
+
+    def test_has_language_composite_pack(self):
+        engine = RealTesseractEngine.__new__(RealTesseractEngine)
+        engine._available = True
+        engine._available_languages = {"eng", "hin"}
+        assert engine.has_language("eng+hin") is True
+        assert engine.has_language("eng+fra") is False
+
+    def test_has_language_empty_set_assumes_available(self):
+        """When we can't retrieve language list, assume available if binary exists."""
+        engine = RealTesseractEngine.__new__(RealTesseractEngine)
+        engine._available = True
+        engine._available_languages = set()
+        assert engine.has_language("eng") is True
+        assert engine.has_language("anything") is True
+
+    def test_has_language_empty_set_unavailable_binary(self):
+        engine = RealTesseractEngine.__new__(RealTesseractEngine)
+        engine._available = False
+        engine._available_languages = set()
+        assert engine.has_language("eng") is False
+
+
+# ---------------------------------------------------------------------------
+# Test Enhanced Report Structure
+# ---------------------------------------------------------------------------
+
+
+class TestEnhancedReport:
+    def test_report_contains_per_case_results(self):
+        """Mock benchmark report includes case_results list."""
+        cases = RasterDocumentGenerator.generate_benchmark_dataset(count=4, seed=42)
+        engine = MockRasterOCREngine()
+        report = RasterBenchmarkScorer.run_benchmark(cases, engine)
+
+        assert "case_results" in report
+        assert len(report["case_results"]) == 4
+        for cr in report["case_results"]:
+            assert cr["status"] == "evaluated"
+            assert "case_id" in cr
+            assert "language" in cr
+            assert "layout" in cr
+            assert "corruption_type" in cr
+            assert "clean" in cr
+            assert "corrupted" in cr
+            assert "expected_text" in cr
+            assert "expected_fields" in cr
+            # Per-case metrics
+            assert "cer" in cr["clean"]
+            assert "wer" in cr["clean"]
+            assert "f1" in cr["clean"]
+            assert "predicted_text" in cr["clean"]
+            assert "predicted_fields" in cr["clean"]
+
+    def test_report_contains_engine_type_mock(self):
+        cases = RasterDocumentGenerator.generate_benchmark_dataset(count=2, seed=42)
+        engine = MockRasterOCREngine()
+        report = RasterBenchmarkScorer.run_benchmark(cases, engine)
+        assert report["engine_type"] == "mock"
+
+    def test_report_contains_dataset_fingerprint(self):
+        cases = RasterDocumentGenerator.generate_benchmark_dataset(count=2, seed=42)
+        engine = MockRasterOCREngine()
+        report = RasterBenchmarkScorer.run_benchmark(cases, engine)
+        assert "dataset_fingerprint" in report
+        assert report["dataset_fingerprint"] != "unknown"
+
+    def test_report_counts_match(self):
+        """total_cases, evaluated_count, unavailable_count are consistent."""
+        cases = RasterDocumentGenerator.generate_benchmark_dataset(count=6, seed=42)
+        engine = MockRasterOCREngine()
+        report = RasterBenchmarkScorer.run_benchmark(cases, engine)
+        assert report["total_cases"] == 6
+        assert report["evaluated_count"] == 6
+        assert report["unavailable_count"] == 0
+        assert report["sample_size"] == 6
+
+    def test_unavailable_language_cases_excluded(self):
+        """Cases requiring missing language packs are excluded from scoring."""
+        cases = RasterDocumentGenerator.generate_benchmark_dataset(count=3, seed=42)
+        # Force all cases to require Hindi
+        for c in cases:
+            c["language"] = "hi"
+
+        engine = RealTesseractEngine.__new__(RealTesseractEngine)
+        engine.language = "eng"
+        engine._available = True
+        engine.engine_version = "5.5.3"
+        engine._available_languages = {"eng"}  # hin NOT available
+        engine.engine_name = "tesseract"
+
+        report = RasterBenchmarkScorer.run_benchmark(cases, engine)
+        assert report["available"] is True
+        assert report["evaluated_count"] == 0
+        assert report["unavailable_count"] == 3
+        assert len(report.get("unavailable_cases", [])) == 3
+        for uc in report["unavailable_cases"]:
+            assert uc["status"] == "unavailable"
+            assert "hin" in uc["reason"]
+
+    def test_mixed_available_unavailable_cases(self):
+        """Only unavailable cases are excluded; available ones are scored normally."""
+        cases = RasterDocumentGenerator.generate_benchmark_dataset(count=6, seed=42)
+        # Make cases 0,1,2 English (available), 3,4,5 Hindi (unavailable)
+        for i, c in enumerate(cases):
+            c["language"] = "en" if i < 3 else "hi"
+
+        engine = RealTesseractEngine.__new__(RealTesseractEngine)
+        engine.language = "eng"
+        engine._available = True
+        engine.engine_version = "5.5.3"
+        engine._available_languages = {"eng"}
+        engine.engine_name = "tesseract"
+
+        # Mock the extract_from_bytes to avoid needing real Tesseract
+        from unittest.mock import patch, MagicMock
+
+        mock_raw = MagicMock()
+        mock_raw.words = []
+        mock_adapter = MagicMock()
+        mock_adapter.recognize.return_value = mock_raw
+
+        with patch("backend.app.ocr_pipeline.TesseractOCRAdapter", return_value=mock_adapter), \
+             patch("backend.app.ocr_pipeline.extract_institution_fields", return_value={}):
+            report = RasterBenchmarkScorer.run_benchmark(cases, engine)
+
+        assert report["total_cases"] == 6
+        assert report["evaluated_count"] == 3
+        assert report["unavailable_count"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Test Field Scoring Edge Cases
+# ---------------------------------------------------------------------------
+
+
+class TestFieldScoringEdgeCases:
+    def test_false_positive_unexpected_field(self):
+        """Predicted field not in expected → FP."""
+        result = RasterBenchmarkScorer.evaluate_case(
+            predicted_text="hello",
+            expected_text="hello",
+            predicted_fields={"extra_field": "value"},
+            expected_fields={},
+        )
+        assert result["fp"] == 1
+        assert result["tp"] == 0
+        assert result["fn"] == 0
+
+    def test_false_negative_missing_field(self):
+        """Expected field not in predicted → FN."""
+        result = RasterBenchmarkScorer.evaluate_case(
+            predicted_text="hello",
+            expected_text="hello",
+            predicted_fields={},
+            expected_fields={"institution_name": "Alpha"},
+        )
+        assert result["fn"] == 1
+        assert result["tp"] == 0
+        assert result["fp"] == 0
+
+    def test_wrong_value_counts_as_fp_and_fn(self):
+        """Mismatched value → both FP and FN."""
+        result = RasterBenchmarkScorer.evaluate_case(
+            predicted_text="hello",
+            expected_text="hello",
+            predicted_fields={"institution_name": "Beta"},
+            expected_fields={"institution_name": "Alpha"},
+        )
+        assert result["fp"] == 1
+        assert result["fn"] == 1
+        assert result["tp"] == 0
+
+    def test_empty_both_fields_no_counts(self):
+        """Both empty field dicts → no TP, FP, FN."""
+        result = RasterBenchmarkScorer.evaluate_case(
+            predicted_text="",
+            expected_text="",
+            predicted_fields={},
+            expected_fields={},
+        )
+        assert result["tp"] == 0
+        assert result["fp"] == 0
+        assert result["fn"] == 0
+
+    def test_multiple_fields_mixed_outcomes(self):
+        """Mix of TP, FP, FN across multiple fields."""
+        result = RasterBenchmarkScorer.evaluate_case(
+            predicted_text="hello",
+            expected_text="hello",
+            predicted_fields={
+                "institution_name": "Alpha",  # correct → TP
+                "certificate_number": "WRONG",  # wrong value → FP + FN
+                "extra_field": "surprise",  # unexpected → FP
+            },
+            expected_fields={
+                "institution_name": "Alpha",
+                "certificate_number": "CERT/001",
+                "academic_year": "2026-2027",  # missing → FN
+            },
+        )
+        assert result["tp"] == 1
+        assert result["fp"] == 2  # wrong cert + extra field
+        assert result["fn"] == 2  # wrong cert + missing year
+
+
+# ---------------------------------------------------------------------------
+# Test CLI Edge Cases
+# ---------------------------------------------------------------------------
+
+
+class TestCLIEdgeCases:
+    def test_invalid_count_zero(self, tmp_path):
+        import subprocess
+
+        cmd = [sys.executable, "ai/raster_benchmark.py", "--count", "0"]
+        res = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True)
+        assert res.returncode == 1
+        assert "must be at least 1" in res.stderr
+
+    def test_invalid_count_negative(self, tmp_path):
+        import subprocess
+
+        cmd = [sys.executable, "ai/raster_benchmark.py", "--count", "-5"]
+        res = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True)
+        assert res.returncode == 1
+        assert "must be at least 1" in res.stderr
+
+    def test_json_parent_dir_created_automatically(self, tmp_path):
+        """JSON output directory is created if it doesn't exist."""
+        import subprocess
+
+        json_out = tmp_path / "nested" / "deep" / "report.json"
+        cmd = [
+            sys.executable,
+            "ai/raster_benchmark.py",
+            "--count", "2",
+            "--seed", "42",
+            "--json", str(json_out),
+        ]
+        res = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True)
+        assert res.returncode == 0, f"CLI failed: {res.stderr}"
+        assert json_out.is_file()
+        data = json.loads(json_out.read_text(encoding="utf-8"))
+        assert data["sample_size"] == 2
+        assert "seed" in data
+
+    def test_deterministic_report_same_seed(self, tmp_path):
+        """Same seed and count produce identical reports across separate processes.
+
+        The mock engine uses hashlib (not hash()) for field degradation, so
+        results are deterministic regardless of PYTHONHASHSEED.
+        """
+        import subprocess
+
+        reports = []
+        for i in range(2):
+            json_out = tmp_path / f"report_{i}.json"
+            cmd = [
+                sys.executable,
+                "ai/raster_benchmark.py",
+                "--count", "4",
+                "--seed", "99",
+                "--json", str(json_out),
+            ]
+            res = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True)
+            assert res.returncode == 0
+            reports.append(json.loads(json_out.read_text(encoding="utf-8")))
+
+        # Compare everything except timing
+        for key in ["clean_baseline", "corrupted_evaluation", "by_corruption_type",
+                     "by_language", "dataset_fingerprint", "sample_size"]:
+            assert reports[0][key] == reports[1][key], f"Mismatch on {key}"
+
+
+# ---------------------------------------------------------------------------
+# Test Engine Error Handling
+# ---------------------------------------------------------------------------
+
+
+class TestEngineErrorHandling:
+    def test_engine_exception_recorded_as_error(self):
+        """Engine that raises during evaluation produces error case result."""
+        from ai.raster_benchmark import RasterOCREngine
+
+        class FailingEngine(RasterOCREngine):
+            engine_name = "failing"
+
+            def is_available(self):
+                return True
+
+            def extract_from_bytes(self, image_bytes):
+                raise RuntimeError("engine crashed")
+
+        cases = RasterDocumentGenerator.generate_benchmark_dataset(count=2, seed=42)
+        engine = FailingEngine()
+        report = RasterBenchmarkScorer.run_benchmark(cases, engine)
+
+        assert report["available"] is True
+        assert report["evaluated_count"] == 0
+        assert len(report["case_results"]) == 2
+        for cr in report["case_results"]:
+            assert cr["status"] == "error"
+            assert "engine crashed" in cr["reason"]
+
+    def test_unavailable_engine_returns_error_report(self):
+        """Unavailable engine produces available=False report."""
+        from ai.raster_benchmark import RasterOCREngine
+
+        class UnavailableEngine(RasterOCREngine):
+            engine_name = "missing"
+
+            def is_available(self):
+                return False
+
+            def extract_from_bytes(self, image_bytes):
+                raise NotImplementedError
+
+        cases = RasterDocumentGenerator.generate_benchmark_dataset(count=2, seed=42)
+        engine = UnavailableEngine()
+        report = RasterBenchmarkScorer.run_benchmark(cases, engine)
+
+        assert report["available"] is False
+        assert "unavailable" in report["error"]
+        assert report["total_cases"] == 2

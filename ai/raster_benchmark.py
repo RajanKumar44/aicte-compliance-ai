@@ -40,6 +40,20 @@ from typing import Any, Callable, Optional
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+# ---------------------------------------------------------------------------
+# Language mapping: dataset language code → Tesseract language code
+# ---------------------------------------------------------------------------
+
+DATASET_LANG_TO_TESSERACT: dict[str, str] = {
+    "en": "eng",
+    "hi": "hin",
+    "bilingual": "eng+hin",
+}
+
 # ---------------------------------------------------------------------------
 # Font selection with graceful fallback
 # ---------------------------------------------------------------------------
@@ -456,18 +470,49 @@ class RasterOCREngine(ABC):
 
 
 class RealTesseractEngine(RasterOCREngine):
-    """Adapter executing real Tesseract OCR via backend.app.ocr_pipeline if available."""
+    """Adapter executing real Tesseract OCR via backend.app.ocr_pipeline if available.
+
+    Words are grouped by ``(page_number, line_number)`` so that the multiline
+    text passed to ``extract_institution_fields`` preserves the line boundaries
+    required by its line-oriented regex patterns.
+    """
 
     engine_name = "tesseract"
 
     def __init__(self, language: str = "eng"):
         self.language = language
         self._available = shutil.which("tesseract") is not None
+        self.engine_version: Optional[str] = None
+        self._available_languages: set[str] = set()
+        if self._available:
+            try:
+                import pytesseract
+
+                ver_raw = str(pytesseract.get_tesseract_version())
+                self.engine_version = ver_raw.splitlines()[0].strip()
+            except Exception:
+                pass
+            try:
+                import pytesseract
+
+                self._available_languages = set(pytesseract.get_languages())
+            except Exception:
+                pass
 
     def is_available(self) -> bool:
         return self._available
 
-    def extract_from_bytes(self, image_bytes: bytes) -> dict[str, Any]:
+    def has_language(self, lang_code: str) -> bool:
+        """Check if all components of a language spec (e.g. ``eng+hin``) are installed."""
+        if not self._available_languages:
+            # Cannot verify; assume available when the binary exists.
+            return self._available
+        for part in lang_code.split("+"):
+            if part not in self._available_languages:
+                return False
+        return True
+
+    def extract_from_bytes(self, image_bytes: bytes, *, language: Optional[str] = None) -> dict[str, Any]:
         if not self.is_available():
             raise RuntimeError(
                 "Tesseract executable is not installed on this system. "
@@ -478,11 +523,25 @@ class RealTesseractEngine(RasterOCREngine):
         except ImportError as exc:
             raise RuntimeError(f"Failed to import backend OCR adapter: {exc}") from exc
 
-        adapter = TesseractOCRAdapter(language=self.language)
+        lang = language or self.language
+        adapter = TesseractOCRAdapter(language=lang)
         raw_result = adapter.recognize(image_bytes)
-        text = " ".join(w.text for w in raw_result.words)
+
+        # Group words by (page, line) to preserve line boundaries required by
+        # extract_institution_fields (which uses ^…$ regex patterns per line).
+        grouped: dict[tuple[int, int], list[str]] = {}
+        for w in raw_result.words:
+            key = (w.page_number, w.line_number)
+            grouped.setdefault(key, []).append(w.text)
+
+        line_texts: list[str] = []
+        for key in sorted(grouped):
+            line_texts.append(" ".join(grouped[key]))
+        text = "\n".join(line_texts)
+
         fields = extract_institution_fields(text)
         plain_fields = {k: (v.value if hasattr(v, "value") else v) for k, v in fields.items()}
+
         avg_conf = (
             sum(w.confidence for w in raw_result.words) / len(raw_result.words)
             if raw_result.words
@@ -493,6 +552,7 @@ class RealTesseractEngine(RasterOCREngine):
             "fields": plain_fields,
             "confidence": avg_conf,
             "engine": "tesseract",
+            "engine_version": self.engine_version,
         }
 
 
@@ -549,7 +609,9 @@ class MockRasterOCREngine(RasterOCREngine):
         pred_fields: dict[str, Any] = {}
         if reference_fields and error_rate < 0.8:
             for k, v in reference_fields.items():
-                if random.Random(hash(k) + len(image_bytes)).random() > error_rate:
+                # Use hashlib for cross-process determinism (hash() varies per PYTHONHASHSEED).
+                stable_seed = int(hashlib.sha256(k.encode()).hexdigest()[:8], 16) + len(image_bytes)
+                if random.Random(stable_seed).random() > error_rate:
                     pred_fields[k] = v
 
         conf = max(0.0, min(1.0, 1.0 - error_rate))
@@ -622,11 +684,17 @@ class RasterBenchmarkScorer:
         cases: list[dict[str, Any]],
         engine: RasterOCREngine,
     ) -> dict[str, Any]:
-        """Run full benchmark evaluating both clean and corrupted pairs."""
+        """Run full benchmark evaluating both clean and corrupted pairs.
+
+        For real engines, per-case language selection is performed using
+        ``DATASET_LANG_TO_TESSERACT``.  Cases requiring unavailable language
+        packs are excluded from scored aggregates and reported separately.
+        """
         if not engine.is_available():
             return {
                 "available": False,
                 "engine": engine.engine_name,
+                "engine_type": "real" if isinstance(engine, RealTesseractEngine) else "mock",
                 "error": f"Engine {engine.engine_name} is unavailable on this host system.",
                 "total_cases": len(cases),
             }
@@ -637,23 +705,70 @@ class RasterBenchmarkScorer:
         corrupted_results: list[dict[str, Any]] = []
         per_corruption: dict[str, list[dict[str, Any]]] = {}
         per_language: dict[str, list[dict[str, Any]]] = {}
+        case_results: list[dict[str, Any]] = []
+        unavailable_cases: list[dict[str, Any]] = []
 
         for case in cases:
             corr_type = case.get("corruption_type", "none")
             lang = case.get("language", "en")
             exp_text = case.get("transcription_ground_truth", "")
             exp_fields = case.get("ground_truth", {})
+            case_id = case.get("case_id", "unknown")
 
-            # 1. Clean evaluation
-            if isinstance(engine, MockRasterOCREngine):
-                res_clean = engine.extract_from_bytes(
-                    case["clean_image_bytes"],
-                    reference_text=exp_text,
-                    reference_fields=exp_fields,
-                    corruption_type="none",
-                )
-            else:
-                res_clean = engine.extract_from_bytes(case["clean_image_bytes"])
+            # --- language availability check for real engines ---------------
+            if isinstance(engine, RealTesseractEngine):
+                tesseract_lang = DATASET_LANG_TO_TESSERACT.get(lang, "eng")
+                if not engine.has_language(tesseract_lang):
+                    missing = [
+                        p
+                        for p in tesseract_lang.split("+")
+                        if p not in engine._available_languages
+                    ]
+                    reason = f"Missing Tesseract language pack(s): {', '.join(missing)}"
+                    unavailable_cases.append({
+                        "case_id": case_id,
+                        "language": lang,
+                        "tesseract_language": tesseract_lang,
+                        "status": "unavailable",
+                        "reason": reason,
+                    })
+                    case_results.append({
+                        "case_id": case_id,
+                        "language": lang,
+                        "layout": case.get("layout", "unknown"),
+                        "corruption_type": corr_type,
+                        "status": "unavailable",
+                        "reason": reason,
+                    })
+                    continue
+
+            # --- clean evaluation -------------------------------------------
+            try:
+                if isinstance(engine, MockRasterOCREngine):
+                    res_clean = engine.extract_from_bytes(
+                        case["clean_image_bytes"],
+                        reference_text=exp_text,
+                        reference_fields=exp_fields,
+                        corruption_type="none",
+                    )
+                elif isinstance(engine, RealTesseractEngine):
+                    tesseract_lang = DATASET_LANG_TO_TESSERACT.get(lang, "eng")
+                    res_clean = engine.extract_from_bytes(
+                        case["clean_image_bytes"],
+                        language=tesseract_lang,
+                    )
+                else:
+                    res_clean = engine.extract_from_bytes(case["clean_image_bytes"])
+            except Exception as exc:
+                case_results.append({
+                    "case_id": case_id,
+                    "language": lang,
+                    "layout": case.get("layout", "unknown"),
+                    "corruption_type": corr_type,
+                    "status": "error",
+                    "reason": f"Clean evaluation failed: {exc}",
+                })
+                continue
 
             eval_clean = cls.evaluate_case(
                 predicted_text=res_clean.get("transcription", ""),
@@ -663,16 +778,33 @@ class RasterBenchmarkScorer:
             )
             clean_results.append(eval_clean)
 
-            # 2. Corrupted evaluation
-            if isinstance(engine, MockRasterOCREngine):
-                res_corr = engine.extract_from_bytes(
-                    case["corrupted_image_bytes"],
-                    reference_text=exp_text,
-                    reference_fields=exp_fields,
-                    corruption_type=corr_type,
-                )
-            else:
-                res_corr = engine.extract_from_bytes(case["corrupted_image_bytes"])
+            # --- corrupted evaluation --------------------------------------
+            try:
+                if isinstance(engine, MockRasterOCREngine):
+                    res_corr = engine.extract_from_bytes(
+                        case["corrupted_image_bytes"],
+                        reference_text=exp_text,
+                        reference_fields=exp_fields,
+                        corruption_type=corr_type,
+                    )
+                elif isinstance(engine, RealTesseractEngine):
+                    tesseract_lang = DATASET_LANG_TO_TESSERACT.get(lang, "eng")
+                    res_corr = engine.extract_from_bytes(
+                        case["corrupted_image_bytes"],
+                        language=tesseract_lang,
+                    )
+                else:
+                    res_corr = engine.extract_from_bytes(case["corrupted_image_bytes"])
+            except Exception as exc:
+                case_results.append({
+                    "case_id": case_id,
+                    "language": lang,
+                    "layout": case.get("layout", "unknown"),
+                    "corruption_type": corr_type,
+                    "status": "error",
+                    "reason": f"Corrupted evaluation failed: {exc}",
+                })
+                continue
 
             eval_corr = cls.evaluate_case(
                 predicted_text=res_corr.get("transcription", ""),
@@ -685,8 +817,29 @@ class RasterBenchmarkScorer:
             per_corruption.setdefault(corr_type, []).append(eval_corr)
             per_language.setdefault(lang, []).append(eval_corr)
 
+            # --- per-case detail -------------------------------------------
+            case_results.append({
+                "case_id": case_id,
+                "language": lang,
+                "layout": case.get("layout", "unknown"),
+                "corruption_type": corr_type,
+                "status": "evaluated",
+                "expected_text": exp_text,
+                "expected_fields": exp_fields,
+                "clean": {
+                    "predicted_text": res_clean.get("transcription", ""),
+                    "predicted_fields": res_clean.get("fields", {}),
+                    **eval_clean,
+                },
+                "corrupted": {
+                    "predicted_text": res_corr.get("transcription", ""),
+                    "predicted_fields": res_corr.get("fields", {}),
+                    **eval_corr,
+                },
+            })
+
         elapsed = time.time() - start_time
-        n = len(cases)
+        evaluated_count = len(clean_results)
 
         def _aggregate(res_list: list[dict[str, Any]]) -> dict[str, float]:
             if not res_list:
@@ -712,11 +865,18 @@ class RasterBenchmarkScorer:
         corr_breakdown = {k: _aggregate(v) for k, v in per_corruption.items()}
         lang_breakdown = {k: _aggregate(v) for k, v in per_language.items()}
 
-        return {
+        dataset_fp = cases[0].get("dataset_fingerprint", "unknown") if cases else "unknown"
+
+        report: dict[str, Any] = {
             "available": True,
             "engine": engine.engine_name,
             "engine_version": getattr(engine, "engine_version", None),
-            "sample_size": n,
+            "engine_type": "real" if isinstance(engine, RealTesseractEngine) else "mock",
+            "dataset_fingerprint": dataset_fp,
+            "total_cases": len(cases),
+            "evaluated_count": evaluated_count,
+            "unavailable_count": len(unavailable_cases),
+            "sample_size": evaluated_count,
             "duration_seconds": round(elapsed, 3),
             "clean_baseline": clean_agg,
             "corrupted_evaluation": corr_agg,
@@ -727,7 +887,13 @@ class RasterBenchmarkScorer:
             },
             "by_corruption_type": corr_breakdown,
             "by_language": lang_breakdown,
+            "case_results": case_results,
         }
+
+        if unavailable_cases:
+            report["unavailable_cases"] = unavailable_cases
+
+        return report
 
 
 # ---------------------------------------------------------------------------
@@ -742,7 +908,17 @@ def main() -> int:
     parser.add_argument("--json", type=Path, help="Write machine-readable benchmark report to JSON file")
     parser.add_argument("--output-images", type=Path, help="Optional directory to save generated PNG images")
     parser.add_argument("--real-engine", action="store_true", help="Attempt real Tesseract engine evaluation")
+    parser.add_argument(
+        "--language",
+        type=str,
+        default="eng",
+        help="Default Tesseract language code for real engine (e.g. eng, hin, eng+hin)",
+    )
     args = parser.parse_args()
+
+    if args.count < 1:
+        print("ERROR: --count must be at least 1.", file=sys.stderr)
+        return 1
 
     print("Generating synthetic raster image dataset...")
     cases = RasterDocumentGenerator.generate_benchmark_dataset(count=args.count, seed=args.seed)
@@ -759,10 +935,13 @@ def main() -> int:
 
     engine: RasterOCREngine
     if args.real_engine:
-        engine = RealTesseractEngine()
+        engine = RealTesseractEngine(language=args.language)
         if not engine.is_available():
             print("ERROR: Real Tesseract engine requested, but 'tesseract' was not found in PATH.")
             return 1
+        print(f"Tesseract version: {engine.engine_version}")
+        if engine._available_languages:
+            print(f"Available languages: {', '.join(sorted(engine._available_languages))}")
     else:
         engine = MockRasterOCREngine()
 
@@ -778,11 +957,21 @@ def main() -> int:
     delta = report["degradation_delta"]
 
     print("\n================ RASTER OCR BENCHMARK REPORT ================")
-    print(f"Engine: {report['engine']} | Samples: {report['sample_size']} | Time: {report['duration_seconds']}s")
+    print(
+        f"Engine: {report['engine']} ({report.get('engine_type', 'unknown')}) | "
+        f"Evaluated: {report['evaluated_count']}/{report['total_cases']} | "
+        f"Time: {report['duration_seconds']}s"
+    )
+    if report.get("engine_version"):
+        print(f"Engine Version: {report['engine_version']}")
     print("-------------------------------------------------------------")
     print(f"CLEAN:     CER={clean['cer']:.3f} | WER={clean['wer']:.3f} | Exact={clean['exact']:.3f} | F1={clean['f1']:.3f}")
     print(f"CORRUPTED: CER={corr['cer']:.3f} | WER={corr['wer']:.3f} | Exact={corr['exact']:.3f} | F1={corr['f1']:.3f}")
     print(f"DELTA:     +CER={delta['cer_increase']:.3f} | +WER={delta['wer_increase']:.3f} | -F1={delta['f1_drop']:.3f}")
+    if report.get("unavailable_count", 0) > 0:
+        print(f"UNAVAILABLE: {report['unavailable_count']} case(s) excluded (missing language packs)")
+        for uc in report.get("unavailable_cases", []):
+            print(f"  {uc['case_id']} ({uc['language']}): {uc['reason']}")
     print("-------------------------------------------------------------")
     print("Performance by Corruption Type:")
     for corr_type, stats in sorted(report["by_corruption_type"].items()):
@@ -793,6 +982,8 @@ def main() -> int:
     print("=============================================================")
 
     if args.json:
+        args.json.parent.mkdir(parents=True, exist_ok=True)
+        report["seed"] = args.seed
         args.json.write_text(json.dumps(report, indent=2), encoding="utf-8")
         print(f"Report written to {args.json}")
 
