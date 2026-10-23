@@ -3,7 +3,9 @@
 How three workstreams work at the same time without overwriting each other. Ownership is
 defined in [`../../WORKSTREAMS.md`](../../WORKSTREAMS.md); contracts in
 [`API_CONTRACT.md`](API_CONTRACT.md); gates in
-[`INTEGRATION_CHECKLIST.md`](INTEGRATION_CHECKLIST.md).
+[`INTEGRATION_CHECKLIST.md`](INTEGRATION_CHECKLIST.md); first tasks in
+[`STARTER_TASKS.md`](STARTER_TASKS.md); owner-only steps in
+[`OWNER_ACTIONS.md`](OWNER_ACTIONS.md).
 
 **Command status legend.** Every command below is marked:
 
@@ -116,6 +118,33 @@ git worktree remove ../aicte-frontend
 `fatal: '../aicte-frontend' contains modified or untracked files, use --force to delete it`
 (exit 128), and succeeds once the directory is clean. Do not add `--force` to silence
 that message — commit or stash first.
+
+## Contributor day-one checklist
+
+Run this before writing any code. It takes about two minutes and catches the three mistakes
+that cost the most: wrong base, wrong directory, wrong branch.
+
+```bash
+git fetch origin --prune
+git rev-parse origin/research/grounded-foundation     # know the base SHA you are on
+
+git worktree add ../aicte-frontend -b feature/frontend-intake-fixtures origin/research/grounded-foundation
+cd ../aicte-frontend
+git status --short --branch          # must be clean, on your own branch, nothing else's
+git log --oneline -1                 # must equal the base SHA you just recorded
+
+python3 -m venv .venv && . .venv/bin/activate
+python -m pip install -r backend/requirements-dev.txt
+python -m pytest -q                  # base: 54 passed, 1 skipped; after PR #5: 187 passed
+```
+
+- **✅ verified** 2026-10-23: three worktrees created this way from `014403a`, each clean and on
+  its own branch; the base suite gives `54 passed, 1 skipped`.
+- The base does **not** contain `WORKSTREAMS.md`, `docs/development/`, `frontend/`, `ai/` or
+  `pyproject.toml` — those live on unmerged PR #5. Read them from the PR head before you
+  start (see [`STARTER_TASKS.md`](STARTER_TASKS.md#read-this-before-you-branch--the-coordination-docs-are-not-on-the-base-yet)).
+- Do not create `WORKSTREAMS.md`, `docs/development/*`, `frontend/README.md` or
+  `ai/README.md` on your branch; PR #4 and PR #5 own those paths.
 
 ## Setup
 
