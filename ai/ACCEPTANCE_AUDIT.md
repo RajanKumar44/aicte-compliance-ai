@@ -1,7 +1,7 @@
 # AI/OCR acceptance audit — canonical requirement → evidence
 
-Status as of 2026-10-24, branch `feature/ai-ocr-corruption-slice`, HEAD `8485526`
-(after the shaping-validity milestone — update this line with each milestone).
+Status as of 2026-10-24, branch `feature/ai-ocr-corruption-slice`, HEAD `441aeb0`
+(the shaping-validity milestone — update this line with each milestone).
 Sources of truth: [`docs/canonical/prd.md`](../docs/canonical/prd.md),
 [`docs/canonical/phases.md`](../docs/canonical/phases.md),
 [`WORKSTREAMS.md`](../WORKSTREAMS.md), [`ai/EVALUATION.md`](EVALUATION.md),
