@@ -18,8 +18,31 @@ targeting the research base gets **no checks at all** (PRs #2 and #4 have none).
 **Fix.** One line in the workflow plus the regression test. The change already exists on
 PR #5's head; this block extracts it as a standalone, minimal PR.
 
-**Verified procedure** (executed in a throwaway clone on 2026-10-23 and confirmed to produce
-exactly two changed files, `+92/−1`):
+**Two equivalent routes.** Route A applies the checked-in patch; route B recreates the commit.
+Both were executed on 2026-10-23 against `014403a`.
+
+Route A — apply the verified patch (SHA-256
+`d3c9256e652e61dabf5553d61e9453c2269106c3249f396f4964769f31570716`):
+
+```bash
+git fetch origin --prune
+git switch -c fix/ci-pr-trigger origin/research/grounded-foundation
+git apply --check docs/development/patches/ci-pr-trigger.patch   # must print nothing
+git apply docs/development/patches/ci-pr-trigger.patch
+
+python -m pip install -r backend/requirements-dev.txt
+python -m pytest -q backend/tests/test_ci_configuration.py   # 6 passed
+python -m pytest -q                                          # 60 passed, 1 skipped
+
+git add .github/workflows/backend-tests.yml backend/tests/test_ci_configuration.py
+git commit -m "ci: run checks for pull requests targeting the research base"
+git push -u origin fix/ci-pr-trigger
+gh pr create --base research/grounded-foundation --draft \
+  --title "ci: run checks for PRs targeting the research base" \
+  --body-file /tmp/ci-fix-body.md
+```
+
+Route B — extract the same two files from PR #5's head:
 
 ```bash
 git fetch origin --prune
@@ -40,7 +63,8 @@ gh pr create --base research/grounded-foundation --draft \
   --body-file /tmp/ci-fix-body.md
 ```
 
-PR body to paste into `/tmp/ci-fix-body.md`:
+Either route produces the same two-file change (`+92/−1`). PR body to paste into
+`/tmp/ci-fix-body.md`:
 
 ```markdown
 The `pull_request.branches` filter is matched against the PR's **base** branch. It listed
