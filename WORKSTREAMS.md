@@ -177,4 +177,4 @@ are all **unimplemented**. Production remains **NO-GO**.
 Branch protection is also **not configured**: as observed on 2026-10-23, both `main` and
 `research/grounded-foundation` report `protected: false` and the repository has no rulesets.
 Nothing here is technically enforced — see
-[`docs/development/REPOSITORY_STATE.md`](docs/development/REPOSITORY_STATE.md#enforcement).
+[`docs/development/REPOSITORY_STATE.md`](docs/development/REPOSITORY_STATE.md#enforcement-branch-protection-rulesets-codeowners).

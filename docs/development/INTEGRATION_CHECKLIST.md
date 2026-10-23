@@ -34,6 +34,13 @@ statement of fact, not a failure of the checklist.
       earlier commit.
 - [ ] No test was weakened, skipped or deleted to make the suite pass.
 
+**Enforcement reality (verified 2026-10-23):** `main` and `research/grounded-foundation`
+both report `protected: false`, the repository has no rulesets, and `.github/CODEOWNERS`
+only *requests* reviewers. Nothing in this checklist is technically enforced — every item is
+a human commitment until an owner configures the protection rules listed in
+[`REPOSITORY_STATE.md`](REPOSITORY_STATE.md#enforcement-branch-protection-rulesets-codeowners).
+Do not describe any of it as enforced.
+
 ## 4. Security gates
 
 Record the true state; do not mark a control done because it is documented.

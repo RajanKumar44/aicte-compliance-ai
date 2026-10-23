@@ -1,6 +1,7 @@
 # Pull-request reconciliation
 
-**Observed:** 2026-10-22T23:58Z. Re-verify before acting; SHAs change.
+**Observed:** 2026-10-23 (second pass; first pass 2026-10-22T23:58Z). Re-verify before
+acting; SHAs change.
 
 Purpose: record, for each open PR, whether it is independent, stacked, blocked, redundant
 or superseded, and what work would be lost if it were closed. This document **does not**
@@ -11,9 +12,9 @@ change any PR: no base was retargeted, nothing was merged, closed or marked read
 | PR | Verdict | Blocking action |
 |---|---|---|
 | #1 foundation | Foundation for everything else | Needs owner review; it is the base of #2–#5 |
-| #2 cross-repo audit | Independent, docs only, **no CI on its head** | Rebase onto `research/grounded-foundation` |
-| #3 OCR hardening | **Superseded in behaviour by #5** but holds 2 extra fixtures | Owner decision + rebase |
-| #4 workstream split | Independent docs only, **no CI on its head** | Rebase; see the `WORKSTREAMS.md` overlap below |
+| #2 cross-repo audit | Independent, docs only, **no CI on its head** | Owner action: new commit after the trigger fix lands (rebasing alone does not help) |
+| #3 OCR hardening | **Superseded in behaviour by #5**; its 2 extra fixtures are now ported into #5 | Owner decision on closing |
+| #4 workstream split | Independent docs only, **no CI on its head**; its content is now reconciled into #5 | Owner decision; see the `WORKSTREAMS.md` overlap below |
 | #5 audit branch | Current integration branch | Keep as draft until the decisions below land |
 
 ## Per-PR inventory
@@ -53,11 +54,12 @@ change any PR: no base was retargeted, nothing was merged, closed or marked read
 
 ### PR #5 — `arena/97cf136c-aicte-compliance-ai` → research
 
-- Head `e3d24a2`, base `014403a`, 23 files, +2569/−57.
-- CI on the exact head: both jobs success (run 39873561247).
+- Head advances with each commit; at `f96feee` it was base `014403a`, 32 files,
+  +3641/−57. CI on that exact head: both jobs success (run 39875377670).
 - Content: rule-activation gate hardening, OCR engine-boundary hardening, reproducible
-  development environment, documentation/CI-evidence corrections, and the coordination
-  set in `WORKSTREAMS.md` + `docs/development/`.
+  development environment, documentation/CI-evidence corrections, the coordination set in
+  `WORKSTREAMS.md` + `docs/development/`, a CI-trigger regression guard, a docs link check,
+  and (see below) PR #3's two fixture cases and PR #4's workstream split.
 
 ## PR #3 vs PR #5 — OCR implementation overlap
 
@@ -109,53 +111,90 @@ Those cases are already covered by equivalent Python tests in PR #5
 `test_duplicate_labels_keep_first_value_deterministically`), so no behavioural coverage
 would be lost, but the data-driven corpus would stay at 8 cases.
 
-### Decision — required from the repository owner
+### What was done in this pass (no decision taken on PR #3 itself)
 
-**Not decided by this audit**, because resolving it means pushing to
-`feature/ocr-regression-hardening`, which this session is not authorised to do.
+Because the fixtures are data, not implementation, PR #3's two unique cases were **ported
+into this branch's corpus** (`backend/tests/fixtures/institution_ocr_cases.jsonl`, 8 → 10
+cases, commit `c5f9061`). This preserves PR #3's only unique contribution without choosing
+between the two implementations and without touching PR #3's branch.
 
-Recommended, evidence-backed option: **adopt PR #5's implementation** and carry PR #3's
-two fixture lines into the corpus, then close PR #3 as superseded. This keeps every test
-PR #3 wrote, keeps its fixture data, and avoids maintaining two OCR implementations.
+Re-verified against the current head before porting: PR #3's 18-case test module passes
+(18 passed) and all 10 of its fixtures pass, including `SYNTH-009` and `SYNTH-010`. After
+the port, the corpus test and the full suite pass.
 
-Alternative: land PR #3 first and rebase PR #5 onto it — but that requires resolving
-conflicts in `ocr_pipeline.py` and `test_ocr_pipeline.py` in favour of PR #5's stricter
-code anyway, so it produces the same end state with more conflict work.
+### Decision — still required from the repository owner
 
-**Both branches remain intact and recoverable**; nothing was deleted.
+**Not decided by this audit.** The evidence supports adopting PR #5's implementation and
+closing PR #3 as superseded, but closing is an owner action.
+
+Recommended, evidence-backed option: **adopt PR #5's implementation** (it is a behavioural
+superset; its two extra fixtures are already carried here), then close PR #3 as superseded.
+That keeps every test PR #3 wrote, keeps its fixture data, and avoids maintaining two OCR
+implementations.
+
+Alternative: land PR #3 first and rebase PR #5 onto it — this requires resolving conflicts in
+`ocr_pipeline.py` and `test_ocr_pipeline.py` in favour of PR #5's stricter code anyway, so it
+produces the same end state with more conflict work.
+
+**Both branches remain intact and recoverable**; nothing was deleted, retargeted or closed.
 
 ## `WORKSTREAMS.md` overlap between PR #4 and PR #5
 
-PR #4 adds `WORKSTREAMS.md` on the research branch; PR #5 also adds it. Both are *new
+PR #4 adds `WORKSTREAMS.md` on the research branch; this branch also adds it. Both are *new
 files* on their respective branches, so merging both produces an add/add conflict in that
 one file.
 
-Resolution plan, to be applied by an owner (not here, because it needs a push to
-`docs/three-person-workstream-split`):
+**Reconciled in this pass** (commit `d9e10d6`), without touching PR #4's branch:
 
-1. Land PR #5 (or #4) first.
-2. On the other branch, resolve `WORKSTREAMS.md` by keeping the version now on the base
-   branch, and keep that PR's unique content (`frontend/README.md`,
-   `backend/WORKSTREAM.md`, `ai/README.md`).
+- `WORKSTREAMS.md` now carries both texts: this branch's ownership contract (shared-file
+  owners and reviewers, OCR placement rule, handoff/escalation, integration process, gate
+  status) and PR #4's split (repository layout, per-folder scope, eight non-overlap rules
+  including "never merge your own PR" and "no public upload until the gates are met").
+  Where they differed, the stricter rule was kept; no rule from either version was dropped.
+- PR #4's three per-folder documents were carried over to `frontend/README.md`,
+  `backend/WORKSTREAM.md` and `ai/README.md`, marked explicitly as placeholders (README
+  only, no code, no framework chosen).
+- A provenance note at the top of `WORKSTREAMS.md` records that it merges both versions.
+
+**Consequence for PR #4:** its content is now fully represented here, so if this branch
+lands first, PR #4 becomes a pure add/add conflict on four paths with nothing left to add.
+An owner may then close it as superseded — that is an owner decision, not taken here.
+
+Resolution plan if PR #4 lands first instead:
+
+1. Land PR #4.
+2. On this branch, resolve `WORKSTREAMS.md` by keeping the merged version and restoring the
+   provenance note; keep the three folder documents as they are.
 3. Re-run CI on the rebased head.
 
-Recommended order: land **PR #4's folder READMEs first** (they are additive and
-conflict-free), then PR #5 supplies the authoritative `WORKSTREAMS.md`. In that order the
-conflict is a one-file override rather than a merge of two competing texts.
+## Missing CI on PR #2 / PR #4 — exact remaining action
 
-## Missing CI on PR #2 / PR #4 — unresolved owner action
+**Correction to the first pass.** The earlier note implied that rebasing these branches would
+give them CI. It does not. Tested locally: rebasing PR #2's branch onto the current base
+(`014403a`) yields a head whose workflow still filters `pull_request: branches: ["main"]`,
+because the base itself still carries the old filter. Rebasing alone changes nothing.
 
-Both heads predate the workflow trigger fix. Rebase (verified clean with a read-only
-`git merge-tree` against the current research head) and push:
+Verified sequence (local experiment, nothing pushed):
+
+1. The one-line trigger fix must reach `research/grounded-foundation` first. PR #3 and PR #5
+   both contain it; either landing applies it to the base.
+2. Then each branch needs a **new commit** to produce a new head and a `synchronize` event:
+   either a rebase onto the updated base, or a plain commit editing the filter in place.
+3. Re-running the guard test `backend/tests/test_ci_configuration.py` against the rebased
+   head passes; against the current base workflow it fails on exactly this defect.
+
+Owner commands, once the fix is on the base (not run by this session — it needs a push to
+someone else's branch):
 
 ```bash
 git fetch origin
-git switch review/cross-repo-integration-audit      # or docs/three-person-workstream-split
-git rebase --onto origin/research/grounded-foundation 9157374
-git push --force-with-lease origin HEAD
+git switch review/cross-repo-integration-audit        # or docs/three-person-workstream-split
+git rebase origin/research/grounded-foundation
+git push --force-with-lease origin HEAD                # rewrite: rebase rewrote commits
+git rev-parse HEAD                                     # record the new head SHA
 ```
 
-`--force-with-lease` is required because the rebase rewrites commits; it refuses to run
-if someone else pushed in the meantime. Verify the new head then has a
-`pull_request` run before treating the PR as validated. This session did **not** run
-these commands.
+No force-push is needed if the owner instead adds a small commit on top of the existing
+head. Either way, confirm a `pull_request` run appears for the new SHA before treating the
+PR as validated. Until then, #2 and #4 remain **unverified by CI**, not "passing by
+inspection".
