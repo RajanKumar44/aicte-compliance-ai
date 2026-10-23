@@ -1,8 +1,8 @@
 # Workstreams — authoritative ownership contract
 
 **Status:** three workstreams are defined and independently workable. This is **not** a
-claim that three applications exist: only `backend/` contains code. `frontend/` and
-`ai/` contain no implementation on this branch (see [Current reality](#current-reality)).
+claim that three applications exist: only `backend/` contains code. `frontend/` and `ai/`
+contain a README and no implementation (see [Current reality](#current-reality)).
 
 **Scope:** ownership, edit permissions, shared-file rules, integration and escalation.
 This file is the single source of truth for *who may edit what*.
@@ -14,6 +14,26 @@ Process details (branch names, worktrees, PR mechanics) are in
 
 Anything not written down here is **not** permission. Ask before assuming.
 
+> **Provenance.** This file merges two contributions: the ownership contract introduced on
+> this branch, and the folder-ownership split proposed in PR #4
+> (`docs/three-person-workstream-split`). PR #4's per-folder documents now live at
+> [`frontend/README.md`](frontend/README.md), [`backend/WORKSTREAM.md`](backend/WORKSTREAM.md)
+> and [`ai/README.md`](ai/README.md). Both versions meant the same thing; where they differed
+> in detail, this file keeps the stricter rule. The comparison is recorded in
+> [`docs/development/PR_RECONCILIATION.md`](docs/development/PR_RECONCILIATION.md).
+
+## Repository layout
+
+```text
+aicte-compliance-ai/
+├── frontend/             # workstream A — UI and user workflows (README only)
+├── backend/              # workstream B — API, validation, security, and today's OCR code
+├── ai/                   # workstream C — OCR/AI adapters and evaluation (README only)
+├── docs/                 # shared project, research, development and integration docs
+├── .github/              # shared CI configuration and PR template
+└── WORKSTREAMS.md        # this ownership contract
+```
+
 ## Current reality
 
 | Area | Location | State |
@@ -22,21 +42,22 @@ Anything not written down here is **not** permission. Ask before assuming.
 | OCR contract + pipeline + adapter | `backend/app/ocr_adapter.py`, `ocr_pipeline.py` | Implemented, synthetic tests only |
 | Local OCR CLI | `backend/app/ocr_cli.py` | Implemented |
 | Rule catalogue + activation gate | `backend/app/rule_catalog.py` | Implemented; **no rule defined or active**, no evaluator |
-| Backend tests | `backend/tests/` | Implemented |
-| Frontend application | `frontend/` | **Does not exist** |
-| AI/OCR service | `ai/` | **Does not exist** |
+| Backend tests | `backend/tests/` | Implemented (186 passing, 1 skipped on this branch) |
+| Frontend application | `frontend/` | **README only**, no code, no framework chosen |
+| AI/OCR service | `ai/` | **README only**, no code |
 | Persistence, auth, storage, audit | — | **Does not exist** |
 
-The `ai/` and `frontend/` directories are created by the folder-scaffolding change set,
-not by this document. If they are absent on your branch, that is expected, not a bug.
+The `frontend/` and `ai/` directories contain a single documentation file each. That is an
+honest placeholder, not an application. **Do not add stub code that fakes persistence, auth,
+compliance or OCR behaviour to make the layout look complete.**
 
 ## Workstreams
 
 | Workstream | Owns | Deliverables | Unassigned until |
 |---|---|---|---|
-| **A — Frontend** | `frontend/` | Applicant/reviewer UI, forms and validation feedback, loading/error/empty/success states, accessibility, mock fixtures, frontend tests, API client against the approved contract | an owner names the contributor |
-| **B — Backend / Platform** | `backend/` | FastAPI endpoints, request/response schemas, validation and service boundaries, auth/RBAC, tenant isolation, upload security, persistence, audit, error contract, backend tests | an owner names the contributor |
-| **C — AI / OCR** | `ai/` | OCR adapters and engine integration, normalization and confidence handling, evidence/provenance, evaluation corpus and accuracy measurement, AI tests | an owner names the contributor |
+| **A — Frontend** | `frontend/` | Applicant/reviewer UI, forms and validation feedback, document/status and evidence views, loading/error/empty/success states, accessibility and responsive layout, mock fixtures, API client against the approved contract, frontend tests | an owner names the contributor |
+| **B — Backend / Platform** | `backend/` | FastAPI endpoints, request/response schemas, server-side validation, service boundaries, auth/RBAC, tenant isolation, upload security, persistence, audit, retention/deletion, error contract, integration contracts, backend tests | an owner names the contributor |
+| **C — AI / OCR** | `ai/` | OCR adapters and engine integration, pre-processing, normalization and confidence handling, evidence/provenance, evaluation corpus and accuracy measurement, AI tests | an owner names the contributor |
 
 **Contributor names are deliberately unassigned.** Record the assignment in this table
 (one line, with the date) when the owner provides it; do not infer it from commit authors.
@@ -62,7 +83,7 @@ them, but must not land them alone. See
 **Prohibited for everyone:** pushing to `main`; force-pushing a shared branch; editing
 another workstream's directory; adding real institutional or personal documents;
 committing secrets or `.env` files; activating a regulatory rule; adding a public upload
-route; weakening a test to make CI pass.
+route; weakening a test to make CI pass; merging your own PR without owner review.
 
 ## Shared files and how they are coordinated
 
@@ -99,7 +120,9 @@ consumer in the same PR.
 7. Regulatory rules stay inactive until an owner records official-source verification,
    applicability, effective dates and reviewer identity. The gate in
    `backend/app/rule_catalog.py` enforces the mechanical part; it does not verify sources.
-8. Never resolve a conflict by discarding the other side. Compare, record the decision,
+8. No workstream may import another workstream's private implementation before the
+   interface is agreed.
+9. Never resolve a conflict by discarding the other side. Compare, record the decision,
    and keep the losing branch recoverable (see
    [`RECOVERY_AND_BACKUP.md`](docs/development/RECOVERY_AND_BACKUP.md)).
 
@@ -116,8 +139,7 @@ If C wants the OCR implementation in `ai/`, that requires its own migration PR t
 4. says whether `backend/` keeps a thin adapter or loses OCR entirely.
 
 **Do not create empty placeholder applications or move files to make the layout look
-complete.** A folder containing only a README is an honest placeholder; a folder
-containing a stub that fakes persistence, auth or compliance is not.
+complete.**
 
 ## Handoff and escalation
 
@@ -151,3 +173,8 @@ Ownership rules do not make the project production-ready. Authentication,
 authorization, tenant isolation, private storage, malware scanning, durable audit,
 retention/deletion, authenticated reviewer identity and official-source rule verification
 are all **unimplemented**. Production remains **NO-GO**.
+
+Branch protection is also **not configured**: as observed on 2026-10-23, both `main` and
+`research/grounded-foundation` report `protected: false` and the repository has no rulesets.
+Nothing here is technically enforced — see
+[`docs/development/REPOSITORY_STATE.md`](docs/development/REPOSITORY_STATE.md#enforcement).
