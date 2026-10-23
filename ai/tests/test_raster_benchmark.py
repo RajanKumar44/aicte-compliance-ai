@@ -890,3 +890,162 @@ ARIAL_FOR_TESTS = [
     "/System/Library/Fonts/Supplemental/Arial.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 ][0]
+
+
+# ---------------------------------------------------------------------------
+# Pooled multi-seed benchmark (run_benchmark_multiseed)
+# ---------------------------------------------------------------------------
+
+
+class TestMultiSeedBenchmark:
+    """Regression tests for pooled multi-seed evaluation."""
+
+    def _run(self, seeds, count=4):
+        from ai.raster_benchmark import MockRasterOCREngine, run_benchmark_multiseed
+
+        return run_benchmark_multiseed(seeds, count=count, engine=MockRasterOCREngine())
+
+    # -- seed validation ----------------------------------------------------
+
+    def test_multiseed_rejects_duplicate_seeds(self):
+        with pytest.raises(ValueError, match="[Dd]uplicate seeds"):
+            self._run([42, 42, 43])
+
+    def test_multiseed_rejects_empty_seed_list(self):
+        with pytest.raises(ValueError, match="at least one seed"):
+            self._run([])
+
+    # -- dataset independence ------------------------------------------------
+
+    def test_multiseed_datasets_are_distinct(self):
+        report = self._run([42, 43, 44])
+        fps = [r["dataset_fingerprint"] for r in report["per_seed"]]
+        assert len(set(fps)) == 3, "same count with different seeds must yield distinct datasets"
+
+    # -- reconciliation -------------------------------------------------------
+
+    def test_multiseed_counts_reconcile(self):
+        report = self._run([42, 43], count=4)
+        assert report["total_case_pairs"] == 8
+        assert (
+            report["evaluated_pairs"] + report["unavailable_pairs"] + report["failed_pairs"]
+            == report["total_case_pairs"]
+        )
+        assert report["reconciliation"]["evaluated_plus_unavailable_plus_failed_equals_total"] is True
+
+    # -- pooled math (independent recomputation) ------------------------------
+
+    def test_pooled_corrupted_cer_matches_equal_weight_mean(self):
+        """With identical evaluated counts per seed, pooled CER must equal the
+        arithmetic mean of per-seed CERs (a hand-checkable restatement of
+        case-level micro-averaging)."""
+        report = self._run([42, 43], count=4)
+        evaluated = [r["evaluated_count"] for r in report["per_seed"]]
+        assert len(set(evaluated)) == 1, "mock engine evaluates every case"
+        per_seed_cer = [r["corrupted_evaluation"]["cer"] for r in report["per_seed"]]
+        expected = round(sum(per_seed_cer) / len(per_seed_cer), 4)
+        assert math.isclose(report["pooled"]["corrupted_evaluation"]["cer"], expected, abs_tol=1e-6)
+
+    def test_pooled_delta_positive_and_consistent(self):
+        report = self._run([42, 43], count=4)
+        pool = report["pooled"]
+        delta = pool["degradation_delta"]
+        assert pool["corrupted_evaluation"]["cer"] >= pool["clean_baseline"]["cer"]
+        assert delta["cer_increase"] >= 0
+        assert delta["f1_drop"] >= 0
+        assert math.isclose(
+            delta["cer_increase"],
+            round(pool["corrupted_evaluation"]["cer"] - pool["clean_baseline"]["cer"], 4),
+            abs_tol=1e-6,
+        )
+
+    # -- per-seed summary stats ----------------------------------------------
+
+    def test_sample_stddev_known_values(self):
+        from ai.raster_benchmark import sample_stddev
+
+        # [1, 2, 3] with ddof=1: mean=2, sqrt((1+0+1)/2) = 1.0
+        assert sample_stddev([1.0, 2.0, 3.0]) == pytest.approx(1.0)
+        assert sample_stddev([4.0]) == 0.0
+        assert sample_stddev([]) == 0.0
+        assert sample_stddev([5.0, 5.0, 5.0]) == 0.0
+
+    def test_metric_summary_shape_and_values(self):
+        from ai.raster_benchmark import _metric_summary
+
+        summary = _metric_summary({"corrupted_cer": [0.1, 0.3]})
+        block = summary["corrupted_cer"]
+        assert set(block.keys()) == {"mean", "sample_stddev", "min", "max", "seeds"}
+        assert block["mean"] == 0.2
+        assert block["min"] == 0.1
+        assert block["max"] == 0.3
+        assert block["seeds"] == 2
+        # [0.1, 0.3] ddof=1: sqrt((0.01 + 0.01) / 1) = sqrt(0.02)
+        assert block["sample_stddev"] == pytest.approx(math.sqrt(0.02), abs=1e-3)
+
+    def test_metric_summary_skips_empty_metric(self):
+        from ai.raster_benchmark import _metric_summary
+
+        summary = _metric_summary({"corrupted_cer": [0.1], "clean_cer": []})
+        assert "corrupted_cer" in summary
+        assert "clean_cer" not in summary
+
+    # -- report schema ---------------------------------------------------------
+
+    def test_multiseed_report_schema(self):
+        report = self._run([42], count=4)
+        for key in (
+            "seeds",
+            "count_per_seed",
+            "total_case_pairs",
+            "evaluated_pairs",
+            "unavailable_pairs",
+            "failed_pairs",
+            "reconciliation",
+            "total_duration_seconds",
+            "per_seed",
+            "pooled",
+            "per_seed_summary",
+        ):
+            assert key in report, f"multiseed report missing key {key!r}"
+        assert report["seeds"] == [42]
+        assert report["pooled"]["clean_baseline"]["cer"] == report["per_seed"][0]["clean_baseline"]["cer"]
+
+    # -- CLI integration ---------------------------------------------------------
+
+    def test_cli_multiseed_writes_json(self, tmp_path):
+        import subprocess
+
+        json_out = tmp_path / "multiseed.json"
+        cmd = [
+            sys.executable,
+            "ai/raster_benchmark.py",
+            "--count",
+            "4",
+            "--seeds",
+            "42,43",
+            "--json",
+            str(json_out),
+        ]
+        res = subprocess.run(cmd, check=False, cwd=str(REPO_ROOT), capture_output=True, text=True)
+        assert res.returncode == 0, f"CLI multiseed failed: {res.stderr}"
+        data = json.loads(json_out.read_text(encoding="utf-8"))
+        assert data["seeds"] == [42, 43]
+        assert data["total_case_pairs"] == 8
+        assert "per_seed_summary" in data
+
+    def test_cli_rejects_duplicate_seeds(self):
+        import subprocess
+
+        cmd = [sys.executable, "ai/raster_benchmark.py", "--seeds", "42,42"]
+        res = subprocess.run(cmd, check=False, cwd=str(REPO_ROOT), capture_output=True, text=True)
+        assert res.returncode == 1
+        assert "duplicate seeds" in res.stderr.lower()
+
+    def test_cli_rejects_non_integer_seeds(self):
+        import subprocess
+
+        cmd = [sys.executable, "ai/raster_benchmark.py", "--seeds", "42,abc"]
+        res = subprocess.run(cmd, check=False, cwd=str(REPO_ROOT), capture_output=True, text=True)
+        assert res.returncode == 1
+        assert "integers" in res.stderr.lower()

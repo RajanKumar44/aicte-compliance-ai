@@ -279,12 +279,42 @@ The workstream provides two distinct evaluation modules:
 ### Running benchmark tests and evaluations
 
 ```bash
-python -m pytest -q ai/tests/test_ocr_benchmark.py     # benchmark module tests (101 tests)
-python -m pytest -q ai/tests/test_raster_benchmark.py  # raster image tests (22 tests)
-python -m pytest -q ai/tests                            # all AI/OCR tests (189 tests)
+python -m pytest -q ai/tests/test_ocr_benchmark.py     # benchmark module tests
+python -m pytest -q ai/tests/test_raster_benchmark.py  # raster image tests (67 tests)
+python -m pytest -q ai/tests                            # all AI/OCR tests
 
 # Run raster image benchmark CLI (generates paired images and computes degradation delta)
 python ai/raster_benchmark.py --count 16 --json raster_report.json
+
+# Pooled multi-seed evaluation with the real Tesseract engine
+python ai/raster_benchmark.py --real-engine --seeds 11,23 --count 8 \
+  --json ai/reports/tesseract_5.5.3_multiseed_s11_s23_count8_fontfix.json
 ```
+
+### Pooled multi-seed evaluation (`--seeds`)
+
+`run_benchmark_multiseed(seeds, count=…, engine=…)` or the CLI form
+`--seeds 11,23,42 --count 8` evaluates one deterministic dataset **per seed** and
+reports a pooled result alongside every per-seed baseline:
+
+- **Dataset independence:** every seed has a distinct `dataset_fingerprint`. Duplicate
+  seeds are rejected (`ValueError`; the CLI exits 1) instead of silently collapsing.
+- **Pooling semantics:** pooled `pooled.clean_baseline` / `pooled.corrupted_evaluation`
+  are micro-aggregated over **all evaluated cases of all seeds** — not the mean of
+  per-seed means. With equal evaluated counts per seed these coincide; the
+  `test_pooled_corrupted_cer_matches_equal_weight_mean` test pins that equivalence.
+- **Per-metric summary:** `per_seed_summary.<metric>` carries
+  `mean` / `sample_stddev` (ddof=1; `0.0` for fewer than two seeds) / `min` / `max` /
+  `seeds` over that metric's per-seed baseline values.
+- **Reconciliation:** `evaluated_pairs + unavailable_pairs + failed_pairs ==
+  total_case_pairs` is verified inside the report
+  (`reconciliation.…_equals_total`) — a broken sum is a bug, never hidden.
+- **Mid-run engine loss:** if a real engine disappears between seeds, the remaining
+  seeds are **not** pooled; the report marks `available: false` and lists the seeds
+  actually completed.
+
+Sample artifacts: `ai/reports/tesseract_5.5.3_multiseed_s11_s23_count8_fontfix.json`
+(real Tesseract 5.5.3, seeds 11/23, 16/16 pairs evaluated — corrupted CER spread across
+seeds was ±0.005) and the historical older reports in the same directory.
 
 
