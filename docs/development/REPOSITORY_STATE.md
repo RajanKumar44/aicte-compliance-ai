@@ -8,7 +8,7 @@
 `gh api .../rulesets`, plus local test and setup runs in fresh clones and worktrees.
 
 This is a point-in-time snapshot. Re-verify before quoting it; see
-[PARALLEL_WORKFLOW.md](PARALLEL_WORKFLOW.md#before-you-start) for the re-check commands.
+[PARALLEL_WORKFLOW.md](PARALLEL_WORKFLOW.md#before-you-start-make-sure-the-remote-refs-exist) for the re-check commands.
 The session branch has advanced past the SHA recorded here — a document cannot name the
 commit that contains it.
 
@@ -130,6 +130,12 @@ Run on 2026-10-23 in a fresh clone and fresh worktrees (Linux, Python 3.11.2).
 Three `git worktree add` commands against `origin/research/grounded-foundation` produced
 three independent branches at `014403a`; a worktree with untracked files refused removal
 (`contains modified or untracked files`), and removed cleanly once emptied.
+
+The base branch is also **not starter-task ready** in three specific ways: `ruff` is absent
+from its requirements, `ruff check backend/` reports one pre-existing `F401` in
+`backend/app/ocr_adapter.py`, and none of the coordination documents exist there. Per-task
+commands, the verified workaround and the collision rules are in
+[STARTER_TASKS.md](STARTER_TASKS.md#verified-against-the-research-base).
 
 ## CI workflows present
 
