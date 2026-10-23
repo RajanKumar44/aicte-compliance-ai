@@ -22,9 +22,9 @@ export function DocumentChecklist({ data }: DocumentChecklistProps) {
 
   if (allDocs.size === 0) {
     return (
-      <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+      <div className="flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800">
         <Check className="h-4 w-4" />
-        All required documents accounted for in the supplied checklist.
+        No missing or expired items were returned for the supplied checklist.
       </div>
     );
   }

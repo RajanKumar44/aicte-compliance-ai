@@ -5,9 +5,9 @@ type BadgeVariant = "success" | "warning" | "error" | "info" | "neutral";
 
 const VARIANTS: Record<BadgeVariant, string> = {
   success: "bg-green-50 text-green-600 border-green-200",
-  warning: "bg-amber-50 text-amber-600 border-amber-200",
-  error: "bg-red-50 text-red-600 border-red-200",
-  info: "bg-teal-50 text-teal-600 border-teal-200",
+  warning: "bg-amber-50 text-amber-700 border-amber-200",
+  error: "bg-red-50 text-red-700 border-red-200",
+  info: "bg-teal-50 text-teal-700 border-teal-200",
   neutral: "bg-slate-100 text-slate-600 border-slate-200",
 };
 

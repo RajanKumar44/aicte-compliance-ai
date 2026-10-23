@@ -24,9 +24,9 @@ export function HealthIndicator() {
   return (
     <div
       className={cn(
-        "flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium",
-        status === "healthy" && "bg-green-50 text-green-600",
-        status === "unhealthy" && "bg-red-50 text-red-600",
+        "flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium",
+        status === "healthy" && "bg-teal-50 text-teal-800",
+        status === "unhealthy" && "bg-red-50 text-red-700",
         status === "checking" && "bg-slate-100 text-slate-500"
       )}
       role="status"

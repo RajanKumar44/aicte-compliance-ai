@@ -41,8 +41,21 @@ body {
   font-family: var(--font-sans);
   background-color: var(--color-slate-50);
   color: var(--color-navy-900);
+  min-width: 320px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: var(--color-teal-100, #ccfbf1);
+  color: var(--color-navy-900);
 }
 
 @media (prefers-reduced-motion: reduce) {

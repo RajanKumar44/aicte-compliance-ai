@@ -2,6 +2,7 @@ import {
   CheckCircle2, AlertTriangle, Clock, FileX2,
   BarChart3, CalendarDays, Info
 } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { Card, CardHeader, CardTitle, CardDescription } from "./Card";
 import { Badge } from "./Badge";
 import { Alert } from "./Alert";
@@ -9,7 +10,7 @@ import { FindingsTable } from "./FindingsTable";
 import { DocumentChecklist } from "./DocumentChecklist";
 import { ScopeNotice } from "./ScopeNotice";
 import { Button } from "./Button";
-import { formatTimestamp } from "@/lib/utils";
+import { formatTimestamp, humanizeApplicationType } from "@/lib/utils";
 import type { ValidationResponse } from "@/lib/api";
 
 interface ValidationResultsProps {
@@ -21,6 +22,11 @@ export function ValidationResults({ data, onReset }: ValidationResultsProps) {
   const isPassed = data.status === "preliminary_checks_passed";
   const missingCount = data.missing_documents.length;
   const expiredCount = data.expired_documents.length;
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -31,25 +37,27 @@ export function ValidationResults({ data, onReset }: ValidationResultsProps) {
         <div className="flex flex-col sm:flex-row sm:items-start gap-4">
           <div className={
             isPassed
-              ? "flex h-12 w-12 items-center justify-center rounded-xl bg-green-50 text-green-600"
+              ? "flex h-12 w-12 items-center justify-center rounded-xl bg-teal-50 text-teal-700"
               : "flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50 text-amber-600"
           }>
             {isPassed ? <CheckCircle2 className="h-6 w-6" /> : <AlertTriangle className="h-6 w-6" />}
           </div>
           <div className="flex-1">
-            <h2 className="text-lg font-semibold text-navy-900">
+            <h1 ref={headingRef} tabIndex={-1} className="text-lg font-semibold text-navy-900 outline-none">
               {isPassed
-                ? "Preliminary Checks Passed"
-                : "Attention Required"}
-            </h2>
+                ? "Preliminary check complete"
+                : "Attention required for review"}
+            </h1>
             <p className="mt-1 text-sm text-slate-500">
               {isPassed
                 ? "The supplied document lists agree. This does not confirm regulatory compliance, document authenticity, or AICTE approval."
-                : `${missingCount + expiredCount} finding(s) require attention. Review the details below.`}
+                : `${missingCount + expiredCount} checklist observation(s) require attention. Review the evidence below.`}
             </p>
 
             {/* Metadata */}
-            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-400">
+            <div className="mt-4 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+              <span><strong className="font-medium text-navy-900">Institution:</strong> {data.institution_id}</span>
+              <span><strong className="font-medium text-navy-900">Application:</strong> {humanizeApplicationType(data.application_type)}</span>
               <span className="flex items-center gap-1">
                 <BarChart3 className="h-3.5 w-3.5" />
                 Scope: {data.validation_scope.replace(/_/g, " ")}
@@ -66,9 +74,9 @@ export function ValidationResults({ data, onReset }: ValidationResultsProps) {
           </div>
           <div className="flex items-start gap-2">
             {isPassed ? (
-              <Badge variant="success">
+              <Badge variant="info">
                 <CheckCircle2 className="h-3 w-3" />
-                Checks Passed
+                Lists agree
               </Badge>
             ) : (
               <Badge variant="warning">
@@ -118,7 +126,7 @@ export function ValidationResults({ data, onReset }: ValidationResultsProps) {
           <CardHeader>
             <CardTitle>Findings</CardTitle>
             <CardDescription>
-              Each finding is a checklist observation, not a compliance determination.
+              These are checklist observations from the supplied inputs, not a compliance determination.
             </CardDescription>
           </CardHeader>
           <FindingsTable findings={data.findings} />

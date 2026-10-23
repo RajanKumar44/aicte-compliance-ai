@@ -2,12 +2,16 @@ import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Input } from "./FormField";
 import { Button } from "./Button";
+import { humanizeDocName } from "@/lib/utils";
 
 interface ExpiryDateInputProps {
   documents: string[];
   value: Record<string, string>;
   onChange: (dates: Record<string, string>) => void;
   disabled?: boolean;
+  id?: string;
+  describedBy?: string;
+  error?: boolean;
 }
 
 export function ExpiryDateInput({
@@ -15,6 +19,9 @@ export function ExpiryDateInput({
   value,
   onChange,
   disabled = false,
+  id = "expiry_dates",
+  describedBy,
+  error = false,
 }: ExpiryDateInputProps) {
   const [selectedDoc, setSelectedDoc] = useState("");
 
@@ -40,20 +47,25 @@ export function ExpiryDateInput({
   return (
     <div className="space-y-3">
       {Object.entries(value).map(([doc, date]) => (
-        <div key={doc} className="flex items-center gap-2">
-          <span className="min-w-[140px] text-sm text-navy-800 truncate">{doc}</span>
+        <div key={doc} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 sm:flex">
+          <label htmlFor={`${id}-${doc}`} className="min-w-0 truncate text-sm text-navy-800">
+            {humanizeDocName(doc)}
+          </label>
           <Input
+            id={`${id}-${doc}`}
             type="date"
             value={date}
             onChange={(e) => updateDate(doc, e.target.value)}
             disabled={disabled}
-            className="max-w-[180px]"
+            aria-invalid={error || undefined}
+            aria-describedby={describedBy}
+            className="w-full sm:max-w-[180px]"
           />
           <button
             type="button"
             onClick={() => removeDate(doc)}
             disabled={disabled}
-            className="rounded-md p-1.5 text-slate-400 hover:text-red-500 disabled:opacity-50"
+            className="rounded-md p-2 text-slate-500 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1 disabled:opacity-50"
             aria-label={`Remove expiry for ${doc}`}
           >
             <Trash2 className="h-4 w-4" />
@@ -62,12 +74,15 @@ export function ExpiryDateInput({
       ))}
 
       {availableDocs.length > 0 && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <select
+            id={id}
             value={selectedDoc}
             onChange={(e) => setSelectedDoc(e.target.value)}
             disabled={disabled}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-navy-900 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+            aria-describedby={describedBy}
+            aria-invalid={error || undefined}
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-navy-900 focus:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-700 sm:max-w-xs"
           >
             <option value="">Select document…</option>
             {availableDocs.map((d) => (

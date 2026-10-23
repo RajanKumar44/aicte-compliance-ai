@@ -9,6 +9,8 @@ interface DocumentTagInputProps {
   placeholder?: string;
   disabled?: boolean;
   error?: boolean;
+  describedBy?: string;
+  ariaLabel?: string;
 }
 
 export function DocumentTagInput({
@@ -18,6 +20,8 @@ export function DocumentTagInput({
   placeholder = "Type document name and press Enter",
   disabled = false,
   error = false,
+  describedBy,
+  ariaLabel,
 }: DocumentTagInputProps) {
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -63,7 +67,7 @@ export function DocumentTagInput({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); removeTag(tag); }}
-              className="rounded-sm text-slate-400 hover:text-red-500"
+              className="rounded-sm text-slate-500 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
               aria-label={`Remove ${tag}`}
             >
               <X className="h-3 w-3" />
@@ -81,8 +85,10 @@ export function DocumentTagInput({
         onBlur={() => { if (input.trim()) addTag(input); }}
         placeholder={value.length === 0 ? placeholder : ""}
         disabled={disabled}
-        className="min-w-[120px] flex-1 border-none bg-transparent py-1 text-sm outline-none placeholder:text-slate-400"
-        aria-label="Add document name"
+        className="min-w-[120px] flex-1 border-none bg-transparent py-1 text-sm outline-none placeholder:text-slate-500"
+        aria-label={ariaLabel}
+        aria-invalid={error || undefined}
+        aria-describedby={describedBy}
       />
     </div>
   );

@@ -67,10 +67,10 @@ export function ValidatePage() {
     if (apiResult.ok) {
       setResult(apiResult.data);
       setPageState("success");
-    } else if (apiResult.status === 422) {
+    } else if (apiResult.kind === "validation") {
       setFieldErrors(apiResult.errors);
       setPageState("form");
-    } else if (apiResult.status === 0) {
+    } else if (apiResult.kind === "network" || apiResult.kind === "timeout") {
       setServerError(apiResult.errors._network || "Network error.");
       setPageState("error");
     } else {
@@ -105,10 +105,16 @@ export function ValidatePage() {
   if (pageState === "error") {
     return (
       <div className="max-w-2xl space-y-6">
-        <Alert variant="error" title="Unable to Complete Validation">
+        <div className="space-y-2">
+          <p className="text-sm font-medium uppercase tracking-[0.16em] text-teal-700">Preliminary validation</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-navy-900 sm:text-3xl">
+            Validation service unavailable
+          </h1>
+        </div>
+        <Alert variant="error" title="Unable to complete this check">
           {serverError}
         </Alert>
-        <div className="flex gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <Button onClick={handleRetry} variant="primary" className="gap-2">
             <RefreshCw className="h-4 w-4" />
             Retry
@@ -127,6 +133,16 @@ export function ValidatePage() {
 
   return (
     <div className="max-w-2xl space-y-6">
+      <div className="space-y-2">
+        <p className="text-sm font-medium uppercase tracking-[0.16em] text-teal-700">Preliminary validation</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-navy-900 sm:text-3xl">
+          Check a supplied document list
+        </h1>
+        <p className="max-w-xl text-sm leading-6 text-slate-600 sm:text-base">
+          Compare the required and submitted lists you provide. The service does not
+          verify authenticity or make an official AICTE decision.
+        </p>
+      </div>
       <ScopeNotice />
 
       <Card>
@@ -144,7 +160,10 @@ export function ValidatePage() {
           </div>
         </CardHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5" aria-busy={isLoading}>
+          <div className="sr-only" role="status" aria-live="polite">
+            {isLoading ? "Checking the supplied document lists." : ""}
+          </div>
           {/* General error */}
           {fieldErrors._unknown && (
             <Alert variant="error">{fieldErrors._unknown}</Alert>
@@ -165,6 +184,7 @@ export function ValidatePage() {
               placeholder="e.g. SYNTH-INST-001"
               disabled={isLoading}
               aria-invalid={!!fieldErrors.institution_id}
+              aria-describedby={`institution_id-${fieldErrors.institution_id ? "error" : "hint"}`}
               maxLength={100}
             />
           </FormField>
@@ -181,6 +201,8 @@ export function ValidatePage() {
               value={applicationType}
               onChange={(e) => setApplicationType(e.target.value as ApplicationType)}
               disabled={isLoading}
+              aria-invalid={!!fieldErrors.application_type}
+              aria-describedby={fieldErrors.application_type ? "application_type-error" : undefined}
             >
               <option value="eoa">Extension of Approval (EOA)</option>
               <option value="new_program">New Program</option>
@@ -194,7 +216,7 @@ export function ValidatePage() {
             htmlFor="required_documents"
             required
             error={fieldErrors.required_documents}
-            hint="Type a document name and press Enter"
+            hint="Add at least one item. Type a document name and press Enter."
           >
             <DocumentTagInput
               id="required_documents"
@@ -202,6 +224,8 @@ export function ValidatePage() {
               onChange={setRequiredDocs}
               disabled={isLoading}
               error={!!fieldErrors.required_documents}
+              ariaLabel="Add a required document"
+              describedBy={`required_documents-${fieldErrors.required_documents ? "error" : "hint"}`}
             />
           </FormField>
 
@@ -218,6 +242,8 @@ export function ValidatePage() {
               onChange={setSubmittedDocs}
               disabled={isLoading}
               error={!!fieldErrors.submitted_documents}
+              ariaLabel="Add a submitted document"
+              describedBy={`submitted_documents-${fieldErrors.submitted_documents ? "error" : "hint"}`}
             />
           </FormField>
 
@@ -230,16 +256,19 @@ export function ValidatePage() {
               hint="Add known expiry dates for documents"
             >
               <ExpiryDateInput
+                id="expiry_dates"
                 documents={allDocs}
                 value={expiryDates}
                 onChange={setExpiryDates}
                 disabled={isLoading}
+                error={!!fieldErrors.expiry_dates}
+                describedBy={`expiry_dates-${fieldErrors.expiry_dates ? "error" : "hint"}`}
               />
             </FormField>
           )}
 
           {/* Submit */}
-          <div className="flex gap-3 pt-2">
+          <div className="flex flex-col gap-3 pt-2 sm:flex-row">
             <Button
               type="submit"
               loading={isLoading}
@@ -249,6 +278,11 @@ export function ValidatePage() {
               <Send className="h-4 w-4" />
               {isLoading ? "Validating…" : "Validate Documents"}
             </Button>
+            {requiredDocs.length === 0 && !isLoading && (
+              <p className="text-sm text-slate-600 sm:self-center">
+                Add at least one required document to continue.
+              </p>
+            )}
             {(institutionId || requiredDocs.length > 0) && !isLoading && (
               <Button type="button" variant="ghost" onClick={handleReset}>
                 Clear

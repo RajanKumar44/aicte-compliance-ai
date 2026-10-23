@@ -56,6 +56,13 @@ export interface ValidationErrorResponse {
   detail: ValidationErrorDetail[];
 }
 
+export type ApiFailureKind =
+  | "validation"
+  | "server"
+  | "network"
+  | "timeout"
+  | "invalid_response";
+
 // ── Error mapping (mirrors frontend/tools/map_errors.py) ──────
 
 export function mapValidationErrors(
@@ -95,17 +102,94 @@ export function mapValidationErrors(
 
 export type ApiResult<T> =
   | { ok: true; data: T }
-  | { ok: false; status: number; errors: Record<string, string>; raw?: unknown };
+  | {
+      ok: false;
+      kind: ApiFailureKind;
+      status: number;
+      errors: Record<string, string>;
+      raw?: unknown;
+    };
+
+const REQUEST_TIMEOUT_MS = 15_000;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isValidationResponse(value: unknown): value is ValidationResponse {
+  if (!isRecord(value)) return false;
+
+  return (
+    typeof value.institution_id === "string" &&
+    typeof value.application_type === "string" &&
+    (value.status === "preliminary_checks_passed" || value.status === "attention_required") &&
+    typeof value.validation_scope === "string" &&
+    Array.isArray(value.missing_documents) &&
+    Array.isArray(value.expired_documents) &&
+    Array.isArray(value.findings) &&
+    typeof value.checked_at === "string" &&
+    typeof value.source === "string" &&
+    typeof value.notice === "string"
+  );
+}
+
+async function fetchJson(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<{ response: Response; body: unknown; parseError: boolean }> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(input, { ...init, signal: controller.signal });
+    const text = await response.text();
+
+    if (!text.trim()) {
+      return { response, body: undefined, parseError: false };
+    }
+
+    try {
+      return { response, body: JSON.parse(text) as unknown, parseError: false };
+    } catch {
+      return { response, body: undefined, parseError: true };
+    }
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
 
 export async function checkHealth(): Promise<ApiResult<HealthResponse>> {
   try {
-    const res = await fetch("/health");
-    if (res.ok) {
-      return { ok: true, data: await res.json() };
+    const { response: res, body, parseError } = await fetchJson("/health");
+    if (res.ok && !parseError && isRecord(body) && typeof body.status === "string" && typeof body.service === "string") {
+      return { ok: true, data: body as unknown as HealthResponse };
     }
-    return { ok: false, status: res.status, errors: { _server: `Server returned ${res.status}` } };
-  } catch {
-    return { ok: false, status: 0, errors: { _network: "Unable to reach the server. Check your connection." } };
+    if (res.ok && (parseError || !isRecord(body))) {
+      return {
+        ok: false,
+        kind: "invalid_response",
+        status: res.status,
+        errors: { _server: "Health check returned an invalid response." },
+      };
+    }
+    return {
+      ok: false,
+      kind: "server",
+      status: res.status,
+      errors: { _server: `Server returned ${res.status}` },
+    };
+  } catch (error) {
+    const timedOut = error instanceof DOMException && error.name === "AbortError";
+    return {
+      ok: false,
+      kind: timedOut ? "timeout" : "network",
+      status: 0,
+      errors: {
+        _network: timedOut
+          ? "Health check timed out."
+          : "Unable to reach the server. Check your connection.",
+      },
+    };
   }
 }
 
@@ -113,38 +197,60 @@ export async function validateDocuments(
   request: ValidationRequest
 ): Promise<ApiResult<ValidationResponse>> {
   try {
-    const res = await fetch("/api/v1/validate", {
+    const { response: res, body, parseError } = await fetchJson("/api/v1/validate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
     });
 
-    const body = await res.json();
-
     if (res.ok) {
-      return { ok: true, data: body as ValidationResponse };
+      if (!parseError && isValidationResponse(body)) {
+        return { ok: true, data: body };
+      }
+      return {
+        ok: false,
+        kind: "invalid_response",
+        status: res.status,
+        errors: { _server: "Validation service returned an invalid response." },
+        raw: body,
+      };
     }
 
     if (res.status === 422) {
+      const errors = mapValidationErrors(body);
       return {
         ok: false,
+        kind: "validation",
         status: 422,
-        errors: mapValidationErrors(body),
+        errors: Object.keys(errors).length > 0
+          ? errors
+          : { _unknown: "The request was rejected. Check the form and try again." },
         raw: body,
       };
     }
 
     return {
       ok: false,
+      kind: "server",
       status: res.status,
-      errors: { _server: `Server error (${res.status})` },
+      errors: {
+        _server: parseError
+          ? `Validation service returned an unreadable response (${res.status}).`
+          : `Validation service returned an error (${res.status}).`,
+      },
       raw: body,
     };
-  } catch {
+  } catch (error) {
+    const timedOut = error instanceof DOMException && error.name === "AbortError";
     return {
       ok: false,
+      kind: timedOut ? "timeout" : "network",
       status: 0,
-      errors: { _network: "Unable to reach the server. Check your connection and try again." },
+      errors: {
+        _network: timedOut
+          ? "Validation timed out. Check the service and try again."
+          : "Unable to reach the validation service. Check your connection and try again.",
+      },
     };
   }
 }

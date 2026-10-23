@@ -11,6 +11,9 @@ interface FormFieldProps {
 }
 
 export function FormField({ label, htmlFor, error, required, hint, children }: FormFieldProps) {
+  const hintId = `${htmlFor}-hint`;
+  const errorId = `${htmlFor}-error`;
+
   return (
     <div className="space-y-1.5">
       <label htmlFor={htmlFor} className="block text-sm font-medium text-navy-900">
@@ -19,10 +22,10 @@ export function FormField({ label, htmlFor, error, required, hint, children }: F
       </label>
       {children}
       {hint && !error && (
-        <p className="text-xs text-slate-400">{hint}</p>
+        <p id={hintId} className="text-xs text-slate-600">{hint}</p>
       )}
       {error && (
-        <p className="text-xs text-red-600" role="alert">{error}</p>
+        <p id={errorId} className="text-xs text-red-700" role="alert">{error}</p>
       )}
     </div>
   );

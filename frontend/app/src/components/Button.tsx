@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 type ButtonVariant = "primary" | "secondary" | "ghost" | "destructive";
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-teal-600 text-white hover:bg-teal-700 focus-visible:ring-teal-500",
+  primary: "bg-teal-700 text-white hover:bg-teal-800 focus-visible:ring-teal-700",
   secondary: "bg-white text-navy-900 border border-slate-300 hover:bg-slate-50 focus-visible:ring-slate-400",
   ghost: "text-slate-600 hover:bg-slate-100 hover:text-navy-900 focus-visible:ring-slate-400",
   destructive: "bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500",

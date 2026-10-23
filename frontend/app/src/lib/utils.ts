@@ -37,3 +37,12 @@ export function humanizeDocName(name: string): string {
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+export function humanizeApplicationType(value: string): string {
+  const labels: Record<string, string> = {
+    eoa: "Extension of Approval (EOA)",
+    new_program: "New Program",
+    intake_change: "Intake Change",
+  };
+  return labels[value] ?? value.replace(/_/g, " ");
+}
