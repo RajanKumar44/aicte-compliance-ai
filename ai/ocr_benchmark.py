@@ -821,13 +821,35 @@ class OCREngine(ABC):
                 f"need at least 2 cases to split, got {len(cases)}"
             )
 
-        rng = random.Random(seed)
-        shuffled = list(cases)
-        rng.shuffle(shuffled)
+        # Group cases by ground-truth reference signature so near-duplicates /
+        # multiple corruptions of the same document stay in the same partition.
+        groups: Dict[str, List[Dict[str, Any]]] = {}
+        for c in cases:
+            gt = c.get("ground_truth")
+            key = json.dumps(gt, sort_keys=True, ensure_ascii=False) if isinstance(gt, dict) else str(c.get("case_id"))
+            groups.setdefault(key, []).append(c)
 
-        n_hold = max(1, int(len(shuffled) * hold_out_fraction))
-        held_out = shuffled[:n_hold]
-        development = shuffled[n_hold:]
+        rng = random.Random(seed)
+        group_keys = list(groups.keys())
+        rng.shuffle(group_keys)
+
+        n_hold = max(1, int(len(cases) * hold_out_fraction))
+        held_out: List[Dict[str, Any]] = []
+        development: List[Dict[str, Any]] = []
+
+        for k in group_keys:
+            grp = groups[k]
+            if len(held_out) < n_hold:
+                held_out.extend(grp)
+            else:
+                development.extend(grp)
+
+        # Ensure neither partition is left completely empty when len(cases) >= 2
+        if not development and len(held_out) > 1:
+            development.append(held_out.pop())
+        elif not held_out and len(development) > 1:
+            held_out.append(development.pop())
+
         return development, held_out
 
     @staticmethod
@@ -835,32 +857,83 @@ class OCREngine(ABC):
         development: List[Dict[str, Any]],
         held_out: List[Dict[str, Any]],
     ) -> List[str]:
-        """Check that development and held-out partitions share no case IDs.
+        """Check the integrity and separation between development and held-out partitions.
 
-        Also checks for template leakage: warns if the same
-        ``(corruption_type, dataset_fingerprint)`` pair appears in both
-        partitions when the case count is small enough that this matters.
+        Separation checks:
+        1. Case ID overlap: no case_id may appear in both partitions.
+        2. Text overlap: identical input text must not cross partitions.
+        3. Ground-truth reference overlap: identical ground-truth dictionaries must
+           not appear across partitions (preventing the same underlying document
+           or template instance from leaking with different IDs or text corruptions).
 
-        Returns a list of warning strings (empty if integrity is sound).
+        Provenance vs. Leakage:
+        - A ``dataset_fingerprint`` represents batch-level provenance (e.g., the SHA-256
+          hash of generation parameters). When a single dataset is split into development
+          and held-out subsets, cases in both partitions legitimately share the same
+          ``dataset_fingerprint``. This is intentional provenance, NOT partition leakage.
+        - Leakage occurs strictly when identical case IDs, identical texts, or identical
+          ground-truth reference dictionaries appear in both subsets.
+
+        Parameters
+        ----------
+        development : list[dict[str, Any]]
+            Development partition cases.
+        held_out : list[dict[str, Any]]
+            Held-out partition cases.
+
+        Returns
+        -------
+        list[str]
+            A list of warning strings describing violations (empty if integrity is sound).
         """
         warnings: List[str] = []
 
-        dev_ids = {c["case_id"] for c in development if "case_id" in c}
-        hold_ids = {c["case_id"] for c in held_out if "case_id" in c}
+        if not isinstance(development, list) or not isinstance(held_out, list):
+            warnings.append("Malformed partition: development and held_out must be lists")
+            return warnings
+
+        if not development or not held_out:
+            warnings.append("Partition is empty: both development and held_out must contain at least one case")
+            return warnings
+
+        dev_valid = [c for c in development if isinstance(c, dict)]
+        hold_valid = [c for c in held_out if isinstance(c, dict)]
+        if len(dev_valid) != len(development) or len(hold_valid) != len(held_out):
+            warnings.append("Malformed partition: all partition elements must be dictionaries")
+
+        # 1. Check for Case ID overlap
+        dev_ids = {c["case_id"] for c in dev_valid if "case_id" in c and isinstance(c["case_id"], str)}
+        hold_ids = {c["case_id"] for c in hold_valid if "case_id" in c and isinstance(c["case_id"], str)}
         overlap = dev_ids & hold_ids
         if overlap:
             warnings.append(
                 f"Case ID overlap between partitions: {sorted(overlap)[:10]}"
             )
 
-        # Check for template-level leakage: same text appearing in both.
-        dev_texts = {c.get("text", "") for c in development}
-        hold_texts = {c.get("text", "") for c in held_out}
+        # 2. Check for Text-level leakage
+        dev_texts = {c.get("text", "") for c in dev_valid if c.get("text")}
+        hold_texts = {c.get("text", "") for c in hold_valid if c.get("text")}
         text_overlap = dev_texts & hold_texts
         if text_overlap:
             warnings.append(
-                f"Identical text found in both partitions: "
-                f"{len(text_overlap)} case(s)"
+                f"Identical text found in both partitions: {len(text_overlap)} case(s)"
+            )
+
+        # 3. Check for Ground-truth reference leakage
+        dev_gts = {
+            json.dumps(c["ground_truth"], sort_keys=True, ensure_ascii=False)
+            for c in dev_valid
+            if isinstance(c.get("ground_truth"), dict) and c["ground_truth"]
+        }
+        hold_gts = {
+            json.dumps(c["ground_truth"], sort_keys=True, ensure_ascii=False)
+            for c in hold_valid
+            if isinstance(c.get("ground_truth"), dict) and c["ground_truth"]
+        }
+        gt_overlap = dev_gts & hold_gts
+        if gt_overlap:
+            warnings.append(
+                f"Identical ground-truth reference found in both partitions: {len(gt_overlap)} case(s)"
             )
 
         return warnings

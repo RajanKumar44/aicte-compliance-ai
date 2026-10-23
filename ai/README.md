@@ -34,11 +34,13 @@ engine contract tests. The working OCR implementation is still in `backend/`
 |---|---|
 | [`evaluate_extraction.py`](evaluate_extraction.py) | Corpus-driven extraction scorer with CLI (`--check`, `--json`, `--compare`, `--engine`, `--normalize`). |
 | [`ocr_benchmark.py`](ocr_benchmark.py) | OCR engine adapter contract (`OCREngine` ABC), transcription metrics (CER, WER), structured-field scoring, synthetic case generation, corpus I/O, and held-out partitioning. |
+| [`raster_benchmark.py`](raster_benchmark.py) | Genuine raster-image OCR evaluation: synthetic document image rendering (Pillow), pixel-level corruptions (blur, skew, low-res, JPEG compression, contrast, noise, rotation), paired clean/corrupted benchmark, and engine evaluation. |
 | [`normalize.py`](normalize.py) | Conservative text normalization with provenance (zero-width removal, NFKC, line-break unification). |
 | [`corpus/extraction_cases.jsonl`](corpus/extraction_cases.jsonl) | 56 labelled extraction cases (54 scored, 2 documented known gaps). |
 | [`corpus/ocr_corruption_cases.jsonl`](corpus/ocr_corruption_cases.jsonl) | 30 OCR corruption cases (15 scored, 15 documented known gaps). |
 | [`tests/test_evaluate.py`](tests/test_evaluate.py) | Tests for the extraction evaluator, corpus validation, and scoring semantics. |
 | [`tests/test_ocr_benchmark.py`](tests/test_ocr_benchmark.py) | Tests for the OCR benchmark module: metrics, generation, scoring, contracts, corpus loading, partitioning. |
+| [`tests/test_raster_benchmark.py`](tests/test_raster_benchmark.py) | Tests for the raster benchmark module: pixel transforms, document rendering, paired scoring, engine availability, CLI. |
 | [`EVALUATION.md`](EVALUATION.md) | What the evaluation measures, its limitations, and how to run it. |
 | [`BACKEND_HANDOFF.md`](BACKEND_HANDOFF.md) | 17 documented extraction defects owned by the backend workstream. |
 
@@ -62,24 +64,30 @@ Empty-input conventions: both empty → 0.0; reference empty → 1.0; hypothesis
 
 ## OCR benchmark: text vs. image evaluation
 
-The current benchmark operates on **text only**. The synthetic case generator
-produces labelled text fixtures with controlled corruption types (inserted
-newlines, misread characters, Latin-Hindi mixing, column reordering). No raster
-images, scans, or real OCR engine invocations are involved.
+The workstream supports two levels of evaluation:
 
-**Image-level evaluation** (blur, skew, resolution, compression, contrast on
-actual rendered document images) requires:
-1. Image generation dependencies (e.g. Pillow, ReportLab) — not yet approved.
-2. A real OCR engine (Tesseract, EasyOCR) — optional and engine-specific.
-3. Authorization to add or modify shared dependency manifests.
-
-Until those dependencies are approved, the benchmark measures text-to-structured-field
-extraction only. It is **not** an image OCR benchmark and must not be described as one.
+1. **Text-level extraction benchmark** ([`ai/ocr_benchmark.py`](ocr_benchmark.py)):
+   Measures text-to-field extraction on synthetic labelled texts with controlled
+   textual corruption (character misreads, inserted newlines, column order, language mixing).
+2. **Genuine raster-image benchmark** ([`ai/raster_benchmark.py`](raster_benchmark.py)):
+   Renders synthetic document images (English, Hindi, bilingual, certificates, tables)
+   and applies true pixel transformations:
+   - Gaussian blur (`ImageFilter.GaussianBlur`)
+   - Affine shear / skew
+   - Low-resolution downsampling and upsampling
+   - Real 8x8 block discrete cosine transform JPEG compression artifacts
+   - Low contrast / illumination reduction
+   - Pixel-level sensor/scanner noise
+   - 90-degree document rotation
+   Evaluates paired clean vs. corrupted images, reporting degradation deltas,
+   per-corruption breakdowns, and language breakdowns. If Tesseract is not installed on
+   the host system, the benchmark explicitly reports the missing prerequisite and
+   supports a calibrated mock engine for automated regression verification.
 
 ## Running tests and evaluations
 
 ```bash
-# AI/OCR tests (benchmark + evaluator)
+# All AI/OCR tests (189 tests: evaluator + benchmark + raster)
 python -m pytest -q ai/tests
 
 # Extraction evaluation (human-readable)
@@ -94,8 +102,12 @@ python ai/evaluate_extraction.py \
 python ai/evaluate_extraction.py --json baseline.json
 python ai/evaluate_extraction.py --compare baseline.json
 
-# Engine bake-off
-python ai/evaluate_extraction.py --engine module:attribute
+# Raster image OCR benchmark (calibrated mock or real engine)
+python ai/raster_benchmark.py --count 16
+python ai/raster_benchmark.py --count 16 --json raster_report.json
+
+# Attempt real Tesseract raster evaluation (requires tesseract in PATH)
+python ai/raster_benchmark.py --real-engine
 
 # Preprocessing diagnosis
 python ai/evaluate_extraction.py --corpus ai/corpus/ocr_corruption_cases.jsonl --normalize
@@ -121,10 +133,12 @@ ruff check ai/
 ## Known gaps and limitations
 
 - The 17 backend-owned extraction defects are documented in [`BACKEND_HANDOFF.md`](BACKEND_HANDOFF.md).
-- No raster-image evaluation capability exists yet (blocked on dependency approval).
-- The synthetic corpus is not representative of real AICTE documents.
-- No held-out split exists for the extraction corpus (cases were written alongside patterns).
-- Hindi coverage is limited to five label variants.
+- Real Tesseract engine execution requires the Tesseract system binary (`tesseract`) in PATH;
+  when absent, the raster benchmark explicitly reports the missing prerequisite.
+- The synthetic document images use programmatic layouts and font rendering; they are not
+  photographed real-world paper documents.
+- No held-out split exists for the text extraction corpus (cases were written alongside patterns).
+- Hindi coverage is limited to five label variants and rendered Devanagari fonts.
 
 ## First task
 

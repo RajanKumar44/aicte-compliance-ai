@@ -264,16 +264,27 @@ A separate benchmark infrastructure module provides:
 
 ### Text-only vs. image-level evaluation
 
-The current benchmark operates on **text only**. The synthetic case generator produces
-labelled text, not raster images. Image-level evaluation (blur, skew, resolution,
-compression, contrast on rendered documents) requires image generation and OCR engine
-dependencies that are not yet approved. Until then, the benchmark is a
-**text-to-structured-field extraction benchmark**, not an image OCR benchmark.
+The workstream provides two distinct evaluation modules:
 
-### Running benchmark tests
+1. **Text extraction evaluator & benchmark** (`ai/evaluate_extraction.py`, `ai/ocr_benchmark.py`):
+   Operates on text strings. Measures rule-based field extraction against hand-crafted synthetic
+   cases and textual corruptions (misread characters, inserted newlines, column order).
+2. **Genuine raster-image benchmark** (`ai/raster_benchmark.py`):
+   Renders synthetic document images using Pillow and applies true raster pixel transformations
+   (Gaussian blur, affine skew, low-resolution down/upsampling, JPEG compression artifacts,
+   low contrast, sensor noise, 90-degree rotation). Measures paired clean vs. corrupted
+   degradation deltas across transcription (CER/WER) and field extraction (precision/recall/F1).
+   Works with real Tesseract when installed or a calibrated mock engine when system binaries are absent.
+
+### Running benchmark tests and evaluations
 
 ```bash
-python -m pytest -q ai/tests/test_ocr_benchmark.py   # 97 tests
-python -m pytest -q ai/tests                          # all AI/OCR tests
+python -m pytest -q ai/tests/test_ocr_benchmark.py     # benchmark module tests (101 tests)
+python -m pytest -q ai/tests/test_raster_benchmark.py  # raster image tests (22 tests)
+python -m pytest -q ai/tests                            # all AI/OCR tests (189 tests)
+
+# Run raster image benchmark CLI (generates paired images and computes degradation delta)
+python ai/raster_benchmark.py --count 16 --json raster_report.json
 ```
+
 

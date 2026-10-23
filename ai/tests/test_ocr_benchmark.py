@@ -815,6 +815,47 @@ class TestPartitionIntegrity:
         warnings = OCREngine.check_partition_integrity(dev, held)
         assert any("Identical text" in w for w in warnings)
 
+    def test_detects_identical_references_with_different_ids(self):
+        """Regression/leakage check: different IDs and corrupted text, but identical ground truth."""
+        shared_gt = {"institution_name": "Alpha", "certificate_number": "CERT/001"}
+        dev = [{"case_id": "dev_001", "text": "Alpha College Clean", "ground_truth": shared_gt}]
+        held = [{"case_id": "held_002", "text": "Alpha C0llege Corrupt", "ground_truth": shared_gt}]
+        warnings = OCREngine.check_partition_integrity(dev, held)
+        assert any("Identical ground-truth reference" in w for w in warnings)
+
+    def test_shared_dataset_fingerprints_is_valid_provenance_not_leakage(self):
+        """Intentional provenance: cases from the same generated dataset share a fingerprint.
+        Sharing fingerprint alone is NOT a warning when cases have disjoint IDs, text, and ground truth."""
+        shared_fp = "sha256_batch_fingerprint_123"
+        dev = [{
+            "case_id": "dev_001",
+            "text": "Institution Name: Alpha",
+            "ground_truth": {"institution_name": "Alpha"},
+            "dataset_fingerprint": shared_fp,
+        }]
+        held = [{
+            "case_id": "held_001",
+            "text": "Institution Name: Beta",
+            "ground_truth": {"institution_name": "Beta"},
+            "dataset_fingerprint": shared_fp,
+        }]
+        warnings = OCREngine.check_partition_integrity(dev, held)
+        assert warnings == []
+
+    def test_detects_empty_partitions(self):
+        warnings = OCREngine.check_partition_integrity([], [{"case_id": "a"}])
+        assert any("Partition is empty" in w for w in warnings)
+
+        warnings2 = OCREngine.check_partition_integrity([{"case_id": "a"}], [])
+        assert any("Partition is empty" in w for w in warnings2)
+
+    def test_detects_malformed_partitions(self):
+        warnings = OCREngine.check_partition_integrity("not a list", [])  # type: ignore[arg-type]
+        assert any("Malformed partition" in w for w in warnings)
+
+        warnings2 = OCREngine.check_partition_integrity([1, 2], [{"case_id": "a"}])  # type: ignore[list-item]
+        assert any("must be dictionaries" in w for w in warnings2)
+
 
 # ---------------------------------------------------------------------------
 # Regression tests for Phase A defects
