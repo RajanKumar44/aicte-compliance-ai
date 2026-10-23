@@ -89,3 +89,26 @@ def test_workflow_permissions_are_read_only():
 def test_full_suite_runs_in_ci():
     text = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "python -m pytest -q" in text
+
+
+def test_workstream_checks_cannot_be_silently_dropped_from_ci():
+    """Each workstream's own check must stay wired into the workflow.
+
+    Removing a step is the quietest way to make a red check disappear, so the
+    step text is asserted rather than trusted.
+    """
+    text = WORKFLOW_PATH.read_text(encoding="utf-8")
+    required_commands = {
+        "backend suite": "python -m pytest -q",
+        "ai extraction tests": "python -m pytest -q ai/tests",
+        "frontend fixture verification": "python frontend/tools/verify_fixtures.py",
+        "optional OCR engine smoke test": "test_ocr_engine_integration.py",
+    }
+    missing = [name for name, command in required_commands.items() if command not in text]
+    assert not missing, f"CI no longer runs: {missing}"
+
+
+def test_workflow_declares_no_secrets_and_no_upload_steps():
+    text = WORKFLOW_PATH.read_text(encoding="utf-8")
+    for forbidden in ("secrets.", "upload-artifact", "pull_request_target", "contents: write"):
+        assert forbidden not in text, f"workflow must not use {forbidden!r}"
