@@ -865,3 +865,268 @@ def test_cli_normalize_is_deterministic_and_run_independently():
     ]
     assert runs[0].returncode == runs[1].returncode == 0
     assert runs[0].stdout == runs[1].stdout
+
+
+# --- remaining schema rules, metric edges, baseline exit-code policy -------
+
+@pytest.mark.parametrize(
+    ("line", "message"),
+    [
+        ('[1, 2]', "record must be a JSON object, got list"),
+        ('{"case_id": "", "text": "t", "expected": {}}',
+         "case_id must be a non-empty string"),
+        ('{"case_id": 3, "text": "t", "expected": {}}',
+         "case_id must be a non-empty string"),
+        ('{"case_id": "a", "text": 7, "expected": {}}', "text must be a string"),
+        ('{"case_id": "a", "text": "t", "expected": {"": "x"}}',
+         "field names must be non-empty strings"),
+        ('{"case_id": "a", "text": "t", "expected": {"institution_name": 9}}',
+         "must be a string"),
+        ('{"case_id": "a", "text": "t", "expected": {}, "notes": 5}',
+         "notes must be a string"),
+        ('{"case_id": "a", "text": "t", "expected": {}, "known_gap": "yes"}',
+         "known_gap must be a boolean"),
+    ],
+)
+def test_cli_surface_for_remaining_corpus_schema_rules(
+    tmp_path: Path, line: str, message: str
+):
+    corpus = tmp_path / "schema.jsonl"
+    corpus.write_text(line + "\n", encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--corpus", str(corpus), "--quiet"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 1
+    assert message in completed.stderr
+
+
+def test_cli_rejects_a_corpus_that_is_not_valid_utf8(tmp_path: Path):
+    corpus = tmp_path / "bad-encoding.jsonl"
+    corpus.write_bytes(b'{"case_id": "\xff", "text": "t", "expected": {}}\n')
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--corpus", str(corpus), "--quiet"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 1
+    assert "not valid UTF-8" in completed.stderr
+
+
+def test_hand_worked_metric_example_settles_every_counter():
+    """tp=2, fp=3, fn=1 gives precision 0.4, recall 2/3 and F1 0.5 exactly."""
+    from ai.evaluate_extraction import CaseResult, score
+
+    results = [
+        CaseResult(
+            case_id="R1", category="clean",
+            expected={"institution_name": "A", "valid_until": "2027-01-01"},
+            extracted={"institution_name": "A", "valid_until": "2027-01-01"},
+            known_gap=False,
+        ),
+        CaseResult(
+            case_id="R2", category="clean",
+            expected={"institution_name": "B", "issue_date": "2026-01-01"},
+            extracted={"institution_name": "C"},
+            known_gap=False,
+        ),
+        # A negative case must keep spurious extraction visible.
+        CaseResult(
+            case_id="R3", category="clean", expected={},
+            extracted={"issue_date": "x"}, known_gap=False,
+        ),
+    ]
+    report = score(results)
+    # tp=2, fp=2, fn=1: precision 0.5, recall 2/3, F1 2*(0.5*2/3)/(0.5+2/3)=4/7.
+    assert report["micro"] == {
+        "tp": 2, "fp": 2, "fn": 1, "wrong_value": 0,
+        "precision": 0.5, "recall": 0.6667, "f1": 0.5714,
+    }
+    assert report["exact_match_count"] == 1
+    assert report["exact_match_rate"] == round(1 / 3, 4)
+    assert report["negative_cases"] == 1
+    assert report["negative_false_positives"] == ["R3"]
+    assert report["negative_false_positive_count"] == 1
+    assert {w["case_id"] for w in report["wrong_values"]} == {"R2", "R3"}
+    # Wrong-value detail is kept per case; the aggregate wrong-value counter of
+    # the micro roll-up is not merged into it (they are different definitions).
+    assert report["per_field"]["institution_name"]["wrong_value"] == 1
+    assert report["per_field"]["issue_date"]["fp"] == 1
+
+
+def test_score_on_empty_input_and_zero_denominators():
+    from ai.evaluate_extraction import FieldScore, score
+
+    report = score([])
+    assert report["cases"] == 0
+    assert report["exact_match_count"] == 0
+    assert report["exact_match_rate"] == 0.0
+    assert report["micro"]["precision"] == report["micro"]["recall"] == 0.0
+    assert report["micro"]["f1"] == 0.0
+    assert report["negative_cases"] == 0
+    # Denominator-zero properties are reported as 0.0, never divide by zero.
+    assert FieldScore().precision == FieldScore().recall == FieldScore().f1 == 0.0
+
+
+def _cli_cap(corpus: Path, *extra: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), "--corpus", str(corpus), *extra, "--quiet"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+    )
+
+
+def test_compare_notifies_when_a_passing_case_becomes_a_known_gap(tmp_path: Path):
+    corpus = tmp_path / "flip.jsonl"
+    scored_first = json.dumps({
+        "case_id": "FL-1", "category": "edge",
+        "text": "Institution Name: Alpha College",
+        "expected": {"institution_name": "Alpha College"},
+    })
+    gap_after = json.dumps({
+        "case_id": "FL-1", "category": "edge", "known_gap": True,
+        "text": "Institution Name: Alpha College",
+        "expected": {"institution_name": "Alpha College"},
+    })
+    corpus.write_text(scored_first + "\n", encoding="utf-8")
+    baseline = tmp_path / "base.json"
+    assert _cli_cap(corpus, "--json", str(baseline)).returncode == 0
+    corpus.write_text(gap_after + "\n", encoding="utf-8")
+    completed = _cli_cap(corpus, "--compare", str(baseline))
+    # A rescoped case left the scored denominator by flag: clearly noted, not
+    # counted as a scored regression, and the run is not silently gated.
+    assert completed.returncode == 0
+    assert "scored case FL-1 absent from the current run" in completed.stdout
+    assert "new documented known gap FL-1" in completed.stdout
+
+
+def test_compare_notifies_when_a_known_gap_becomes_a_scored_failure(tmp_path: Path):
+    corpus = tmp_path / "flip.jsonl"
+    gap_first = json.dumps({
+        "case_id": "FL-2", "category": "edge", "known_gap": True,
+        "text": "Institution Name: Gamma College, Valid Until: 2099-01-01",
+        "expected": {"institution_name": "Gamma College", "valid_until": "2099-01-01"},
+    })
+    # The case is unflagged with an intentionally failing expected value.
+    failing_after = json.dumps({
+        "case_id": "FL-2", "category": "edge",
+        "text": "Institution Name: Gamma College, Valid Until: 2099-01-01",
+        "expected": {"institution_name": "Gamma College", "valid_until": "2030-01-01"},
+    })
+    corpus.write_text(gap_first + "\n", encoding="utf-8")
+    baseline = tmp_path / "base.json"
+    assert _cli_cap(corpus, "--json", str(baseline)).returncode == 0
+    corpus.write_text(failing_after + "\n", encoding="utf-8")
+    completed = _cli_cap(corpus, "--compare", str(baseline))
+    # The same truth: no baseline scored success exists to regress; the flag
+    # change and the failure are visible, and the run exits 0.
+    assert completed.returncode == 0
+    assert "new scored case FL-2 has no baseline result" in completed.stdout
+    assert "documented known gap FL-2 no longer exists in the corpus" in completed.stdout
+    assert "micro F1" in completed.stdout
+
+
+def test_compare_notes_a_brand_new_case_that_fails_with_exit_zero(tmp_path: Path):
+    corpus = tmp_path / "growth.jsonl"
+    base = json.dumps({
+        "case_id": "G-1", "category": "clean-label-en",
+        "text": "Institution Name: Alpha College",
+        "expected": {"institution_name": "Alpha College"},
+    })
+    added = json.dumps({
+        "case_id": "G-2", "category": "clean-label-en",
+        "text": "Institution Name: Alpha College",
+        "expected": {"institution_name": "Wrong College"},
+    })
+    corpus.write_text(base + "\n", encoding="utf-8")
+    baseline = tmp_path / "base.json"
+    assert _cli_cap(corpus, "--json", str(baseline)).returncode == 0
+    corpus.write_text(base + "\n" + added + "\n", encoding="utf-8")
+    completed = _cli_cap(corpus, "--compare", str(baseline))
+    assert completed.returncode == 0
+    assert "new scored case G-2 has no baseline result" in completed.stdout
+    assert "NEW REGRESSIONS" not in completed.stdout
+
+
+def test_compare_fails_when_a_negative_case_starts_pulling_fields(tmp_path: Path):
+    corpus = tmp_path / "negative.jsonl"
+    clean = json.dumps({
+        "case_id": "N-1", "category": "clean-label-en",
+        "text": "The rain in Spain stays mainly", "expected": {},
+    })
+    leaking = json.dumps({
+        "case_id": "N-1", "category": "clean-label-en",
+        "text": "Institution Name: Chance College", "expected": {},
+    })
+    corpus.write_text(clean + "\n", encoding="utf-8")
+    baseline = tmp_path / "base.json"
+    assert _cli_cap(corpus, "--json", str(baseline)).returncode == 0
+    corpus.write_text(leaking + "\n", encoding="utf-8")
+    completed = _cli_cap(corpus, "--compare", str(baseline))
+    assert completed.returncode == 1
+    assert "NEW REGRESSIONS" in completed.stdout
+    assert "N-1" in completed.stdout
+
+
+def test_compare_refuses_an_ambiguous_same_name_baseline(tmp_path: Path):
+    """Two baseline slices with one basename must never be matched silently."""
+    def cap(target_corpus: Path, *extra: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "--corpus", str(target_corpus), *extra,
+             "--quiet"],
+            cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+        )
+
+    slice_a = tmp_path / "aa"
+    slice_b = tmp_path / "bb"
+    slice_a.mkdir()
+    slice_b.mkdir()
+    corpus_a = slice_a / "shared.jsonl"
+    corpus_b = slice_b / "shared.jsonl"
+    corpus_a.write_text(json.dumps({
+        "case_id": "A-1", "category": "clean-label-en",
+        "text": "Institution Name: Alpha College",
+        "expected": {"institution_name": "Alpha College"},
+    }) + "\n", encoding="utf-8")
+    corpus_b.write_text(json.dumps({
+        "case_id": "B-1", "category": "clean-label-en",
+        "text": "Valid Until: 2099-01-01",
+        "expected": {"valid_until": "2099-01-01"},
+    }) + "\n", encoding="utf-8")
+    report_a = tmp_path / "a.json"
+    report_b = tmp_path / "b.json"
+    assert cap(corpus_a, "--json", str(report_a)).returncode == 0
+    assert cap(corpus_b, "--json", str(report_b)).returncode == 0
+    merged = {"corpora": [
+        json.loads(report_a.read_text(encoding="utf-8")),
+        json.loads(report_b.read_text(encoding="utf-8")),
+    ]}
+    ambiguous = tmp_path / "ambiguous.json"
+    ambiguous.write_text(json.dumps(merged), encoding="utf-8")
+    elsewhere = slice_b / "renamed-shared.jsonl"
+    corpus_b.rename(elsewhere)
+    completed = cap(elsewhere, "--compare", str(ambiguous))
+    assert completed.returncode == 0
+    assert "no matching corpus in the baseline" in completed.stdout
+    assert "NEW REGRESSIONS" not in completed.stdout
+    # The ambiguity is resolved when the exact path is available again.
+    elsewhere.rename(corpus_b)
+    resolved = cap(corpus_b, "--compare", str(ambiguous))
+    assert resolved.returncode == 0
+    assert "no matching corpus in the baseline" not in resolved.stdout
+
+
+def test_evaluation_doc_states_the_compare_exit_code_policy():
+    text = (REPO_ROOT / "ai" / "EVALUATION.md").read_text(encoding="utf-8")
+    for phrase in (
+        "Exit-code policy for `--compare`",
+        "scored success in the baseline now fails",
+        "negative false positives now reports one",
+        "visible note with exit 0",
+        "no baseline result yet",
+    ):
+        assert phrase in text, phrase

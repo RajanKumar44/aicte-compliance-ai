@@ -52,7 +52,7 @@ independently and never combines their denominators.
 | ambiguous-date | 6 | `DD/MM/YYYY`, long-form months, reversed/equal/multi-year sessions |
 | invalid-date | 2 | impossible day (`2026-02-30`), impossible month (`2026-13`) |
 | duplicate-labels | 3 | first label wins, deterministically |
-| boundary | 7 | 3- and 160-character names, 2-character certificate, leap day |
+| boundary | 6 | 3- and 160-character names, 2-character certificate, leap day |
 | personal-data | 2 | applicant name and DOB must **not** be extracted |
 | table-like | 1 | spaced columns |
 | known-gap | 2 | behaviour the extractor is known to get wrong (see below) |
@@ -147,6 +147,25 @@ gaps, new negative false positives (exit 1), and the micro-F1 delta. A corpus ab
 the baseline reports `no matching corpus in the baseline` and does not gate the run.
 Multi-corpus baselines (`{"corpora": [...]}`) compare slice by slice, never as one merged
 score.
+
+### Exit-code policy for `--compare`
+
+The command exits 1 (baseline verification failed) exactly when:
+
+1. a case that scored success in the baseline now fails (mismatch or
+   extraction error) - reported as `NEW REGRESSIONS`;
+2. a slice with no baseline negative false positives now reports one -
+   reported as `NEW REGRESSIONS`;
+3. the stored baseline cannot be read or parsed.
+
+Everything else is a visible note with exit 0: corpus-byte changes,
+known-gap flags appearing or disappearing, cases added or removed, the
+micro-F1 delta, and newly added cases that fail - no baseline result yet -
+capture the next baseline with `--check` so they become protected).
+A corpus absent from the baseline never gates the run. A
+gapped case that starts passing is reported as `FIXED - remove the
+known_gap flag` so a human reviews the flag before the case enters the
+scored denominator.
 
 A useful developer loop after touching anything the extractor depends on:
 

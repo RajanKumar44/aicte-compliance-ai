@@ -17,18 +17,20 @@ branch; nothing here is inferred from tests alone.
 Per-case observed extraction (the `Actual` column below comes from this):
 
 ```bash
-.venv/bin/python - <<'PY'
+# corpus paths are passed to python after the heredoc marker, so they arrive
+# in sys.argv[1:] (verified: `python - arg` puts `arg` at sys.argv[1])
+.venv/bin/python - <<'PY' ai/corpus/extraction_cases.jsonl ai/corpus/ocr_corruption_cases.jsonl
 import json, sys
 sys.path.insert(0, ".")
 from backend.app.ocr_pipeline import extract_institution_fields
-cases = [json.loads(l) for l in open(sys.argv[1], encoding="utf-8") if l.strip()]
-for c in cases:
-    if c.get("known_gap"):
-        got = extract_institution_fields(c["text"])
-        got = {k: (v.value if hasattr(v, "value") else v) for k, v in got.items()}
-        print(c["case_id"], "->", json.dumps(got, ensure_ascii=False))
+for corpus_path in sys.argv[1:]:
+    cases = [json.loads(l) for l in open(corpus_path, encoding="utf-8") if l.strip()]
+    for c in cases:
+        if c.get("known_gap"):
+            got = extract_institution_fields(c["text"])
+            got = {k: (v.value if hasattr(v, "value") else v) for k, v in got.items()}
+            print(c["case_id"], "->", json.dumps(got, ensure_ascii=False))
 PY
-ai/corpus/<corpus>.jsonl
 ```
 
 The evaluator's own report shows the same status: each case prints

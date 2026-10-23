@@ -122,21 +122,62 @@ class CaseResult:
 
 
 def load_corpus(path: Path = CORPUS_PATH) -> list[dict[str, Any]]:
+    """Load and strictly validate a corpus; every failure is a clean CLI exit 1.
+
+    Documented rules (checked here and in ai/EVALUATION.md): each non-empty line
+    is a JSON object; `case_id` is a unique non-empty string; `text` is a
+    string; `expected` is an object of non-empty string field names with string
+    values (negative cases use an empty object); `category` and `notes` are
+    strings when present; `known_gap` is a boolean when present; the file must
+    be valid UTF-8 and non-empty.
+    """
     if not path.is_file():
         raise SystemExit(f"error: corpus not found: {path}")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as error:
+        raise SystemExit(f"error: {path.name} is not valid UTF-8: {error}") from error
     cases = []
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    for line_number, line in enumerate(text.splitlines(), 1):
         if not line.strip():
             continue
         try:
             case = json.loads(line)
         except json.JSONDecodeError as error:
             raise SystemExit(f"error: {path.name} line {line_number}: {error}") from error
+        if not isinstance(case, dict):
+            type_name = type(case).__name__
+            raise SystemExit(
+                f"error: {path.name} line {line_number}: record must be a JSON object, got {type_name}"
+            )
         for key in ("case_id", "text", "expected"):
             if key not in case:
                 raise SystemExit(f"error: {path.name} line {line_number}: missing {key!r}")
-        if not isinstance(case["expected"], dict):
+        case_id = case["case_id"]
+        if not isinstance(case_id, str) or not case_id.strip():
+            raise SystemExit(
+                f"error: {path.name} line {line_number}: case_id must be a non-empty string"
+            )
+        if not isinstance(case["text"], str):
+            raise SystemExit(f"error: {path.name} line {line_number}: text must be a string")
+        expected = case["expected"]
+        if not isinstance(expected, dict):
             raise SystemExit(f"error: {path.name} line {line_number}: expected must be an object")
+        for field_name, value in expected.items():
+            if not isinstance(field_name, str) or not field_name:
+                raise SystemExit(
+                    f"error: {path.name} line {line_number}: expected field names must be non-empty strings"
+                )
+            if not isinstance(value, str):
+                raise SystemExit(
+                    f"error: {path.name} line {line_number}: "
+                    f"expected.{field_name!r} must be a string (negative cases use an empty object)"
+                )
+        for key in ("category", "notes"):
+            if key in case and not isinstance(case[key], str):
+                raise SystemExit(f"error: {path.name} line {line_number}: {key} must be a string")
+        if "known_gap" in case and not isinstance(case["known_gap"], bool):
+            raise SystemExit(f"error: {path.name} line {line_number}: known_gap must be a boolean")
         cases.append(case)
     if not cases:
         raise SystemExit(f"error: {path.name} is empty")
@@ -380,9 +421,15 @@ def _match_baseline(
         if candidate.get("corpus") == report["corpus"]:
             return candidate
     name = report["corpus"].rsplit("/", 1)[-1]
-    for candidate in baselines:
-        if str(candidate.get("corpus", "")).rsplit("/", 1)[-1] == name:
-            return candidate
+    candidates = [
+        candidate
+        for candidate in baselines
+        if str(candidate.get("corpus", "")).rsplit("/", 1)[-1] == name
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    # An ambiguous filename (or no match): comparing the wrong report silently
+    # would be worse than comparing none — the caller reports no match.
     return None
 
 
