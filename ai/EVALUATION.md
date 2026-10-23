@@ -16,11 +16,18 @@ python ai/evaluate_extraction.py \
   --corpus ai/corpus/ocr_corruption_cases.jsonl --check   # separate slice reports
 python -m pytest -q ai/tests                              # corpus and scorer tests (also runs in CI)
 python ai/evaluate_extraction.py --json b.json --compare b.json  # compare against a baseline
+python ai/evaluate_extraction.py --engine module:attribute ...    # evaluate a candidate engine (bake-off)
+python ai/evaluate_extraction.py --corpus ai/corpus/ocr_corruption_cases.jsonl --normalize
+                                                                 # evidence-only preprocessing diagnosis
 ```
 
-The scorer imports `extract_institution_fields` from `backend.app.ocr_pipeline`
+By default the scorer imports `extract_institution_fields` from `backend.app.ocr_pipeline`
 **read-only**. It does not modify, wrap or reimplement backend code, and no OCR engine is
-required — the input is text, so Tesseract is irrelevant here.
+required — the input is text, so Tesseract is irrelevant here. `--engine module:attribute`
+substitutes any callable with the same input/output shape (`str` in, mapping of
+field-name → `OCRField`-like object or plain value out) so candidate engines can be scored
+against the same corpora without touching `backend/`. Invalid specs (`malformed`,
+missing module, missing attribute) exit 1 with a clear error.
 
 The loader validates each corpus before scoring: a missing path, malformed JSONL, a
 missing or non-object `expected`, an empty file, or duplicate `case_id`s fails the run
@@ -122,6 +129,8 @@ Beyond the printed table, every report (human or `--json`) carries:
 | `case_results` | Every scored case with its expected/extracted values, match status, error and category — the machine-readable failure artifact |
 | `by_category` | Scored-case coverage per category: cases, exact matches and failing case ids |
 | `known_gaps` | Documented broken behaviour, each with `still_failing` and its own `error` when it raises |
+| `engine` | Which extractor produced the numbers (default `backend.app.ocr_pipeline:extract_institution_fields`); set by `--engine` |
+| `confidences` (per case) | Field→confidence as reported by the engine (`OCRField.confidence`), present only when the engine supplies them; the scorer never invents confidence values |
 
 To compare a change against a stored result, capture a baseline once and compare later:
 
@@ -150,6 +159,27 @@ python ai/evaluate_extraction.py --json /tmp/after.json --compare /tmp/before.js
 
 Performance note (2026-10-23, this MacBook, .venv): a 600-case synthetic corpus scores in
 ~0.08 s wall time including interpreter startup. No optimisation is warranted or claimed.
+
+
+## Engine bake-offs and preprocessing diagnosis
+
+Canonical `docs/canonical/prd.md` requires OCR engine selection "via a labelled
+synthetic-data bake-off". `--engine module:attribute` implements the evaluation half of
+that requirement: any candidate callable is scored on the same corpora with the same
+semantics, and the report names the engine it measured.
+
+`--normalize` prints an **evidence-only** preprocessing diagnosis after the report: it
+re-extracts every known-gap case from conservatively normalized text
+(`ai/normalize.py`) and reports which gaps normalization alone would exact-match, plus
+the rules that fired and `extraction_raised` ids. On the current corruption corpus it
+fixes exactly `1/15` (`CMIS-009`, `remove-invisible-chars`) — the diagnosis quantifies
+what preprocessing can and cannot contribute, it scores nothing and changes no exit
+code. Deliberate scope limits of `ai/normalize.py` (each with provenance in its
+docstring): it removes only characters that are never meaningful (zero-width/soft
+hyphen/control characters), unifies representations (CRLF, U+2028/U+2029, NFKC,
+whitespace) and does **not** attempt label re-joining, column reordering or fuzzy OCR
+confusion correction — those need real policy decisions and belong to the backend-owned
+extraction fix (`ai/BACKEND_HANDOFF.md`).
 
 `ai/tests` runs in the shared `backend-tests` CI workflow; any regression the evaluator can
 detect is therefore also a pull-request gate without an AI-specific configuration change.

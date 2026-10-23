@@ -643,3 +643,225 @@ def test_compare_matches_both_slices_of_a_multi_corpus_run(tmp_path: Path):
     assert completed.returncode == 0, completed.stderr
     assert "no matching corpus" not in completed.stdout
     assert "NEW REGRESSIONS" not in completed.stdout
+# --- engine selection (labelled bake-off) and confidence passthrough -------
+
+def test_run_records_the_engine_label():
+    from ai.evaluate_extraction import DEFAULT_ENGINE_LABEL
+
+    assert run()["engine"] == DEFAULT_ENGINE_LABEL
+    assert (
+        run(CORRUPTION_CORPUS_PATH, engine="stub:engine")["engine"] == "stub:engine"
+    )
+
+
+def test_evaluate_case_accepts_plain_value_and_provenance_engines():
+    class Field:
+        def __init__(self, value: str | None, confidence: float | None = None):
+            self.value, self.confidence = value, confidence
+
+    case = {
+        "case_id": "C-1",
+        "text": "text",
+        "expected": {"institution_name": "X"},
+    }
+    provenance = evaluate_case(case, lambda _t: {"institution_name": Field("X", 0.42)})
+    assert provenance.exact_match
+    assert provenance.as_dict()["confidences"] == {"institution_name": 0.42}
+
+    plain = evaluate_case(case, lambda _t: {"institution_name": "X"})
+    assert plain.exact_match and "confidences" not in plain.as_dict()
+
+    none_value = evaluate_case(case, lambda _t: {"institution_name": Field(None)})
+    assert none_value.extracted == {} and not none_value.exact_match
+
+
+def test_cli_engine_flag_runs_a_bake_off_and_keeps_check_semantics(tmp_path: Path):
+    import os
+
+    (tmp_path / "stub_engine.py").write_text(
+        "def extract_nothing(text):\n    return {}\n", encoding="utf-8"
+    )
+    env = dict(os.environ, PYTHONPATH=str(tmp_path))
+    json_out = tmp_path / "stub.json"
+
+    with_check = subprocess.run(
+        [
+            sys.executable,
+            "ai/evaluate_extraction.py",
+            "--corpus",
+            str(CORRUPTION_CORPUS_PATH),
+            "--engine",
+            "stub_engine:extract_nothing",
+            "--check",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        env=env,
+    )
+    assert with_check.returncode == 1  # a dead engine fails every scored case
+    assert "engine: stub_engine:extract_nothing" in with_check.stdout
+
+    json_report = subprocess.run(
+        [
+            sys.executable,
+            "ai/evaluate_extraction.py",
+            "--corpus",
+            str(CORRUPTION_CORPUS_PATH),
+            "--engine",
+            "stub_engine:extract_nothing",
+            "--json",
+            str(json_out),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        env=env,
+    )
+    assert json_report.returncode == 0
+    payload = json.loads(json_out.read_text(encoding="utf-8"))
+    assert payload["engine"] == "stub_engine:extract_nothing"
+    assert payload["exact_match_count"] == 7  # the negative cases still pass
+
+
+def test_cli_rejects_invalid_engine_specs():
+    for spec in (
+        "malformed",
+        "no_such_module:attr",
+        "backend.app.ocr_pipeline:definitely_not_an_engine",
+    ):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "ai/evaluate_extraction.py",
+                "--corpus",
+                str(CORRUPTION_CORPUS_PATH),
+                "--engine",
+                spec,
+            ],
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+        )
+        assert completed.returncode == 1
+        assert "error:" in completed.stderr
+
+
+# --- preprocessing / normalization diagnostics ------------------------------
+
+def test_normalize_removes_invisible_noise_with_provenance():
+    from ai.normalize import normalize_text
+
+    text = "Institution\u200b Name: No\u00ad  \r\nX\u2028Y  \n"
+    payload, changes = normalize_text(text)
+    assert "\u200b" not in payload and "\u00ad" not in payload and "\u2028" not in payload
+    assert "\r" not in payload
+    rules = {c["rule"] for c in changes}
+    assert {"remove-invisible-chars", "line-separator-to-lf"} <= rules
+    invisible = next(c for c in changes if c["rule"] == "remove-invisible-chars")
+    assert invisible["instances"] == 2  # zero-width space and soft hyphen
+    assert any("U+200B" in example for example in invisible["examples"])
+
+
+def test_normalize_nfkc_composes_allocated_forms_only_when_needed():
+    from ai.normalize import normalize_text
+
+    nfd = unicodedata.normalize("NFD", "Caf\u00e9: 2026")
+    payload, changes = normalize_text(nfd)
+    assert payload == "Caf\u00e9: 2026"
+    assert [c["rule"] for c in changes] == ["nfkc"]
+
+    clean = "Institution Name: Example College"
+    payload_clean, changes_clean = normalize_text(clean)
+    assert payload_clean == clean and changes_clean == []
+
+
+def test_normalize_is_idempotent_and_preserves_meaningful_text():
+    from ai.normalize import normalize_text
+
+    messy = "  \u200bA\u2028B\r\n\tC  \n\n\n\nD\u200b \n"
+    once, changes_once = normalize_text(messy)
+    twice, changes_twice = normalize_text(once)
+    assert twice == once and changes_twice == []
+
+    meaningful = "शैक्षणिक सत्र: 2026/2027 — Certificate No; CERT/2026/0099"
+    assert normalize_text(meaningful) == (meaningful, [])
+
+
+def test_preprocessing_diagnosis_matches_measured_evidence_only():
+    from ai.evaluate_extraction import load_corpus, preprocessing_diagnosis
+
+    cases = load_corpus(CORRUPTION_CORPUS_PATH)
+    gap_ids = {c["case_id"] for c in cases if c.get("known_gap")}
+    diagnosis = preprocessing_diagnosis(cases)
+    assert set(diagnosis["repaired"]) == {"CMIS-009"}
+    assert diagnosis["repaired"]["CMIS-009"] == ["remove-invisible-chars"]
+    assert "CNL-001" in diagnosis["not_fixed_by_these_rules"]
+    assert (
+        set(diagnosis["repaired"]) | set(diagnosis["not_fixed_by_these_rules"])
+    ) <= gap_ids
+    assert diagnosis["extraction_raised"] == []
+
+
+def test_preprocessing_diagnosis_records_raising_engines_without_stopping():
+    from ai.evaluate_extraction import preprocessing_diagnosis
+
+    cases = [
+        {"case_id": "R-1", "known_gap": True, "text": "text", "expected": {}},
+        {
+            "case_id": "R-2",
+            "known_gap": True,
+            "text": "Institution\u200b Name: X",
+            "expected": {"institution_name": "X"},
+        },
+    ]
+
+    def raising_engine(_text: str):
+        raise RuntimeError("engine down")
+
+    diagnosis = preprocessing_diagnosis(cases, raising_engine)
+    assert diagnosis["extraction_raised"] == ["R-1", "R-2"]  # both raise; none masked
+    assert diagnosis["repaired"] == {}  # a dead engine repairs nothing
+
+
+def test_cli_normalize_flag_prints_diagnosis_and_keeps_exit_codes():
+    with_check = subprocess.run(
+        [
+            sys.executable,
+            "ai/evaluate_extraction.py",
+            "--corpus",
+            str(CORRUPTION_CORPUS_PATH),
+            "--normalize",
+            "--check",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
+    assert with_check.returncode == 0
+    assert "preprocessing diagnosis" in with_check.stdout
+    assert "1/15 known-gap cases" in with_check.stdout
+    assert "CNL-001" in with_check.stdout  # not fixed; stays visible
+    assert "remove-invisible-chars" in with_check.stdout
+    assert "backend-owned change" in with_check.stdout
+
+
+def test_cli_normalize_is_deterministic_and_run_independently():
+    runs = [
+        subprocess.run(
+            [
+                sys.executable,
+                "ai/evaluate_extraction.py",
+                "--corpus",
+                str(CORRUPTION_CORPUS_PATH),
+                "--normalize",
+                "--quiet",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+        )
+        for _ in range(2)
+    ]
+    assert runs[0].returncode == runs[1].returncode == 0
+    assert runs[0].stdout == runs[1].stdout

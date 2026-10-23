@@ -38,7 +38,8 @@ import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+import importlib
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CORPUS_PATH = REPO_ROOT / "ai" / "corpus" / "extraction_cases.jsonl"
@@ -47,6 +48,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from backend.app.ocr_pipeline import extract_institution_fields  # noqa: E402
+
+DEFAULT_ENGINE = extract_institution_fields
+DEFAULT_ENGINE_LABEL = "backend.app.ocr_pipeline:extract_institution_fields"
 
 BANNER = (
     "SYNTHETIC CORPUS — NOT A REAL-WORLD BENCHMARK. "
@@ -143,16 +147,28 @@ def load_corpus(path: Path = CORPUS_PATH) -> list[dict[str, Any]]:
     return cases
 
 
-def evaluate_case(case: dict[str, Any]) -> CaseResult:
+def _plain_value(field: Any) -> str | None:
+    """Accept adapter engines that return OCRField-like objects or plain values."""
+    value = getattr(field, "value", field)
+    return None if value is None else str(value)
+
+
+def evaluate_case(
+    case: dict[str, Any], extractor: Callable[[str], dict[str, Any]] | None = None
+) -> CaseResult:
+    extractor = extractor or DEFAULT_ENGINE
     expected = dict(case["expected"])
     try:
-        extracted = {}
-        for name, field in extract_institution_fields(case["text"]).items():
-            if field.value is not None:
-                extracted[name] = field.value
+        extracted, confidences = {}, {}
+        for name, field in extractor(case["text"]).items():
+            if (value := _plain_value(field)) is not None:
+                extracted[name] = value
+            if (confidence := getattr(field, "confidence", None)) is not None:
+                confidences[name] = confidence
         error = None
+        extra: dict[str, Any] = {"confidences": confidences} if confidences else {}
     except Exception as exc:  # noqa: BLE001 - a raising case is a failure, not a skip
-        extracted, error = {}, f"{type(exc).__name__}: {exc}"
+        extracted, error, extra = {}, f"{type(exc).__name__}: {exc}", {}
     return CaseResult(
         case_id=case["case_id"],
         category=case.get("category", "uncategorised"),
@@ -160,6 +176,7 @@ def evaluate_case(case: dict[str, Any]) -> CaseResult:
         extracted=extracted,
         known_gap=bool(case.get("known_gap", False)),
         error=error,
+        extra=extra,
     )
 
 
@@ -246,15 +263,20 @@ def failure_reason(detail: dict[str, Any]) -> str:
     return "; ".join(diffs) or "case no longer matches its expected values"
 
 
-def run(corpus_path: Path = CORPUS_PATH) -> dict[str, Any]:
+def run(
+    corpus_path: Path = CORPUS_PATH,
+    extractor: Callable[[str], dict[str, Any]] | None = None,
+    engine: str = DEFAULT_ENGINE_LABEL,
+) -> dict[str, Any]:
     cases = load_corpus(corpus_path)
     main_cases = [case for case in cases if not case.get("known_gap")]
     gap_cases = [case for case in cases if case.get("known_gap")]
 
-    main_results = [evaluate_case(case) for case in main_cases]
-    gap_results = [evaluate_case(case) for case in gap_cases]
+    main_results = [evaluate_case(case, extractor) for case in main_cases]
+    gap_results = [evaluate_case(case, extractor) for case in gap_cases]
 
     report = score(main_results)
+    report["engine"] = engine
     report["known_gaps"] = [
         {
             **result.as_dict(),
@@ -281,6 +303,7 @@ def _print_human(report: dict[str, Any], *, show_banner: bool = True) -> None:
         print()
     print(f"corpus: {report['corpus']}  ({report['cases']} scored cases, "
           f"{len(report['known_gaps'])} known gaps reported separately)")
+    print(f"engine: {report.get('engine', DEFAULT_ENGINE_LABEL)}")
     print()
     header = f"{'field':<22}{'tp':>4}{'fp':>4}{'fn':>4}{'precision':>11}{'recall':>9}{'f1':>7}"
     print(header)
@@ -446,11 +469,105 @@ def baseline_regressions(lines: list[str]) -> bool:
     )
 
 
-def run_corpora(corpus_paths: list[Path]) -> list[dict[str, Any]]:
+def run_corpora(
+    corpus_paths: list[Path],
+    extractor: Callable[[str], dict[str, Any]] | None = None,
+    engine: str | None = None,
+) -> list[dict[str, Any]]:
     """Evaluate each corpus independently; never combine their denominators."""
     if not corpus_paths:
         raise ValueError("at least one corpus path is required")
-    return [run(path) for path in corpus_paths]
+    return [run(path, extractor, engine or DEFAULT_ENGINE_LABEL) for path in corpus_paths]
+
+
+def resolve_engine(spec: str) -> tuple[Callable[[str], dict[str, Any]], str]:
+    """Resolve an adapter engine named 'module:attribute' for corpus bake-offs.
+
+    The default engine must stay importable in CI (default: no extra argument);
+    a candidate engine only needs the same input/output shape as the current
+    one, so the corpora can compare them without touching backend code.
+    """
+    module_name, _, attr_name = spec.partition(":")
+    if not module_name or not attr_name:
+        raise SystemExit(f"error: --engine must look like module:attribute, got {spec!r}")
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError as exc:
+        raise SystemExit(f"error: cannot import engine module {module_name!r}: {exc}")
+    engine = getattr(module, attr_name, None)
+    if not callable(engine):
+        raise SystemExit(f"error: engine {spec!r} is not callable")
+    return engine, spec
+
+
+def preprocessing_diagnosis(
+    cases: list[dict[str, Any]], extractor: Callable[[str], dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """Evidence-only diagnostic: which known-gap cases exact-match after normalization.
+
+    Runs the default (or provided) engine on raw versus conservatively
+    normalized text for every known-gap case. Scores and exit codes are never
+    affected. See ``ai/normalize.py`` for the deliberate scope limits.
+    """
+    from ai.normalize import normalize_text  # local: keep the report importable
+
+    extractor = extractor or DEFAULT_ENGINE
+    repaired: dict[str, list[str]] = {}
+    unrepairable: list[str] = []
+    raised: list[str] = []
+    for case in cases:
+        if not case.get("known_gap"):
+            continue
+        try:
+            raw = {
+                name: value
+                for name, value in (
+                    (k, _plain_value(v)) for k, v in extractor(case["text"]).items()
+                )
+                if value is not None
+            }
+            payload, changes = normalize_text(case["text"])
+            normalized = {
+                name: value
+                for name, value in (
+                    (k, _plain_value(v)) for k, v in extractor(payload).items()
+                )
+                if value is not None
+            }
+        except Exception:  # noqa: BLE001 - diagnosis never masks the error shape
+            raised.append(case["case_id"])
+            continue
+        if raw == case["expected"]:
+            unrepairable.append(case["case_id"])  # flagged gap already passes? defensive
+        elif normalized == case["expected"]:
+            repaired[case["case_id"]] = [c["rule"] for c in changes]
+        else:
+            unrepairable.append(case["case_id"])
+    return {
+        "repaired": repaired,
+        "not_fixed_by_these_rules": unrepairable,
+        "extraction_raised": raised,
+    }
+
+
+def print_preprocessing_diagnosis(diagnosis: dict[str, Any]) -> None:
+    repaired = diagnosis["repaired"]
+    total = len(repaired) + len(diagnosis["not_fixed_by_these_rules"]) + len(diagnosis["extraction_raised"])
+    print("preprocessing diagnosis (evaluation-only evidence, not scored):")
+    print(
+        f"  conservative normalization alone exact-matches "
+        f"{len(repaired)}/{total} known-gap cases"
+        + (f": {', '.join(sorted(repaired))}" if repaired else "")
+    )
+    rules = sorted({rule for ids in repaired.values() for rule in ids})
+    if rules:
+        print(f"  rules that fired: {', '.join(rules)}")
+    if diagnosis["extraction_raised"]:
+        print(f"  extraction raised on: {', '.join(diagnosis['extraction_raised'])}")
+    print(
+        "  adopting any preprocessing in production is a backend-owned change "
+        "(see ai/BACKEND_HANDOFF.md); the flag changes no scores or exit codes"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -468,6 +585,17 @@ def main(argv: list[str] | None = None) -> int:
         help="compare this run against a stored baseline JSON report; the baseline "
         "is only read, never written or updated",
     )
+    parser.add_argument(
+        "--engine",
+        help="adapter engine for this run as module:attribute; used for labelled "
+        "corpus bake-offs. Defaults to the current backend pipeline",
+    )
+    parser.add_argument(
+        "--normalize",
+        action="store_true",
+        help="after the report(s), print the evidence-only preprocessing "
+        "diagnosis for known-gap cases (no effect on scores or exit codes)",
+    )
     parser.add_argument("--quiet", action="store_true", help="print one summary line only")
     parser.add_argument(
         "--check",
@@ -478,7 +606,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    reports = run_corpora(args.corpus or [CORPUS_PATH])
+    extractor, engine_label = resolve_engine(args.engine) if args.engine else (None, DEFAULT_ENGINE_LABEL)
+    reports = run_corpora(args.corpus or [CORPUS_PATH], extractor=extractor, engine=engine_label)
     report = reports[0] if len(reports) == 1 else None
     if args.json:
         payload: dict[str, Any]
@@ -503,6 +632,11 @@ def main(argv: list[str] | None = None) -> int:
             if index:
                 print("\n" + "=" * 80 + "\n")
             _print_human(current, show_banner=False)
+
+    if args.normalize:
+        for path in args.corpus or [CORPUS_PATH]:
+            print(f"corpus: {path}")
+            print_preprocessing_diagnosis(preprocessing_diagnosis(load_corpus(path), extractor))
 
     if args.compare:
         try:
