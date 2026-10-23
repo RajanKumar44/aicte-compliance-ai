@@ -18,8 +18,15 @@ targeting the research base gets **no checks at all** (PRs #2 and #4 have none).
 **Fix.** One line in the workflow plus the regression test. The change already exists on
 PR #5's head; this block extracts it as a standalone, minimal PR.
 
+**Which route to take now.** PR #5 already carries the trigger fix plus the workstream CI
+steps, so the simplest path is to **merge PR #5**. Use the standalone routes below only if
+you need CI to work on the base *before* #5 merges.
+
 **Two equivalent routes.** Route A applies the checked-in patch; route B recreates the commit.
-Both were executed on 2026-10-23 against `014403a`.
+Both were executed on 2026-10-23 against `014403a`. Note that both add
+`backend/tests/test_ci_configuration.py` (6 guard tests, the pre-workstream version), which
+PR #5 supersedes with an 8-test version — expect a trivial add/add conflict on that one file
+if you apply the patch and later merge #5.
 
 Route A — apply the verified patch (SHA-256
 `d3c9256e652e61dabf5553d61e9453c2269106c3249f396f4964769f31570716`):

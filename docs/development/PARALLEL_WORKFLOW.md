@@ -143,6 +143,40 @@ git worktree remove ../aicte-frontend
 (exit 128), and succeeds once the directory is clean. Do not add `--force` to silence
 that message — commit or stash first.
 
+## Launch verification (executed 2026-10-23)
+
+The three-workstream setup was created and exercised in a fresh clone, not just described.
+Two variants exist because the coordination tooling only lives on PR #5:
+
+**Variant 1 — from the research base `014403a`** (what policy says; no tooling yet):
+
+```bash
+git worktree add ../aicte-frontend -b feature/frontend-intake-fixtures origin/research/grounded-foundation
+git worktree add ../aicte-backend  -b feature/backend-response-model  origin/research/grounded-foundation
+git worktree add ../aicte-ai       -b feature/ai-ocr-eval-corpus     origin/research/grounded-foundation
+```
+
+Three directories, three branches, all at `014403a`, all clean. `python -m pytest -q` gives
+**54 passed, 1 skipped**; `ai/tests` does not exist there (exit 4); no fixtures and no
+`tools/check_ownership.py`. Nothing is broken — the base simply predates this work.
+
+**Variant 2 — stacked on PR #5's head** (everything available now):
+
+```bash
+git fetch origin 'refs/heads/arena/*:refs/remotes/origin/arena/*'
+git worktree add ../wt-frontend -b task/frontend-states origin/arena/97cf136c-aicte-compliance-ai
+git worktree add ../wt-backend  -b task/backend-errors  origin/arena/97cf136c-aicte-compliance-ai
+git worktree add ../wt-ai       -b task/ai-eval-extend  origin/arena/97cf136c-aicte-compliance-ai
+```
+
+Verified in each: suite `223 passed, 1 skipped`, `ai/tests` 17 passed, fixtures 9/9,
+evaluator runs, `ruff` clean.
+
+**Isolation was measured, not assumed.** Creating `frontend/_probe.json` in the frontend
+worktree left `git status` empty in the other two worktrees; the ownership checker accepted
+it as `frontend` and rejected the same path claimed by `backend`. The probe was deleted and
+the tree returned to clean.
+
 ## Contributor day-one checklist
 
 Run this before writing any code. It takes about two minutes and catches the three mistakes
@@ -166,7 +200,7 @@ python -m pytest -q                  # base: 54 passed, 1 skipped; after PR #5: 
   its own branch; the base suite gives `54 passed, 1 skipped`.
 - The base does **not** contain `WORKSTREAMS.md`, `docs/development/`, `frontend/`, `ai/` or
   `pyproject.toml` — those live on unmerged PR #5. Read them from the PR head before you
-  start (see [`STARTER_TASKS.md`](STARTER_TASKS.md#read-this-before-you-branch--the-coordination-docs-are-not-on-the-base-yet)).
+  start (see [`STARTER_TASKS.md`](STARTER_TASKS.md#read-this-before-you-branch)).
 - Do not create `WORKSTREAMS.md`, `docs/development/*`, `frontend/README.md` or
   `ai/README.md` on your branch; PR #4 and PR #5 own those paths.
 - Run the ownership check before your first commit and again before pushing:
