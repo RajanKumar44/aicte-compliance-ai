@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 
 import pytest
@@ -176,18 +177,20 @@ def test_corpus_categories_include_the_hard_scenarios():
 
 def test_corruption_slice_is_labelled_and_keeps_negative_cases():
     cases = load_corpus(CORRUPTION_CORPUS_PATH)
-    assert len(cases) == 24
+    assert len(cases) == 30
     assert {
-        case["category"] for case in cases
-    } == {
         "ocr-inserted-newline",
         "ocr-misread-label",
         "ocr-latin-hindi-mix",
         "ocr-column-order",
-    }
+    } <= {case["category"] for case in cases}
     negatives = [case for case in cases if not case["expected"] and not case.get("known_gap")]
     assert len(negatives) == 7
     assert len(negatives) >= len(cases) // 4
+    assert len([c for c in cases if c.get("known_gap")]) == 15
+    # Unicode decomposition must be present explicitly, not by accident of encoding.
+    decomposed = [case for case in cases if case["case_id"] == "CLH-007"]
+    assert all(unicodedata.normalize("NFC", case["text"]) != case["text"] for case in decomposed)
 
 
 def test_multiple_corpora_are_scored_as_separate_slices():
@@ -197,11 +200,11 @@ def test_multiple_corpora_are_scored_as_separate_slices():
         str(CORPUS_PATH.resolve().relative_to(REPO_ROOT)),
         str(CORRUPTION_CORPUS_PATH.resolve().relative_to(REPO_ROOT)),
     ]
-    assert [report["cases"] for report in reports] == [54, 12]
-    assert [report["exact_match_count"] for report in reports] == [54, 12]
+    assert [report["cases"] for report in reports] == [54, 15]
+    assert [report["exact_match_count"] for report in reports] == [54, 15]
     assert reports[0]["negative_false_positive_count"] == 0
     assert reports[1]["negative_false_positive_count"] == 0
-    assert len(reports[1]["known_gaps"]) == 12
+    assert len(reports[1]["known_gaps"]) == 15
 
 
 def test_corpus_contains_no_real_or_personal_data():
@@ -284,7 +287,7 @@ def test_cli_reports_repeated_corpora_without_merging_them(tmp_path: Path):
     assert completed.returncode == 0, completed.stderr
     report = json.loads(output.read_text(encoding="utf-8"))
     assert len(report["corpora"]) == 2
-    assert [slice_report["cases"] for slice_report in report["corpora"]] == [54, 12]
+    assert [slice_report["cases"] for slice_report in report["corpora"]] == [54, 15]
     assert completed.stdout.count("synthetic corpus") == 2
 
 
@@ -486,3 +489,157 @@ def test_check_mode_tolerates_errors_inside_documented_known_gaps(tmp_path: Path
         check=False,
     )
     assert completed.returncode == 0, completed.stderr
+
+
+# --- report hardening: fingerprint, coverage, per-case results -------------
+
+
+def test_report_records_corpus_fingerprint_and_category_coverage():
+    import hashlib
+
+    report = run(CORRUPTION_CORPUS_PATH)
+    assert report["corpus_sha256"] == hashlib.sha256(
+        CORRUPTION_CORPUS_PATH.read_bytes()
+    ).hexdigest()
+    coverage = report["by_category"]["ocr-misread-label"]
+    assert coverage == {"cases": 2, "exact_match_count": 2, "failing_cases": []}
+    ids = [case["case_id"] for case in report["case_results"]]
+    assert len(ids) == report["cases"] == len(set(ids))
+
+
+def test_case_results_agree_with_the_report_metrics():
+    report = run(CORRUPTION_CORPUS_PATH)
+    exact = sum(1 for case in report["case_results"] if case["exact_match"])
+    assert exact == report["exact_match_count"]
+    gap_ids = {gap["case_id"] for gap in report["known_gaps"]}
+    scored_ids = {case["case_id"] for case in report["case_results"]}
+    assert gap_ids.isdisjoint(scored_ids)
+    for case in report["case_results"]:
+        if case["exact_match"]:
+            assert case["error"] is None and case["extracted"] == case["expected"]
+
+
+# --- baseline comparison ---------------------------------------------------
+
+
+def test_compare_is_quiet_for_identical_runs_and_never_touches_the_baseline(tmp_path: Path):
+    baseline = tmp_path / "base.json"
+    current = tmp_path / "current.json"
+    for output in (baseline, current):
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT), "--json", str(output), "--quiet"],
+            cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+        )
+        assert completed.returncode == 0, completed.stderr
+    untouched = baseline.read_bytes()
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--compare", str(baseline), "--quiet"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+    )
+    assert completed.returncode == 0
+    assert "NEW REGRESSIONS" not in completed.stdout
+    assert baseline.read_bytes() == untouched
+
+
+def test_compare_flags_a_newly_failing_case_and_fails_the_run(tmp_path: Path):
+    corpus = tmp_path / "mini.jsonl"
+    stable = json.dumps({"case_id": "M-001", "category": "clean-label-en",
+                         "text": "Institution Name: Example College",
+                         "expected": {"institution_name": "Example College"}})
+    tightened = json.dumps({"case_id": "M-001", "category": "clean-label-en",
+                            "text": "Institution Name: Example College",
+                            "expected": {"institution_name": "Different College"}})
+    corpus.write_text(stable + "\n", encoding="utf-8")
+    baseline = tmp_path / "base.json"
+    first = subprocess.run(
+        [sys.executable, str(SCRIPT), "--corpus", str(corpus), "--json", str(baseline),
+         "--quiet"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+    )
+    assert first.returncode == 0, first.stderr
+    corpus.write_text(tightened + "\n", encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--corpus", str(corpus),
+         "--compare", str(baseline), "--quiet"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+    )
+    assert completed.returncode == 1
+    assert "NEW REGRESSIONS" in completed.stdout
+    assert "M-001" in completed.stdout
+    assert "corpus bytes changed" in completed.stdout
+    assert "nothing compared" not in completed.stdout
+
+
+def test_compare_reports_a_corpus_missing_from_the_baseline(tmp_path: Path):
+    corpus = tmp_path / "elsewhere.jsonl"
+    corpus.write_text(
+        json.dumps({"case_id": "M-001", "category": "clean-label-en",
+                    "text": "Institution Name: Example College",
+                    "expected": {"institution_name": "Example College"}}) + "\n",
+        encoding="utf-8",
+    )
+    # A real baseline that covers neither corpus the current run uses.
+    other = tmp_path / "unrelated-corpus.json"
+    unrelated = tmp_path / "unrelated-corpus.jsonl"
+    unrelated.write_text(
+        json.dumps({"case_id": "U-001", "category": "clean-label-en",
+                    "text": "Institution Name: Other College",
+                    "expected": {"institution_name": "Other College"}}) + "\n",
+        encoding="utf-8",
+    )
+    seeded = subprocess.run(
+        [sys.executable, str(SCRIPT), "--corpus", str(unrelated),
+         "--json", str(other), "--quiet"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+    )
+    assert seeded.returncode == 0, seeded.stderr
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--corpus", str(corpus),
+         "--compare", str(other), "--quiet"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+    )
+    assert completed.returncode == 0
+    assert "no matching corpus in the baseline" in completed.stdout
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [(None, "baseline not found"), ("{}", "baseline does not look like an evaluator report")],
+)
+def test_compare_rejects_missing_or_invalid_baseline_files(
+    tmp_path: Path, content: str | None, message: str
+):
+    corpus = tmp_path / "mini.jsonl"
+    corpus.write_text(
+        json.dumps({"case_id": "M-001", "category": "clean-label-en",
+                    "text": "Institution Name: Example College",
+                    "expected": {"institution_name": "Example College"}}) + "\n",
+        encoding="utf-8",
+    )
+    baseline = tmp_path / "baseline.json"
+    if content is not None:
+        baseline.write_text(content, encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--corpus", str(corpus),
+         "--compare", str(baseline), "--quiet"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+    )
+    assert completed.returncode == 1
+    assert message in completed.stderr
+
+
+def test_compare_matches_both_slices_of_a_multi_corpus_run(tmp_path: Path):
+    baseline = tmp_path / "multi.json"
+    first = subprocess.run(
+        [sys.executable, str(SCRIPT), "--json", str(baseline), "--quiet"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+    )
+    assert first.returncode == 0, first.stderr
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT),
+         "--compare", str(baseline), "--quiet"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert "no matching corpus" not in completed.stdout
+    assert "NEW REGRESSIONS" not in completed.stdout

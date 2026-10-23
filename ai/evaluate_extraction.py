@@ -32,6 +32,7 @@ extractor is *known* to get wrong today, so they are not counted as passes.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from collections import defaultdict
@@ -212,6 +213,39 @@ def score(results: list[CaseResult]) -> dict[str, Any]:
     }
 
 
+def category_summary(results: list[CaseResult]) -> dict[str, dict[str, Any]]:
+    """Per-corruption-category coverage over the scored cases only."""
+    summary: dict[str, dict[str, Any]] = {}
+    for result in sorted(results, key=lambda r: (r.category, r.case_id)):
+        entry = summary.setdefault(
+            result.category, {"cases": 0, "exact_match_count": 0, "failing_cases": []}
+        )
+        entry["cases"] += 1
+        if result.exact_match:
+            entry["exact_match_count"] += 1
+        else:
+            entry["failing_cases"].append(result.case_id)
+    return summary
+
+
+def failure_reason(detail: dict[str, Any]) -> str:
+    """One bounded line explaining why a scored case did not match."""
+    if detail.get("error"):
+        return f"raised {detail['error']}"
+    expected, extracted = detail["expected"], detail["extracted"]
+    diffs = [
+        f"{name}: expected {value!r}, got {extracted.get(name)!r}"
+        for name, value in expected.items()
+        if extracted.get(name) != value
+    ]
+    diffs += [
+        f"{name}: unexpected extraction {value!r}"
+        for name, value in extracted.items()
+        if name not in expected
+    ]
+    return "; ".join(diffs) or "case no longer matches its expected values"
+
+
 def run(corpus_path: Path = CORPUS_PATH) -> dict[str, Any]:
     cases = load_corpus(corpus_path)
     main_cases = [case for case in cases if not case.get("known_gap")]
@@ -230,11 +264,14 @@ def run(corpus_path: Path = CORPUS_PATH) -> dict[str, Any]:
         for result in gap_results
     ]
     report["banner"] = BANNER
+    report["by_category"] = category_summary(main_results)
+    report["case_results"] = [result.as_dict() for result in main_results]
     try:
         report["corpus"] = str(corpus_path.resolve().relative_to(REPO_ROOT))
     except ValueError:
         # --corpus may point outside the repository (tests, scratch experiments).
         report["corpus"] = str(corpus_path)
+    report["corpus_sha256"] = hashlib.sha256(corpus_path.read_bytes()).hexdigest()
     return report
 
 
@@ -264,6 +301,19 @@ def _print_human(report: dict[str, Any], *, show_banner: bool = True) -> None:
         f"case exact-match: {report['exact_match_count']}/{report['cases']} "
         f"({report['exact_match_rate']:.1%})"
     )
+    if report.get("corpus_sha256"):
+        print(f"corpus fingerprint (sha256): {report['corpus_sha256']}")
+    if report.get("by_category"):
+        print("per covered category (scored cases only):")
+        for category, coverage in report["by_category"].items():
+            print(
+                f"  {category}: {coverage['exact_match_count']}/{coverage['cases']} exact"
+                + (
+                    f" — failing: {', '.join(coverage['failing_cases'])}"
+                    if coverage["failing_cases"]
+                    else ""
+                )
+            )
     print(
         f"negative cases: {report['negative_cases']}, "
         f"with a spurious extraction: {report['negative_false_positive_count']}"
@@ -290,6 +340,112 @@ def _print_human(report: dict[str, Any], *, show_banner: bool = True) -> None:
             print(f"    {gap['note']}")
 
 
+def _normalise_baseline(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Accept either a single-corpus report or a multi-corpus {"corpora": [...]} file."""
+    if "corpora" in payload:
+        return list(payload["corpora"])
+    if "cases" in payload and "micro" in payload:
+        return [payload]
+    raise ValueError("baseline does not look like an evaluator report")
+
+
+def _match_baseline(
+    report: dict[str, Any], baselines: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Match by corpus identity: exact path first, then file name (tmp compare runs)."""
+    for candidate in baselines:
+        if candidate.get("corpus") == report["corpus"]:
+            return candidate
+    name = report["corpus"].rsplit("/", 1)[-1]
+    for candidate in baselines:
+        if str(candidate.get("corpus", "")).rsplit("/", 1)[-1] == name:
+            return candidate
+    return None
+
+
+def compare_to_baseline(
+    report: dict[str, Any], baseline: dict[str, Any] | None
+) -> list[str]:
+    """Human-readable, deterministic diff of a current report against a baseline.
+
+    Returns the summary lines. Exit-code decisions belong to the caller; the
+    baseline file is only ever read, never written or updated.
+    """
+    corpus = report["corpus"]
+    if baseline is None:
+        return [f"{corpus}: no matching corpus in the baseline; nothing compared"]
+    lines: list[str] = []
+    if baseline.get("corpus_sha256") != report.get("corpus_sha256"):
+        lines.append(
+            f"{corpus}: corpus bytes changed since the baseline (sha256 "
+            f"{str(baseline.get('corpus_sha256'))[-12:]} ... -> "
+            f"{str(report.get('corpus_sha256'))[-12:]} ...); case ids are still compared"
+        )
+    base_scored = {case["case_id"]: case for case in baseline.get("case_results", [])}
+    current_scored = {case["case_id"]: case for case in report.get("case_results", [])}
+    shared = sorted(set(base_scored) & set(current_scored))
+    only_baseline = sorted(set(base_scored) - set(current_scored))
+    only_current = sorted(set(current_scored) - set(base_scored))
+    for case_id in only_baseline:
+        lines.append(f"{corpus}: scored case {case_id} absent from the current run")
+    for case_id in only_current:
+        lines.append(f"{corpus}: new scored case {case_id} has no baseline result")
+
+    regressions = [
+        (case_id, failure_reason(current_scored[case_id]))
+        for case_id in shared
+        if base_scored[case_id]["exact_match"] and not current_scored[case_id]["exact_match"]
+    ]
+    fixed = [
+        case_id
+        for case_id in shared
+        if not base_scored[case_id]["exact_match"] and current_scored[case_id]["exact_match"]
+    ]
+    if regressions:
+        lines.append(f"{corpus}: NEW REGRESSIONS ({len(regressions)} scored case(s) now failing):")
+        lines.extend(f"  {case_id}: {reason}" for case_id, reason in regressions)
+    if fixed:
+        lines.append(f"{corpus}: newly passing scored cases: {', '.join(fixed)}")
+
+    base_gaps = {gap["case_id"]: gap for gap in baseline.get("known_gaps", [])}
+    current_gaps = {gap["case_id"]: gap for gap in report.get("known_gaps", [])}
+    for case_id in sorted(set(base_gaps) & set(current_gaps)):
+        if base_gaps[case_id]["still_failing"] and not current_gaps[case_id]["still_failing"]:
+            lines.append(
+                f"{corpus}: known gap {case_id} now passes — remove the known_gap flag"
+            )
+        elif not base_gaps[case_id]["still_failing"] and current_gaps[case_id]["still_failing"]:
+            lines.append(
+                f"{corpus}: known gap {case_id} regressed from passing to failing"
+            )
+    for case_id in sorted(set(base_gaps) - set(current_gaps)):
+        lines.append(f"{corpus}: documented known gap {case_id} no longer exists in the corpus")
+    for case_id in sorted(set(current_gaps) - set(base_gaps)):
+        lines.append(f"{corpus}: new documented known gap {case_id}")
+
+    negative_now = set(report.get("negative_false_positives", []))
+    negative_before = set(baseline.get("negative_false_positives", []))
+    if negative_now - negative_before:
+        lines.append(
+            f"{corpus}: NEW negative false positives: "
+            f"{sorted(negative_now - negative_before)}"
+        )
+    micro_current, micro_base = report["micro"], baseline.get("micro", {})
+    if micro_base and micro_current["f1"] != micro_base.get("f1"):
+        lines.append(
+            f"{corpus}: micro F1 {micro_base.get('f1'):.3f} -> {micro_current['f1']:.3f}"
+        )
+    return lines
+
+
+def baseline_regressions(lines: list[str]) -> bool:
+    """True when a comparison produced actionable, exit-worthy regressions."""
+    return any(
+        "NEW REGRESSIONS" in line or "NEW negative false positives" in line
+        for line in lines
+    )
+
+
 def run_corpora(corpus_paths: list[Path]) -> list[dict[str, Any]]:
     """Evaluate each corpus independently; never combine their denominators."""
     if not corpus_paths:
@@ -306,6 +462,12 @@ def main(argv: list[str] | None = None) -> int:
         help="corpus to evaluate; repeat to report independent slices",
     )
     parser.add_argument("--json", type=Path, help="also write the full report as JSON here")
+    parser.add_argument(
+        "--compare",
+        type=Path,
+        help="compare this run against a stored baseline JSON report; the baseline "
+        "is only read, never written or updated",
+    )
     parser.add_argument("--quiet", action="store_true", help="print one summary line only")
     parser.add_argument(
         "--check",
@@ -341,6 +503,26 @@ def main(argv: list[str] | None = None) -> int:
             if index:
                 print("\n" + "=" * 80 + "\n")
             _print_human(current, show_banner=False)
+
+    if args.compare:
+        try:
+            baseline_payload = json.loads(args.compare.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            raise SystemExit(f"error: baseline not found: {args.compare}")
+        except json.JSONDecodeError as error:
+            raise SystemExit(f"error: {args.compare}: {error}")
+        try:
+            baselines = _normalise_baseline(baseline_payload)
+        except ValueError as error:
+            raise SystemExit(f"error: {args.compare}: {error}")
+        diff_lines: list[str] = []
+        for current in reports:
+            baseline = _match_baseline(current, baselines)
+            diff_lines.extend(compare_to_baseline(current, baseline))
+        for line in diff_lines:
+            print(line)
+        if baseline_regressions(diff_lines):
+            return 1
 
     if args.check:
         failed = False
