@@ -808,12 +808,17 @@ class OCREngine(ABC):
         Raises
         ------
         ValueError
-            If *hold_out_fraction* is outside (0, 1) or there are fewer
-            than 2 cases to split.
+            If *hold_out_fraction* is outside (0, 1), if there are fewer
+            than 2 cases, if input types are invalid, or if all cases belong
+            to a single ground-truth group (making a disjoint split impossible).
         """
-        if not 0.0 < hold_out_fraction < 1.0:
+        if not isinstance(cases, list):
+            raise ValueError(f"cases must be a list, got {type(cases).__name__}")
+        if any(not isinstance(c, dict) for c in cases):
+            raise ValueError("all cases must be dictionaries")
+        if not isinstance(hold_out_fraction, (int, float)) or not (0.0 < hold_out_fraction < 1.0):
             raise ValueError(
-                f"hold_out_fraction must be between 0 and 1 exclusive, "
+                f"hold_out_fraction must be a float between 0 and 1 exclusive, "
                 f"got {hold_out_fraction}"
             )
         if len(cases) < 2:
@@ -829,6 +834,12 @@ class OCREngine(ABC):
             key = json.dumps(gt, sort_keys=True, ensure_ascii=False) if isinstance(gt, dict) else str(c.get("case_id"))
             groups.setdefault(key, []).append(c)
 
+        if len(groups) < 2:
+            raise ValueError(
+                "cannot split cases into disjoint partitions: all cases belong to a single "
+                "ground-truth reference group; a disjoint split preserving group isolation is impossible"
+            )
+
         rng = random.Random(seed)
         group_keys = list(groups.keys())
         rng.shuffle(group_keys)
@@ -837,18 +848,14 @@ class OCREngine(ABC):
         held_out: List[Dict[str, Any]] = []
         development: List[Dict[str, Any]] = []
 
-        for k in group_keys:
+        # Allocate groups atomically: never split an individual group across partitions
+        for idx, k in enumerate(group_keys):
             grp = groups[k]
-            if len(held_out) < n_hold:
+            # Allocate to held_out if below target count, reserving at least one group for development
+            if len(held_out) < n_hold and idx < len(group_keys) - 1:
                 held_out.extend(grp)
             else:
                 development.extend(grp)
-
-        # Ensure neither partition is left completely empty when len(cases) >= 2
-        if not development and len(held_out) > 1:
-            development.append(held_out.pop())
-        elif not held_out and len(development) > 1:
-            held_out.append(development.pop())
 
         return development, held_out
 

@@ -789,6 +789,77 @@ class TestHeldOutPartitioning:
         with pytest.raises(ValueError, match="at least 2 cases"):
             OCREngine.split_into_held_out([], 0.5, seed=42)
 
+    def test_one_ground_truth_group_fails_loudly_without_splitting(self):
+        """Edge case: all cases belong to a single ground-truth group.
+        The split must fail loudly with ValueError rather than silently splitting the group."""
+        shared_gt = {"institution_name": "Alpha College", "cert": "001"}
+        cases = [
+            {"case_id": f"c_{i}", "text": f"text_{i}", "ground_truth": shared_gt}
+            for i in range(5)
+        ]
+        with pytest.raises(ValueError, match="single ground-truth reference group"):
+            OCREngine.split_into_held_out(cases, 0.2, seed=42)
+
+    def test_group_larger_than_requested_holdout_size(self):
+        """A group larger than requested holdout size must stay whole and not be split."""
+        gt_large = {"institution_name": "Large Group", "cert": "LG-001"}
+        gt_small = {"institution_name": "Small Group", "cert": "SG-001"}
+
+        cases = [
+            {"case_id": f"lg_{i}", "text": f"lg_text_{i}", "ground_truth": gt_large}
+            for i in range(8)
+        ] + [
+            {"case_id": f"sg_{i}", "text": f"sg_text_{i}", "ground_truth": gt_small}
+            for i in range(2)
+        ]
+        # Total cases = 10, holdout fraction = 0.2 -> target holdout size = 2
+        # If the large group (size 8) is allocated, it must NOT be split
+        dev, held = OCREngine.split_into_held_out(cases, 0.2, seed=42)
+
+        # Integrity check: zero leakage
+        warnings = OCREngine.check_partition_integrity(dev, held)
+        assert warnings == []
+
+        # Confirm all cases of each group stay in exactly one partition
+        dev_ids = {c["case_id"] for c in dev}
+        held_ids = {c["case_id"] for c in held}
+        lg_ids = {f"lg_{i}" for i in range(8)}
+        sg_ids = {f"sg_{i}" for i in range(2)}
+
+        assert lg_ids.issubset(dev_ids) or lg_ids.issubset(held_ids)
+        assert sg_ids.issubset(dev_ids) or sg_ids.issubset(held_ids)
+
+    def test_multiple_distinct_groups_deterministic_and_no_leakage(self):
+        """Multiple distinct groups split deterministically with no cross-partition leakage."""
+        cases = []
+        for grp_idx in range(5):
+            gt = {"group_id": f"G_{grp_idx}", "name": f"College {grp_idx}"}
+            for v_idx in range(3):
+                cases.append({
+                    "case_id": f"c_{grp_idx}_{v_idx}",
+                    "text": f"Document variant {v_idx} of group {grp_idx}",
+                    "ground_truth": gt,
+                })
+
+        dev1, held1 = OCREngine.split_into_held_out(cases, 0.3, seed=123)
+        dev2, held2 = OCREngine.split_into_held_out(cases, 0.3, seed=123)
+        assert dev1 == dev2
+        assert held1 == held2
+
+        warnings = OCREngine.check_partition_integrity(dev1, held1)
+        assert warnings == []
+
+    def test_malformed_inputs_rejected(self):
+        """Invalid types and inputs are strictly rejected."""
+        with pytest.raises(ValueError, match="cases must be a list"):
+            OCREngine.split_into_held_out("not_a_list", 0.5)  # type: ignore[arg-type]
+
+        with pytest.raises(ValueError, match="must be dictionaries"):
+            OCREngine.split_into_held_out(["not_a_dict", "another"], 0.5)  # type: ignore[list-item]
+
+        with pytest.raises(ValueError, match="hold_out_fraction must be a float"):
+            OCREngine.split_into_held_out([{"case_id": "a"}, {"case_id": "b"}], "invalid_frac")  # type: ignore[arg-type]
+
 
 # ---------------------------------------------------------------------------
 # Partition integrity
