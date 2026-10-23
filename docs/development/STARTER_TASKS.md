@@ -1,280 +1,176 @@
-# Starter tasks — one per workstream
+# Starter and follow-up tasks — one per workstream
 
-Three small, independently reviewable first tasks. Each is sized for one branch and one PR,
-and produces something testable. None of them is started.
+**Status:** the three original starter tasks (A1, B1, C1) are **implemented** on this
+branch (PR #5) as reference implementations, so a contributor does not start from a blank
+page and no two people write the same files. Their next tasks are A2, B2, C2 below.
 
-**Every command below was executed against `origin/research/grounded-foundation` @ `014403a`
-on 2026-10-23** (Linux, Python 3.11.2, fresh clone + fresh worktrees). Results are quoted
-inline; the summary table is at the end. Anything not marked verified was not run.
+Every command here was executed on 2026-10-23 against the branch that contains the code it
+references. Where a command needs PR #5 to be merged first, that is stated.
 
-All three PRs target `research/grounded-foundation` and none depends on another, so they can
-run in parallel. Ownership, shared files and prohibitions: [`../../WORKSTREAMS.md`](../../WORKSTREAMS.md).
-
----
-
-## Read this before you branch — the coordination docs are not on the base yet
-
-The research base (`014403a`) contains **none** of these files, because they live on
-unmerged PR #5 (and three of them also on PR #4):
-
-```
-WORKSTREAMS.md
-docs/development/API_CONTRACT.md
-docs/development/STARTER_TASKS.md
-docs/development/INTEGRATION_CHECKLIST.md
-docs/development/PARALLEL_WORKFLOW.md
-docs/development/RECOVERY_AND_BACKUP.md
-docs/development/REPOSITORY_STATE.md
-docs/development/PR_RECONCILIATION.md
-frontend/README.md · ai/README.md · backend/WORKSTREAM.md
-pyproject.toml · .python-version · .github/pull_request_template.md · .github/CODEOWNERS
-```
-
-Read them at
-`https://github.com/rajaryan1111/aicte-compliance-ai/tree/arena/97cf136c-aicte-compliance-ai`
-(the PR #5 head) or locally without checking them out:
-
-```bash
-git fetch origin 'refs/heads/arena/97cf136c-aicte-compliance-ai:refs/remotes/origin/arena/97cf136c-aicte-compliance-ai'
-git show origin/arena/97cf136c-aicte-compliance-ai:docs/development/API_CONTRACT.md | less
-```
-
-**Do not create those paths yourself.** PR #4 and PR #5 create them; if you add them on your
-branch too, the merge produces add/add conflicts on files whose content you do not own. The
-three task file lists below are already written to avoid that collision.
-
-Recommended order: land PR #5 (or #4 then #5) first, then branch. If you must start earlier,
-branch from the base anyway and follow the "if this file does not exist" rule in your task —
-your PR then stacks behind #5 and must say so.
+Ownership, shared files and prohibitions: [`../../WORKSTREAMS.md`](../../WORKSTREAMS.md).
+Setup and worktrees: [`PARALLEL_WORKFLOW.md`](PARALLEL_WORKFLOW.md).
 
 ---
 
-## A1 — Contract fixtures and UI state matrix (workstream A / `frontend/`)
+## What is already built (do not rebuild these)
 
-**Why.** The frontend cannot start without knowing exactly what the API returns, and the
-repository has no captured examples. Guessing a response shape is how a frontend invents an
-endpoint. This task produces the fixtures every later UI task is built and tested against and
-needs no framework decision.
+| Task | Where it lives | How to check it |
+|---|---|---|
+| **A1** frontend fixtures + state matrix + checker | `frontend/fixtures/*.json` (9 cases, captured from the API), `frontend/tools/capture_fixtures.py`, `frontend/tools/verify_fixtures.py`, `frontend/STATE_MATRIX.md` | `python frontend/tools/verify_fixtures.py` → `fixtures OK: 9 case(s)` |
+| **B1** response models + contract tests | `backend/app/main.py` (`HealthResponse`, `ValidationResponse`, `Finding`), `backend/tests/test_api_contract.py` (16 tests) | `python -m pytest -q backend/tests/test_api_contract.py` |
+| **C1** synthetic evaluation corpus + scorer | `ai/corpus/extraction_cases.jsonl` (56 cases), `ai/evaluate_extraction.py`, `ai/tests/test_evaluate.py` (17 tests), `ai/EVALUATION.md` | `python ai/evaluate_extraction.py --quiet` |
 
-**Files (all new, all inside `frontend/` — none collide with PR #4's `frontend/README.md`)**
+B1 did not change the emitted JSON: the A1 fixtures were captured **before** the models
+existed and still replay byte-identically. Keep that property — if you change a response,
+re-capture the fixtures in the same PR and update `docs/development/API_CONTRACT.md`.
 
-- `frontend/fixtures/validate-ok.json` — a captured 200 body, `preliminary_checks_passed`.
-- `frontend/fixtures/validate-missing.json` — a captured 200 body with `MISSING_DOCUMENT`.
-- `frontend/fixtures/validate-expired.json` — a captured 200 body with `DOCUMENT_EXPIRED`.
-- `frontend/fixtures/validate-422.json` — a captured framework validation error body.
-- `frontend/STATE_MATRIX.md` — table: UI state → endpoint → fields consumed → what the screen
-  must not claim.
-- `frontend/tools/verify_fixtures.py` — stdlib-only checker (see acceptance criteria).
+## Read this before you branch
 
-**Capture the bodies — run this, do not hand-write them.** ✅ verified on the base:
+The research base (`014403a`) contains **none** of the coordination files, the
+`frontend/fixtures/`, the `ai/corpus/` or `pyproject.toml`. They exist only on PR #5. So:
+
+- **Preferred:** wait for PR #5 to be merged, then branch from `research/grounded-foundation`.
+- **If you cannot wait:** branch from PR #5's head and declare the dependency in your PR
+  description:
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate
-python -m pip install -r backend/requirements-dev.txt
-
-python - <<'PY'
-import json
-from fastapi.testclient import TestClient
-from backend.app.main import app
-
-c = TestClient(app)
-base = {
-    "institution_id": "SYNTH-INST-001",
-    "application_type": "eoa",
-    "required_documents": ["aicte_approval", "mandatory_disclosure"],
-}
-cases = {
-    "validate-ok": {**base, "submitted_documents": ["aicte_approval", "mandatory_disclosure"]},
-    "validate-missing": {**base, "submitted_documents": ["aicte_approval"]},
-    "validate-expired": {**base, "submitted_documents": ["aicte_approval", "mandatory_disclosure"],
-                         "expiry_dates": {"aicte_approval": "2020-01-01"}},
-}
-for name, payload in cases.items():
-    body = c.post("/api/v1/validate", json=payload).json()
-    body.pop("checked_at", None)          # timestamp would make the fixture non-deterministic
-    print(name, "->", sorted(body))
-PY
+git fetch origin 'refs/heads/arena/*:refs/remotes/origin/arena/*'
+git worktree add ../aicte-frontend -b feature/frontend-error-mapping origin/arena/97cf136c-aicte-compliance-ai
 ```
 
-Observed on the base (first run of this exact script):
+- **Never** create `WORKSTREAMS.md`, `docs/development/*`, `frontend/README.md` or
+  `ai/README.md` on your branch: PR #4 and PR #5 own those paths and you would create an
+  add/add conflict.
 
-| Case | HTTP | `status` | Findings |
-|---|---|---|---|
-| ok | 200 | `preliminary_checks_passed` | none |
-| missing | 200 | `attention_required` | `MISSING_DOCUMENT` for `mandatory_disclosure` |
-| expired | 200 | `attention_required` | `DOCUMENT_EXPIRED` for `aicte_approval`, evidence carries `expiry_date` and `evaluation_date` |
+---
 
-The 422 case is the framework envelope only — `{"detail": [{...}]}`, with no project fields:
+## A2 — Error mapping and state coverage (workstream A / `frontend/`)
 
-```python
-c.post("/api/v1/validate", json={"institution_id": "x"}).json()   # -> {"detail": [...]}
-```
+**Why.** The API rejects bad input with a three-shape `422` envelope (`missing`,
+`literal_error`, `value_error`). A UI that parses `detail[].msg` for logic breaks on the next
+wording change. This task turns the envelope into a tested, framework-free mapping, and adds
+a checker that keeps `STATE_MATRIX.md` honest as the UI grows.
 
-A wrong payload shape really does return 422 (this was reproduced: an invented
-`{"institution": {...}, "documents": [...]}` body produced
-`['body','institution_id'] missing` and `['body','application_type'] missing`). Do not invent
-fields — the request model is documented in `API_CONTRACT.md`.
+**Files (all new, inside `frontend/`)**
+
+- `frontend/tools/map_errors.py` — pure function
+  `map_validation_errors(body: dict) -> dict[str, str]` mapping `detail[].loc[-1]` to a
+  message, with an `"_unknown"` bucket for unrecognised `loc`. No framework, no imports
+  outside the standard library.
+- `frontend/tests/test_map_errors.py` — pytest cases built from the real fixtures
+  (`validate-422-*.json`), including an unknown-`loc` body and a body with no `detail`.
+- `frontend/tools/check_state_matrix.py` — asserts every row of `STATE_MATRIX.md` names
+  either an existing fixture file or the literal phrase `none` / `no HTTP OCR endpoint`.
+- `frontend/STATE_MATRIX.md` — add the A2 rows if you introduce a new state.
 
 **Acceptance criteria**
 
-- Every fixture contains only keys the contract marks `implemented`; no `proposed` or
-  `blocked` field appears, and no field appears that the API did not return.
-- `checked_at` is removed or replaced with a fixed value; fixtures must be byte-stable.
-- `python frontend/tools/verify_fixtures.py` exits 0, and fails if a fixture gains an unknown
-  top-level key, drops `validation_scope`, or contains an approval/compliance verdict.
-- `STATE_MATRIX.md` covers: initial, loading, empty checklist, validation errors, missing
-  document, expired document, server error, network failure.
-- No framework, bundler, `package.json` or UI code — that needs an owner decision.
-- No real institution, person or document.
+- Mapping never raises on a malformed body; unknown shapes land in `_unknown`.
+- Messages come from `detail[].msg` **verbatim** — do not invent friendlier text that
+  could contradict the server.
+- `python -m pytest -q frontend/tests` passes (run explicitly; pytest's `testpaths` only
+  covers `backend/tests`).
+- `python frontend/tools/check_state_matrix.py` exits 0.
+- No framework, no bundler, no `package.json`.
 
-**Dependencies.** None to start. The UI itself is blocked on the framework decision.
+**Dependencies.** Fixtures (A1) — present on PR #5. Wiring `frontend/tests` into CI is a
+shared-file change (`.github/**`): propose it as a separate integration PR, do not edit the
+workflow yourself.
 
-**Prohibited.** Anything outside `frontend/`; creating `frontend/README.md` (PR #4 owns it);
-any field the contract marks blocked; presenting the deterministic checklist result as a
-compliance decision.
+**Prohibited.** Anything outside `frontend/`; parsing `detail[].msg` to decide *behaviour*
+(map it for display only); treating a `422` as a compliance outcome.
 
-**Ownership check.** `python tools/check_ownership.py --workstream frontend --base origin/research/grounded-foundation`
-must exit 0 (every path under `frontend/`).
-
-**PR base / order.** `research/grounded-foundation`, independent, can open first.
+**PR base / order.** `research/grounded-foundation` after PR #5 lands, else stacked on #5.
 
 ---
 
-## B1 — Pin the `POST /api/v1/validate` response contract (workstream B / `backend/`)
+## B2 — Explicit error envelope without changing the wire format (workstream B / `backend/`)
 
-**Why.** The response is asserted by tests but not defined by a response model, so an
-accidental field rename could silently break the frontend. This is a behaviour-preserving
-change that makes the contract explicit and testable.
+**Why.** Error bodies are currently FastAPI's default `{"detail": [...]}`. The contract marks
+a stable application envelope as **proposed**, and the frontend must treat 4xx bodies as
+opaque until it exists. This task makes the 422 shape explicit and testable — documenting it
+precisely — without inventing a new envelope consumers do not expect.
 
 **Files**
 
-- `backend/app/main.py` — add Pydantic response models for `/health` and `/api/v1/validate`;
-  keep the emitted JSON byte-identical.
-- `backend/tests/test_api_contract.py` (new) — assert the exact top-level key set,
-  `validation_scope`, `source`, `status` values and the `findings[]` shape.
-- `docs/development/API_CONTRACT.md` — **only if it already exists on your branch** (i.e. PR
-  #5 has landed). On the base it does not; do not create it, because PR #5 owns that file.
-  In that case record the contract in the test docstring and in your PR description instead.
+- `backend/tests/test_validation_errors.py` (new) — one test per rejection rule
+  (`institution_id` blank/too long, unknown `application_type`, empty or duplicate
+  `required_documents`, blank `submitted_documents`, duplicate expiry keys, malformed
+  `expiry_dates` date), asserting status `422`, `list(body) == ["detail"]`, and the
+  `type`/`loc` for each. Plus a test that a *valid* request never returns 4xx.
+- `docs/development/API_CONTRACT.md` — extend the error table **only if it already exists on
+  your branch** (PR #5 owns that file; on the base, record the finding in your PR instead).
+- Do **not** add middleware or a custom exception handler in this task: a new envelope is a
+  breaking contract change that needs agreement from A and C first.
 
 **Acceptance criteria**
 
-- All existing tests pass unmodified (base: **54 passed, 1 skipped**; after PR #5:
-  **205 passed, 1 skipped** on the PR #5 head at the time of writing — take the number from
-your own run, it grows as that PR gains tests). No response body changes.
-- A test fails if a top-level key is renamed, removed or added without updating the contract.
-- No new endpoint, auth, persistence, upload route or rule activation.
-- Lint is clean **for the files you touched**:
-  `ruff check backend/app/main.py backend/tests/test_api_contract.py`.
-  Do not lint the whole tree on the base — see the note below.
+- Existing tests pass unmodified (currently `223 passed, 1 skipped`).
+- Every rejection rule is covered by at least one test; none is asserted from memory of
+  the source.
+- No change to any 200 response body (`python frontend/tools/verify_fixtures.py` still OK).
+- No new dependency, no auth, no persistence, no upload route, no rule activation.
 
-**Known base-branch lint defect (not yours).** ✅ verified:
+**Dependencies.** None. Pairs with A2 (same envelope, opposite side).
 
-```console
-$ ruff check backend/
-F401 [*] `typing.Sequence` imported but unused
-  --> backend/app/ocr_adapter.py:12:30
-Found 1 error.            # exit 1
-```
-
-That file is fixed on PR #5. Do not "fix" it here (it is OCR code, outside this task and
-owned by another change); scope your lint command to your own files, or rebase once #5 lands.
-
-`ruff` is also **not installed** by the base's `backend/requirements-dev.txt`. Until PR #5
-lands, install it explicitly (local only, no dependency change):
-
-```bash
-python -m pip install ruff==0.13.2
-```
-
-**Ownership check.** `python tools/check_ownership.py --workstream backend --base origin/research/grounded-foundation`
-must exit 0. If it reports `docs/development/API_CONTRACT.md`, you touched a shared file: either
-drop that line (when the file is absent from your base) or declare it and get review.
-
-**Dependencies.** None. Do this before the frontend's first real UI PR so the shape is frozen.
-
-**Prohibited.** `.github/`; dependency changes; `backend/app/ocr_*.py`; the error envelope
-(a separate `proposed` contract change); any auth or persistence claim.
-
-**PR base / order.** `research/grounded-foundation`, independent.
+**Prohibited.** `backend/app/ocr_*.py`; `.github/**`; dependency changes; replacing the 422
+envelope.
 
 ---
 
-## C1 — Labelled synthetic evaluation corpus and scorer (workstream C / `ai/`)
+## C2 — Second corpus slice: realistic OCR corruption (workstream C / `ai/`)
 
-**Why.** The repository has 10 regression fixtures and **no** measurement. Without a separate
-labelled corpus and a scoring method, every accuracy statement stays unsupported. This task
-builds the measurement machinery against synthetic data and states its limits in its own
-output.
+**Why.** The current corpus is label-level text. The extractor's real risk is the text an
+OCR engine actually produces: misread characters, inserted newlines mid-label, missing
+colons, language mixing, and columns flattened in the wrong order. Those are not covered.
 
-**Files (all new, inside `ai/`; none collide with PR #4's `ai/README.md`)**
+**Files (all new or additive, inside `ai/`)**
 
-- `ai/corpus/extraction_cases.jsonl` — ≥ 40 synthetic cases covering `institution_name`,
-  `certificate_number`, `issue_date`, `valid_until`, `academic_year`, including negative cases
-  that must stay unresolved.
-- `ai/evaluate_extraction.py` — imports `extract_institution_fields` **read-only** from
-  `backend.app.ocr_pipeline`, reports per-field precision/recall and false positives on
-  negative cases, and prints the synthetic-only notice.
-- `ai/tests/test_evaluate.py` — scorer arithmetic on hand-checked cases + notice assertion.
-- `ai/EVALUATION.md` — how to run it, the method, and the limits. (Do **not** edit
-  `ai/README.md` unless it already exists on your branch; PR #4 owns its creation.)
-
-**Run the tests** — ✅ verified on the base, from the repository root:
-
-```bash
-python -m pytest -q ai/tests        # confirmed: collects and imports backend read-only
-```
-
-`python -m pytest -q` (whole tree) does not cover `ai/tests` on the base because there is no
-pytest configuration there; after PR #5 lands, `testpaths` still covers only `backend/tests`.
-Use the explicit path until a shared-config change is separately reviewed and approved by B.
+- `ai/corpus/ocr_corruption_cases.jsonl` — 20–30 cases in the existing schema, category
+  values `ocr-inserted-newline`, `ocr-misread-label`, `ocr-latin-hindi-mix`,
+  `ocr-column-order`. Add `"known_gap": true` for any behaviour you document as broken.
+- `ai/evaluate_extraction.py` — accept `--corpus` more than once (or a directory) so the new
+  slice is reported **separately** from the label corpus; never merge the two scores.
+- `ai/tests/test_evaluate.py` — tests for the multi-corpus behavior.
+- `ai/EVALUATION.md` — record the new slice, its categories and its limitations.
 
 **Acceptance criteria**
 
-- `python ai/evaluate_extraction.py` prints a per-field table plus
-  "synthetic corpus, not a real-world benchmark, no production accuracy claim".
-- No real institution, person, certificate number or scanned document.
-- Negative cases exist, and their false-positive count is printed, not omitted.
-- A failing case is reported as a failure; nothing is dropped from the denominator.
-- Runs with `backend/requirements-dev.txt` alone — no ML/OCR dependency added.
+- New cases are labelled with the *behaviour that is correct*, not with the current output:
+  if the extractor gets it wrong and you believe it should be right, mark `known_gap`.
+- Negative cases remain a real proportion; the report keeps separating slices.
+- `python -m pytest -q ai/tests` passes; the banner still appears on every run.
+- Still no real document, no engine dependency, no accuracy claim.
 
-**Ownership check.** `python tools/check_ownership.py --workstream ai --base origin/research/grounded-foundation`
-must exit 0. It is expected to flag any `backend/**` path — that is the point: do not edit
-backend OCR code in this task.
+**Dependencies.** C1 (present on PR #5). No relation to A2/B2.
 
-**Dependencies.** None to start. Shared-config change (`pyproject.toml`) is out of scope here.
-
-**Prohibited.** Editing `backend/`; moving or duplicating the OCR pipeline; real documents;
-any production accuracy claim; adding a dependency.
-
-**PR base / order.** `research/grounded-foundation`, independent.
+**Prohibited.** Editing `backend/`; moving the OCR module; adding an OCR dependency; any
+real or scanned document; quoting a percentage anywhere.
 
 ---
 
-## Verified against the research base
+## Verified commands (2026-10-23)
 
-Executed 2026-10-23 in a fresh clone with three worktrees
-(`task/frontend-fixtures`, `task/backend-response-model`, `task/ai-eval-corpus`), all at
-`014403a`, each with `git status` clean.
+Executed in a fresh clone with three worktrees, on the PR #5 head (`4deeb36`) and on the
+research base (`014403a`) for comparison.
 
-| Command | Base result |
-|---|---|
-| `pip install -r backend/requirements-dev.txt` + `pip check` | install OK, `No broken requirements found` |
-| `python -m pytest -q` | **54 passed, 1 skipped** |
-| `python -m pytest -q backend/tests/test_validation.py backend/tests/test_validation_security.py` | **17 passed** |
-| `ruff check backend/` | **1 pre-existing error** (`F401`, `ocr_adapter.py`) — fixed on PR #5 |
-| `ruff check backend/` after `pip install ruff==0.13.2` | runs; same single pre-existing error |
-| `python -m pytest -q ai/tests` (with a scratch test importing the extractor) | **1 passed** |
-| `python -m compileall -q backend/app backend/tests` | exit 0 |
-| fixture capture script above | 200/200/200 with the expected findings; 422 envelope as described |
-| `git worktree add … -b <branch> origin/research/grounded-foundation` ×3 | 3 worktrees, 3 branches, all `014403a` |
+| Command | PR #5 head | Research base `014403a` |
+|---|---|---|
+| `pip install -r backend/requirements-dev.txt` + `pip check` | OK | OK |
+| `python -m pytest -q` | **223 passed, 1 skipped** | **54 passed, 1 skipped** |
+| `python -m pytest -q ai/tests` | **17 passed** | exit 4, `ai/tests` does not exist |
+| `python frontend/tools/verify_fixtures.py` | `fixtures OK: 9 case(s)` | file does not exist |
+| `python ai/evaluate_extraction.py --quiet` | `54 cases, 54/54, F1 1.000, 0 spurious, 2 known gaps` | file does not exist |
+| `ruff check backend/ ai/ frontend/ tools/` | clean | `ruff` not installed; 1 pre-existing `F401` |
+| `python -m compileall -q backend/app backend/tests` | exit 0 | exit 0 |
+| three `git worktree add … -b …` | 3 branches, 3 directories, all clean | same |
 
-**On the base you get 54 tests, not 187.** The extra tests live on PR #5. Quote the number you
-actually saw.
+**On the base you get 54 tests, not 223.** Quote the number you actually saw.
 
 ## What these tasks deliberately do not do
 
 - No framework, database, identity provider, storage vendor or hosting decision.
 - No authentication, authorization, tenancy, upload, persistence or audit work.
 - No regulatory rule activation and no OCR accuracy claim.
-- No edits to `WORKSTREAMS.md`, `docs/development/*` (other than the one contract line in B1,
-  and only when that file already exists), `.github/*` or root configuration.
+- No edits to `WORKSTREAMS.md`, `docs/development/*`, `.github/*` or root configuration;
+  those are shared surfaces and need a separate proposal/integration PR.

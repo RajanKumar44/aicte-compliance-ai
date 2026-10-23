@@ -77,6 +77,63 @@ and deletion controls, and official-source verification of applicable AICTE docu
 and amendments are implemented and security-tested. Testing uses synthetic data only;
 no real institutional or personal documents are stored.
 
+## Quick start and a five-minute demo
+
+Verified on a clean clone (Linux, Python 3.11.2; CI uses 3.12):
+
+```bash
+python -m venv .venv && . .venv/bin/activate
+python -m pip install -r backend/requirements-dev.txt
+
+python -m pytest -q                                    # 223 passed, 1 skipped
+python -m pytest -q ai/tests                           # 17 passed
+python frontend/tools/verify_fixtures.py               # fixtures OK: 9 case(s)
+python ai/evaluate_extraction.py                       # synthetic report + caveat banner
+ruff check backend/ ai/ frontend/ tools/
+```
+
+Start the API and exercise it:
+
+```bash
+python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+```
+
+```bash
+curl -s localhost:8000/health
+# {"status":"ok","service":"aicte-compliance-assistant"}
+
+curl -s localhost:8000/api/v1/validate -H 'content-type: application/json' -d '{
+  "institution_id": "SYNTH-INST-001",
+  "application_type": "eoa",
+  "required_documents": ["aicte_approval", "mandatory_disclosure"],
+  "submitted_documents": ["aicte_approval"],
+  "expiry_dates": {"aicte_approval": "2020-01-01"}
+}'
+```
+
+That returns `status: attention_required` with two findings — one `MISSING_DOCUMENT` for
+`mandatory_disclosure`, one `DOCUMENT_EXPIRED` for `aicte_approval` carrying the supplied
+expiry date and the server's evaluation date — plus
+`validation_scope: caller_supplied_checklist_only` and a `notice` explaining that this is
+not a compliance decision. Removing the expired entry, or supplying both documents with no
+expiry dates, returns `preliminary_checks_passed`. The full set of request/response shapes,
+including the three `422` error shapes, is captured in `frontend/fixtures/`.
+
+**What the demo proves:** the checklist comparison, the date comparison, the evidence
+payloads and the advisory wording. **What it does not prove:** that any AICTE requirement
+is satisfied, that a document is authentic, or that OCR is accurate.
+
+## Project status at a glance
+
+| Area | State |
+|---|---|
+| Checklist validation API | **implemented**, tested, synthetic data only |
+| Advisory OCR pipeline (Python, no HTTP route) | **implemented**, unit + synthetic engine smoke test |
+| Frontend | **no application**; fixtures, a 13-state matrix and a fixture checker exist |
+| AI/OCR evaluation | **synthetic corpus + scorer implemented**; no real-document benchmark |
+| Rule catalogue | **gate implemented, no rule defined or active, no evaluator** |
+| Auth, RBAC, tenancy, storage, upload, audit, retention | **not implemented** (production blockers) |
+
 ## Requirements and local setup
 
 - **Python 3.11+** (the code uses `StrEnum`). CI runs **3.12**; `.python-version` pins
@@ -129,19 +186,34 @@ python -m pip install -r backend/requirements-dev.txt -r backend/requirements-oc
 python -m pytest -q backend/tests/test_ocr_engine_integration.py
 ```
 
-The `Backend tests` workflow runs the same suite on `main` and
-`research/grounded-foundation`, with a separate job for the optional Tesseract smoke
-test. Pull requests targeting `research/grounded-foundation` are also covered once the
-workflow change in PR #3 or PR #5 merges; before that, only PRs targeting `main`
-trigger it. Passing synthetic tests does not establish OCR accuracy, regulatory
-correctness, or production readiness.
+The `Backend tests` workflow runs three checks in the `backend-tests` job: the pytest
+suite, the AI extraction evaluation tests (`python -m pytest -q ai/tests`) and the frontend
+fixture verification (`python frontend/tools/verify_fixtures.py`). A separate
+`optional-ocr-integration` job installs Tesseract and runs the engine smoke test.
+
+**Known CI gap on the integration base.** `research/grounded-foundation` still filters
+`pull_request` to `["main"]`, so PRs opened against that branch get **no checks** — PRs #2
+and #4 have none. The one-line fix and its regression test exist on this branch and as a
+tested patch in `docs/development/patches/ci-pr-trigger.patch`; it takes effect only once
+it is merged into the base. Passing synthetic tests does not establish OCR accuracy,
+regulatory correctness, or production readiness.
 
 ## Working in this repository
 
-`docs/integration/workstream-contracts.md` records the frontend/backend/AI ownership
-proposal, the implemented versus proposed API/OCR/rule contracts, branch and review
-conventions, per-workstream test commands and the open owner decisions. Frontend and
-`ai/` workstream READMEs are proposed in PR #4 and are not part of this branch.
+Three workstreams share the repository; `WORKSTREAMS.md` is the authoritative ownership
+contract, and `python tools/check_ownership.py --workstream <yours> --base <base>` enforces
+it before a PR.
+
+| Path | Workstream | Start here |
+|---|---|---|
+| `frontend/` | A — frontend | `frontend/STATE_MATRIX.md`, `frontend/fixtures/` |
+| `backend/` | B — backend (also owns today's OCR code) | `docs/development/API_CONTRACT.md` |
+| `ai/` | C — AI/OCR | `ai/EVALUATION.md`, `ai/corpus/` |
+
+Process: `docs/development/PARALLEL_WORKFLOW.md` (worktrees, commits, PRs, conflicts) and
+`docs/development/INTEGRATION_CHECKLIST.md` (gates). Owner-only actions:
+`docs/development/OWNER_ACTIONS.md`. The older `docs/integration/workstream-contracts.md`
+is kept as history.
 
 See `docs/` for the research record, the audit trail
 (`docs/pre-coding/foundation-readiness-2026-10-23.md`) and remaining gates.
