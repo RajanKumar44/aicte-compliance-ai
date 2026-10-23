@@ -25,6 +25,7 @@ Invariants:
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import io
 import json
@@ -36,9 +37,10 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+from PIL import features as PIL_features
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -890,6 +892,8 @@ class RasterBenchmarkScorer:
         lang_breakdown = {k: _aggregate_metrics(v) for k, v in per_language.items()}
 
         dataset_fp = cases[0].get("dataset_fingerprint", "unknown") if cases else "unknown"
+        capabilities = rendering_capabilities()
+        invalid_languages = _accuracy_invalid_languages(per_language.keys())
 
         report: dict[str, Any] = {
             "available": True,
@@ -911,6 +915,9 @@ class RasterBenchmarkScorer:
             },
             "by_corruption_type": corr_breakdown,
             "by_language": lang_breakdown,
+            "rendering": capabilities,
+            "accuracy_invalid_languages": invalid_languages,
+            "accuracy_valid": not invalid_languages,
             "case_results": case_results,
         }
 
@@ -977,6 +984,44 @@ def _metric_summary(per_seed_values: dict[str, list[float]]) -> dict[str, dict[s
             "seeds": len(vals),
         }
     return summary
+
+
+# ---------------------------------------------------------------------------
+# Rendering capability detection (complex-script shaping)
+# ---------------------------------------------------------------------------
+
+
+@functools.lru_cache(maxsize=1)
+def rendering_capabilities() -> dict[str, Any]:
+    """Report the shaping capability of the current rendering environment.
+
+    ``raqm`` is the complex-script shaping library Pillow uses for Devanagari
+    matra reordering and conjunct shaping.  Official Pillow wheels for macOS
+    do not bundle libraqm (Linux manylinux wheels do), so when it is absent
+    Hindi text is rendered glyph-by-glyph and the resulting image does NOT
+    faithfully contain the ground-truth text.  Transcription metrics measured
+    on such images describe the OCR reading an unshaped approximation — they
+    are neither a lower bound nor an upper bound on OCR quality on faithful
+    input; they are simply not valid accuracy measurements for that language.
+    """
+    raqm = bool(PIL_features.check("raqm"))
+    return {"raqm": raqm, "raqm_version": PIL_features.version("raqm") if raqm else None}
+
+
+#: Languages whose ground truth can only be faithfully rendered with shaping.
+SHAPING_REQUIRED_LANGUAGES = frozenset({"hi", "bilingual"})
+
+
+def language_rendering_valid(lang: str) -> bool:
+    """False exactly when *lang* needs shaping and shaping is unavailable."""
+    if rendering_capabilities()["raqm"]:
+        return True
+    return lang not in SHAPING_REQUIRED_LANGUAGES
+
+
+def _accuracy_invalid_languages(langs: Iterable[str]) -> list[str]:
+    """Sorted languages evaluated despite unfaithful (unshaped) rendering."""
+    return sorted({lang for lang in langs if lang in SHAPING_REQUIRED_LANGUAGES and not language_rendering_valid(lang)})
 
 
 def run_benchmark_multiseed(
@@ -1050,6 +1095,7 @@ def run_benchmark_multiseed(
                 "clean_baseline": report["clean_baseline"],
                 "corrupted_evaluation": report["corrupted_evaluation"],
                 "degradation_delta": report["degradation_delta"],
+                "accuracy_invalid_languages": report["accuracy_invalid_languages"],
             }
         )
         for cr in report["case_results"]:
@@ -1088,6 +1134,14 @@ def run_benchmark_multiseed(
     total_unavailable = sum(r["unavailable_count"] for r in per_seed)
     total_errors = sum(r["error_count"] for r in per_seed)
 
+    # Pool the rendering-validity flags across all seeds: any seed that
+    # evaluated a shaping-limited language invalidates that language overall.
+    invalid_seed_background: set[str] = set()
+    for psr in per_seed:
+        invalid_seed_background.update(psr.get("accuracy_invalid_languages", []))
+
+    capabilities = rendering_capabilities()
+
     return {
         "available": True,
         "engine": engine.engine_name,
@@ -1108,6 +1162,8 @@ def run_benchmark_multiseed(
         "per_seed": per_seed,
         "pooled": pooled,
         "per_seed_summary": per_seed_summary,
+        "rendering": capabilities,
+        "accuracy_invalid_languages": sorted(invalid_seed_background),
     }
 
 
@@ -1151,6 +1207,14 @@ def _print_multiseed_report(report: dict[str, Any]) -> None:
             f"min={stats['min']:.3f} | max={stats['max']:.3f} | seeds={stats['seeds']}"
         )
     print("------------------------------------------------------------")
+    if report.get("accuracy_invalid_languages"):
+        print(
+            "RENDERING WARNING: languages "
+            f"{', '.join(report['accuracy_invalid_languages'])} were evaluated without "
+            "complex-script shaping (libraqm); their ground truth is NOT faithfully "
+            "rendered and their metrics are NOT valid accuracy measurements."
+        )
+        print("------------------------------------------------------------")
     print("Per-seed CORRUPTED metrics:")
     for r in report["per_seed"]:
         c = r["corrupted_evaluation"]
@@ -1279,6 +1343,12 @@ def main() -> int:
     print("Performance by Language:")
     for lang, stats in sorted(report["by_language"].items()):
         print(f"  {lang:18s} -> CER={stats['cer']:.3f} | WER={stats['wer']:.3f} | F1={stats['f1']:.3f}")
+    if report.get("accuracy_invalid_languages"):
+        print(
+            "RENDERING WARNING: languages "
+            f"{', '.join(report['accuracy_invalid_languages'])} evaluated without "
+            "complex-script shaping (libraqm) — metrics NOT valid for these languages."
+        )
     print("=============================================================")
 
     if args.json:

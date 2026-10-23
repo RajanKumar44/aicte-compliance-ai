@@ -275,6 +275,10 @@ The workstream provides two distinct evaluation modules:
    low contrast, sensor noise, 90-degree rotation). Measures paired clean vs. corrupted
    degradation deltas across transcription (CER/WER) and field extraction (precision/recall/F1).
    Works with real Tesseract when installed or a calibrated mock engine when system binaries are absent.
+   Reports self-declare their rendering limits: without libraqm the `hi`/`bilingual`
+   entries appear in `accuracy_invalid_languages` and their metrics are **not valid
+   accuracy measurements** (the ground truth was not faithfully on the rendered image).
+   They are not a bound on real accuracy in either direction.
 
 ### Running benchmark tests and evaluations
 
@@ -309,6 +313,13 @@ reports a pooled result alongside every per-seed baseline:
 - **Reconciliation:** `evaluated_pairs + unavailable_pairs + failed_pairs ==
   total_case_pairs` is verified inside the report
   (`reconciliation.…_equals_total`) — a broken sum is a bug, never hidden.
+- **Rendering validity:** every report also carries `rendering`
+  (`{raqm, raqm_version}` — the complex-script shaping availability of the
+  generating environment) and `accuracy_invalid_languages`. Languages whose
+  ground truth can only be faithfully rendered with shaping (`hi`,
+  `bilingual`) are listed there when shaping is unavailable, together with
+  `accuracy_valid: false`; the CLI prints an explicit warning line. Do not
+  quote metrics for a listed language as accuracy.
 - **Mid-run engine loss:** if a real engine disappears between seeds, the remaining
   seeds are **not** pooled; the report marks `available: false` and lists the seeds
   actually completed.

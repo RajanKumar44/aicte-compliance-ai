@@ -1049,3 +1049,84 @@ class TestMultiSeedBenchmark:
         res = subprocess.run(cmd, check=False, cwd=str(REPO_ROOT), capture_output=True, text=True)
         assert res.returncode == 1
         assert "integers" in res.stderr.lower()
+
+
+# ---------------------------------------------------------------------------
+# Rendering capability / shaping validity signalling
+# ---------------------------------------------------------------------------
+
+
+class TestRenderingCapabilitySignalling:
+    """Regression tests: unfaithful (unshaped) Hindi rendering must invalidate
+    hi/bilingual measurements in the report instead of being silently scored."""
+
+    def test_rendering_capabilities_shape(self):
+        from ai.raster_benchmark import rendering_capabilities
+
+        cap = rendering_capabilities()
+        assert set(cap.keys()) == {"raqm", "raqm_version"}
+        assert isinstance(cap["raqm"], bool)
+        assert cap["raqm_version"] is None or isinstance(cap["raqm_version"], str)
+
+    def test_language_rendering_valid_flags_shaping_languages_without_raqm(self, monkeypatch):
+        from ai.raster_benchmark import language_rendering_valid
+
+        monkeypatch.setattr(
+            "ai.raster_benchmark.rendering_capabilities",
+            lambda: {"raqm": False, "raqm_version": None},
+        )
+        assert language_rendering_valid("en") is True
+        assert language_rendering_valid("hi") is False
+        assert language_rendering_valid("bilingual") is False
+
+    def test_language_rendering_valid_all_with_raqm(self, monkeypatch):
+        from ai.raster_benchmark import language_rendering_valid
+
+        monkeypatch.setattr(
+            "ai.raster_benchmark.rendering_capabilities",
+            lambda: {"raqm": True, "raqm_version": "0.10.2"},
+        )
+        for lang in ("en", "hi", "bilingual"):
+            assert language_rendering_valid(lang) is True
+
+    def _run(self, monkeypatch, capabilities, count=4):
+        from ai.raster_benchmark import (
+            MockRasterOCREngine,
+            RasterBenchmarkScorer,
+            RasterDocumentGenerator,
+        )
+
+        monkeypatch.setattr(
+            "ai.raster_benchmark.rendering_capabilities",
+            lambda: capabilities,
+        )
+        cases = RasterDocumentGenerator.generate_benchmark_dataset(count=count, seed=42)
+        return RasterBenchmarkScorer.run_benchmark(cases, MockRasterOCREngine())
+
+    def test_run_benchmark_flags_unshaped_hindi(self, monkeypatch):
+        report = self._run(
+            monkeypatch, {"raqm": False, "raqm_version": None}
+        )
+        assert report["rendering"] == {"raqm": False, "raqm_version": None}
+        assert "hi" in report["accuracy_invalid_languages"]
+        assert "bilingual" in report["accuracy_invalid_languages"]
+        assert report["accuracy_valid"] is False
+
+    def test_run_benchmark_clean_when_raqm_present(self, monkeypatch):
+        report = self._run(monkeypatch, {"raqm": True, "raqm_version": "0.10.2"})
+        assert report["accuracy_invalid_languages"] == []
+        assert report["accuracy_valid"] is True
+
+    def test_multiseed_ignores_seeds_with_invalid_rendering(self, monkeypatch):
+        """A seed that evaluated a shaping-limited language must invalidate the
+        whole pooled report's accuracy claim for that language."""
+        from ai.raster_benchmark import MockRasterOCREngine, run_benchmark_multiseed
+
+        monkeypatch.setattr(
+            "ai.raster_benchmark.rendering_capabilities",
+            lambda: {"raqm": False, "raqm_version": None},
+        )
+        report = run_benchmark_multiseed([42, 43], count=4, engine=MockRasterOCREngine())
+        assert "hi" in report["accuracy_invalid_languages"]
+        for psr in report["per_seed"]:
+            assert "hi" in psr["accuracy_invalid_languages"]

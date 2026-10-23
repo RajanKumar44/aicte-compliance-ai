@@ -141,10 +141,17 @@ ruff check ai/
   `raster_benchmark.py`): fonts that substitute a shared "tofu" box for missing
   characters — which once made every English letter OCR as O/0 while digits stayed
   correct — are rejected, and a Devanagari-capable font is required for `hi`/`bilingual`.
-- Pillow on this host is built without libraqm (`PIL.features.check('raqm') == False`),
-  so Devanagari is rendered without complex-script shaping (conjuncts/matra ordering);
-  hi/bilingual transcription metrics are therefore a pessimistic lower bound, and
-  real-world Hindi accuracy remains unvalidated.
+- Pillow on this host is built without libraqm (`PIL.features.check('raqm') == False`;
+  the pinned official Pillow 11.3.0 macOS wheels simply do not bundle libraqm — Linux
+  manylinux wheels do), so Devanagari is rendered glyph-by-glyph without complex-script
+  shaping (conjuncts/matra ordering). Images generated without shaping do not faithfully
+  contain the `hi`/`bilingual` ground truth, so their metrics are **invalid
+  measurements** — neither a lower nor an upper bound on OCR quality on faithful input.
+  Every raster benchmark report carries `rendering`, `accuracy_invalid_languages` and
+  `accuracy_valid`; reports listing a language in `accuracy_invalid_languages` must not
+  be quoted as accuracy for that language. Real-world Hindi accuracy remains unvalidated.
+  Resolution path (needs an authorized environment change): install libraqm and rebuild
+  Pillow, or generate the corpus on a Linux manylinux-wheel environment.
 - No held-out split exists for the text extraction corpus (cases were written alongside patterns).
 - Hindi coverage is limited to five label variants and rendered Devanagari fonts.
 
