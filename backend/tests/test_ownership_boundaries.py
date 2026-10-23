@@ -162,6 +162,21 @@ def test_cli_rejects_an_unusable_base_ref():
     assert "error:" in result.stderr
 
 
+def test_cli_accepts_several_declarations_after_one_flag():
+    result = _run(
+        "--workstream",
+        "integration",
+        "--paths-from",
+        "-",
+        "--declare-shared",
+        "frontend/README.md",
+        "ai/README.md",
+        stdin="frontend/README.md\nai/README.md\n",
+    )
+    assert result.returncode == 0, result.stderr
+    assert "ownership OK" in result.stdout
+
+
 def test_cli_rejects_an_unknown_workstream():
     result = _run("--workstream", "design", "--paths-from", "-", stdin="")
     assert result.returncode != 0

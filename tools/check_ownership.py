@@ -191,9 +191,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--declare-shared",
         action="append",
+        nargs="+",
         default=[],
         metavar="PATH",
-        help="a shared path this change intentionally touches (repeatable)",
+        help=(
+            "shared path(s) this change intentionally touches; repeatable, and accepts "
+            "several paths after one flag: --declare-shared docs/a.md frontend/README.md"
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -204,7 +208,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             paths = changed_paths(args.base, args.head)
         else:
             parser.error("pass either --base or --paths-from")
-        violations = check(paths, args.workstream, args.declare_shared)
+        declared = [path for group in args.declare_shared for path in group]
+        violations = check(paths, args.workstream, declared)
     except (RuntimeError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

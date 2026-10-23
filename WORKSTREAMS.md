@@ -96,9 +96,24 @@ python tools/check_ownership.py --workstream backend \
 
 Exit `0` means every changed path is yours, or is shared and declared. Exit `1` lists the
 offending paths; exit `2` means a bad argument or an unusable base ref. Workstreams are
-`frontend`, `backend`, `ai` and `integration`. `--declare-shared <path>` is how a deliberate
-shared change is recorded (repeatable); a declaration is an assertion for review, not proof
-that the other owners agreed.
+`frontend`, `backend`, `ai` and `integration`. `--declare-shared <path> [<path> ...]` records
+a deliberate shared change (repeatable, and several paths may follow one flag); a declaration
+is an assertion for review, not proof that the other owners agreed.
+
+Real examples, run against the open PRs:
+
+```console
+$ # PR #3 touches backend/ *and* the workflow
+$ python tools/check_ownership.py --workstream backend --paths-from <(git diff --name-only \
+    origin/research/grounded-foundation...origin/feature/ocr-regression-hardening)
+  - .github/workflows/backend-tests.yml: shared path changed without --declare-shared …
+# add --declare-shared .github/workflows/backend-tests.yml  ->  ownership OK
+
+$ # PR #4 touches three workstream folders plus the root contract
+$ python tools/check_ownership.py --workstream integration --paths-from … --declare-shared \
+    ai/README.md backend/WORKSTREAM.md frontend/README.md
+ownership OK: 4 changed path(s) fit workstream 'integration'
+```
 
 What it enforces:
 
