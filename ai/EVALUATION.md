@@ -21,6 +21,12 @@ The scorer imports `extract_institution_fields` from `backend.app.ocr_pipeline`
 **read-only**. It does not modify, wrap or reimplement backend code, and no OCR engine is
 required — the input is text, so Tesseract is irrelevant here.
 
+The loader validates each corpus before scoring: a missing path, malformed JSONL, a
+missing or non-object `expected`, an empty file, or duplicate `case_id`s fails the run
+with exit 1 and a message naming the file (and line). Each `--json` run fully replaces
+its report file; it never merges with a previous report. Results are deterministic:
+identical inputs and corpus produce byte-identical reports.
+
 ## What is measured
 
 Label corpus: `ai/corpus/extraction_cases.jsonl` — 56 cases, 54 scored, 2 documented known gaps.

@@ -345,3 +345,82 @@ def test_load_corpus_rejects_duplicate_ids(tmp_path: Path):
     corpus.write_text(f"{line}\n{line}\n", encoding="utf-8")
     with pytest.raises(SystemExit):
         load_corpus(corpus)
+
+
+# --- invalid input, report handling and determinism -----------------------
+
+
+@pytest.mark.parametrize(
+    ("payload", "name", "message"),
+    [
+        # A corpus that does not exist must fail loudly, not return zero cases.
+        (None, "absent.jsonl", "corpus not found"),
+        # Malformed JSONL must report the offending line.
+        ('{"case_id": "x", "text": "unterminated string\n', "broken.jsonl", "line 1"),
+        # Whitespace-only corpora are rejected rather than scoring an empty set.
+        ("\n\n", "empty.jsonl", "is empty"),
+        # A case without the required expected map is a schema error.
+        (
+            json.dumps({"case_id": "a", "text": "x"}) + "\n",
+            "missing-field.jsonl",
+            "missing 'expected'",
+        ),
+        # expected must be an object, not a list of field names.
+        (
+            json.dumps({"case_id": "a", "text": "x", "expected": ["institution_name"]})
+            + "\n",
+            "wrong-type.jsonl",
+            "expected must be an object",
+        ),
+    ],
+)
+def test_cli_exits_nonzero_with_a_clear_error_on_invalid_input(
+    tmp_path: Path, payload: str | None, name: str, message: str
+):
+    path = tmp_path / name
+    if payload is not None:
+        path.write_text(payload, encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--corpus", str(path), "--quiet"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 1
+    assert message in completed.stderr
+
+
+def test_cli_json_report_replaces_any_previous_report(tmp_path: Path):
+    """A new run must fully replace a report file, never merge with stale data."""
+    output = tmp_path / "report.json"
+    output.write_text('{"stale": true}\n', encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--json", str(output), "--quiet"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert "stale" not in payload
+    assert "cases" in payload and "micro" in payload and "known_gaps" in payload
+
+
+def test_cli_output_is_deterministic_across_runs(tmp_path: Path):
+    first, second = tmp_path / "one.json", tmp_path / "two.json"
+    runs = [
+        subprocess.run(
+            [sys.executable, str(SCRIPT), "--json", str(target), "--quiet"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        for target in (first, second)
+    ]
+    for completed in runs:
+        assert completed.returncode == 0, completed.stderr
+    assert runs[0].stdout == runs[1].stdout
+    assert first.read_bytes() == second.read_bytes()
