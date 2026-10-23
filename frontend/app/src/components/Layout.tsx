@@ -75,7 +75,7 @@ export function Layout() {
           ref={mainRef}
           id="main-content"
           tabIndex={-1}
-          className="flex-1 overflow-y-auto p-4 outline-none sm:p-6 lg:p-8"
+          className="flex-1 overflow-x-hidden overflow-y-auto bg-[#f7f9fb] p-4 outline-none sm:p-6 lg:p-8 xl:p-10"
         >
           <Outlet />
         </main>

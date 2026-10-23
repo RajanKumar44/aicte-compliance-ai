@@ -29,11 +29,11 @@ export function ValidationResults({ data, onReset }: ValidationResultsProps) {
   }, []);
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="mx-auto max-w-7xl space-y-6">
       <ScopeNotice />
 
       {/* Status summary */}
-      <Card>
+      <Card className="p-6 shadow-sm sm:p-8">
         <div className="flex flex-col sm:flex-row sm:items-start gap-4">
           <div className={
             isPassed
@@ -88,72 +88,87 @@ export function ValidationResults({ data, onReset }: ValidationResultsProps) {
         </div>
       </Card>
 
-      {/* Summary stats */}
-      {!isPassed && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {missingCount > 0 && (
-            <Card className="border-l-4 border-l-red-500">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-50 text-red-500">
-                  <FileX2 className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-navy-900">{missingCount}</p>
-                  <p className="text-xs text-slate-500">Missing Document{missingCount !== 1 ? "s" : ""}</p>
-                </div>
-              </div>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(19rem,0.55fr)] lg:items-start">
+        <div className="space-y-6">
+          {/* Summary stats */}
+          {!isPassed && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {missingCount > 0 && (
+                <Card className="border-l-4 border-l-red-500 p-5 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-50 text-red-700">
+                      <FileX2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-navy-900">{missingCount}</p>
+                      <p className="text-xs text-slate-600">Missing document{missingCount !== 1 ? "s" : ""}</p>
+                    </div>
+                  </div>
+                </Card>
+              )}
+              {expiredCount > 0 && (
+                <Card className="border-l-4 border-l-amber-500 p-5 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
+                      <Clock className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-navy-900">{expiredCount}</p>
+                      <p className="text-xs text-slate-600">Expired document{expiredCount !== 1 ? "s" : ""}</p>
+                    </div>
+                  </div>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* Findings table */}
+          {data.findings.length > 0 && (
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle>Findings</CardTitle>
+                <CardDescription>
+                  These are checklist observations from the supplied inputs, not a compliance determination.
+                </CardDescription>
+              </CardHeader>
+              <FindingsTable findings={data.findings} />
             </Card>
           )}
-          {expiredCount > 0 && (
-            <Card className="border-l-4 border-l-amber-500">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-500">
-                  <Clock className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-navy-900">{expiredCount}</p>
-                  <p className="text-xs text-slate-500">Expired Document{expiredCount !== 1 ? "s" : ""}</p>
-                </div>
-              </div>
-            </Card>
-          )}
+
+          {/* Document checklist */}
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle>Document checklist</CardTitle>
+              <CardDescription>
+                Documents identified in the validation response.
+              </CardDescription>
+            </CardHeader>
+            <DocumentChecklist data={data} />
+          </Card>
         </div>
-      )}
 
-      {/* Findings table */}
-      {data.findings.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Findings</CardTitle>
-            <CardDescription>
-              These are checklist observations from the supplied inputs, not a compliance determination.
-            </CardDescription>
-          </CardHeader>
-          <FindingsTable findings={data.findings} />
-        </Card>
-      )}
+        <aside className="space-y-6">
+          <Alert variant="warning" title="Important notice">
+            {data.notice}
+          </Alert>
 
-      {/* Document checklist */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Document Checklist</CardTitle>
-          <CardDescription>
-            Documents identified in the validation response.
-          </CardDescription>
-        </CardHeader>
-        <DocumentChecklist data={data} />
-      </Card>
-
-      {/* Notice */}
-      <Alert variant="warning" title="Important Notice">
-        {data.notice}
-      </Alert>
-
-      {/* Actions */}
-      <div className="flex gap-3">
-        <Button variant="primary" onClick={onReset}>
-          Run Another Validation
-        </Button>
+          <Card className="p-6 shadow-sm">
+            <CardHeader>
+              <CardTitle>Review next</CardTitle>
+              <CardDescription>Use this result as a starting point for human review.</CardDescription>
+            </CardHeader>
+            <ul className="space-y-3 text-sm leading-6 text-slate-700">
+              <li>Confirm the required list is the correct checklist for your process.</li>
+              <li>Recheck any missing item against the source records.</li>
+              <li>Independently verify every supplied expiry date.</li>
+            </ul>
+            <div className="mt-6 border-t border-slate-200 pt-5">
+              <Button variant="primary" onClick={onReset} className="w-full">
+                Run another check
+              </Button>
+            </div>
+          </Card>
+        </aside>
       </div>
     </div>
   );
