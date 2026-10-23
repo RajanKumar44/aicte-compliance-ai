@@ -4,7 +4,8 @@
 [`../WORKSTREAMS.md`](../WORKSTREAMS.md)).
 **Boundary:** this contributor works only in `ai/` during independent development.
 **Status:** deterministic evaluation support is implemented here: a clean labelled corpus,
-a separate realistic OCR-corruption slice and a reproducible multi-corpus scorer. The
+a separate realistic OCR-corruption slice, a reproducible multi-corpus scorer with corpus
+fingerprints, per-category coverage and baseline comparison (`--compare`). The
 working OCR implementation is still in `backend/` (see the OCR placement rule); no model
 or external provider is introduced by this work.
 

@@ -14,7 +14,8 @@ python ai/evaluate_extraction.py --check                  # exit 1 on any scored
 python ai/evaluate_extraction.py \
   --corpus ai/corpus/extraction_cases.jsonl \
   --corpus ai/corpus/ocr_corruption_cases.jsonl --check   # separate slice reports
-python -m pytest -q ai/tests                              # corpus and scorer tests
+python -m pytest -q ai/tests                              # corpus and scorer tests (also runs in CI)
+python ai/evaluate_extraction.py --json b.json --compare b.json  # compare against a baseline
 ```
 
 The scorer imports `extract_institution_fields` from `backend.app.ocr_pipeline`
@@ -30,7 +31,7 @@ identical inputs and corpus produce byte-identical reports.
 ## What is measured
 
 Label corpus: `ai/corpus/extraction_cases.jsonl` — 56 cases, 54 scored, 2 documented known gaps.
-Corruption slice: `ai/corpus/ocr_corruption_cases.jsonl` — 24 cases, 12 scored, 12 documented
+Corruption slice: `ai/corpus/ocr_corruption_cases.jsonl` — 30 cases, 15 scored, 15 documented
 known gaps. When more than one `--corpus` is supplied, the scorer reports each slice
 independently and never combines their denominators.
 
@@ -53,10 +54,10 @@ The corruption slice categories are:
 
 | Category | Count | What it exercises |
 |---|---:|---|
-| ocr-inserted-newline | 6 | labels and values split across OCR lines |
-| ocr-misread-label | 6 | plausible character substitutions in labels |
-| ocr-latin-hindi-mix | 6 | Hindi labels with Latin values and mixed context |
-| ocr-column-order | 6 | flattened or reordered table-like output |
+| ocr-inserted-newline | 7 | labels and values split across OCR lines; CRLF line endings |
+| ocr-misread-label | 9 | character substitutions, separator doubling and replacement, zero-width noise |
+| ocr-latin-hindi-mix | 7 | Hindi labels with Latin values, mixed context, NFD-decomposed accent data |
+| ocr-column-order | 7 | flattened, reordered or merged column output; order-independent labelled lines |
 
 Per case, each expected field is compared **exactly** (string equality after the
 extractor's own normalisation). Outcomes are true positives, false positives (wrong value
@@ -81,12 +82,12 @@ known gaps:         2 (both still failing)
 The separate corruption slice currently reports:
 
 ```
-corruption slice:    12 scored cases, exact-match 12/12
+corruption slice:    15 scored cases, exact-match 15/15
 negative cases:      7, with a spurious extraction: 0
-known gaps:          12 (all still failing)
+known gaps:          15 (all still failing)
 ```
 
-The 12 corruption-slice known gaps are deliberately excluded from its scored denominator.
+The 15 corruption-slice known gaps are deliberately excluded from its scored denominator.
 They record recovery behaviour that is desirable but not implemented; they are not evidence
 that the current extractor handles those corruptions.
 
@@ -110,6 +111,48 @@ so they cannot inflate the numbers. If either starts passing, the report says
 Neither was fixed here: `ai/**` must not edit `backend/**` (see
 [`../WORKSTREAMS.md`](../WORKSTREAMS.md)), and both changes deserve their own reviewed PR
 with OCR regression tests.
+
+## Report fields and baseline comparison
+
+Beyond the printed table, every report (human or `--json`) carries:
+
+| Field | Meaning |
+|---|---|
+| `corpus` / `corpus_sha256` | Which corpus produced the numbers, and the exact bytes of it |
+| `case_results` | Every scored case with its expected/extracted values, match status, error and category — the machine-readable failure artifact |
+| `by_category` | Scored-case coverage per category: cases, exact matches and failing case ids |
+| `known_gaps` | Documented broken behaviour, each with `still_failing` and its own `error` when it raises |
+
+To compare a change against a stored result, capture a baseline once and compare later:
+
+```bash
+python ai/evaluate_extraction.py --json baseline.json --quiet      # store a baseline
+python ai/evaluate_extraction.py --compare baseline.json          # compare a current run
+```
+
+`--compare` reads the baseline only — it never writes to it. It reports, per corpus:
+corpus-byte changes (a sha256 mismatch is shown explicitly; case ids are still compared),
+scored cases that appear or disappear, **newly failing scored cases** (`NEW REGRESSIONS`,
+exit 1), newly passing cases, known-gap flips in either direction, new/removed documented
+gaps, new negative false positives (exit 1), and the micro-F1 delta. A corpus absent from
+the baseline reports `no matching corpus in the baseline` and does not gate the run.
+Multi-corpus baselines (`{"corpora": [...]}`) compare slice by slice, never as one merged
+score.
+
+A useful developer loop after touching anything the extractor depends on:
+
+```bash
+# before the change
+python ai/evaluate_extraction.py --json /tmp/before.json
+# after the change
+python ai/evaluate_extraction.py --json /tmp/after.json --compare /tmp/before.json
+```
+
+Performance note (2026-10-23, this MacBook, .venv): a 600-case synthetic corpus scores in
+~0.08 s wall time including interpreter startup. No optimisation is warranted or claimed.
+
+`ai/tests` runs in the shared `backend-tests` CI workflow; any regression the evaluator can
+detect is therefore also a pull-request gate without an AI-specific configuration change.
 
 ## What these numbers do not mean
 
