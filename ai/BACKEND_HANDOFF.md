@@ -173,10 +173,19 @@ Fetched check results for HEAD `580faf6` ([PR #10](https://github.com/rajaryan11
   as predicted by its section above (hard-coded Linux path resolves there).
 - **`real-infrastructure-integration` check FAILURE**: `ModuleNotFoundError:
   No module named 'psycopg'` in the "Apply Alembic migrations to fresh
-  PostgreSQL" step — a CI dependency/environment issue in another workstream's
-  integration job (either the job needs `psycopg`/`psycopg[binary]` installed or
-  its Alembic URL dialect changed), not an OCR or backend-code logic failure.
-  Not AI-owned; recorded for the infrastructure/CI owner.
+  PostgreSQL" step. Root cause narrowed from the live stack trace (run
+  `40070848311`): SQLAlchemy resolved the **psycopg v3 dialect**
+  (`site-packages/sqlalchemy/dialects/postgresql/psycopg.py` → `import psycopg`),
+  but `backend/requirements.txt` line 5 declares only
+  `psycopg2-binary>=2.9.0` (the v2 driver, imported as `psycopg2`). So the job's
+  Alembic/database URL is `postgresql+psycopg://…` while only the v2 driver is
+  installed. One-line fix for the infrastructure/CI owner (both files outside
+  `ai/**` — not modified by this workstream): install `psycopg[binary]` in the
+  migration job's environment, or change the job's Alembic URL to
+  `postgresql+psycopg2://…` to match the declared dependency. Not an OCR or
+  backend-code logic failure; pre-existing on `main` (same run proves it).
+  Acceptance check: the "Apply Alembic migrations to fresh PostgreSQL" step
+  completes with exit 0 on a fresh CI run.
 - **`optional-ocr-integration` check SUCCESS** — the OCR-specific integration
   gate for this workstream passes.
 - **Both failures pre-exist on `main`**: run `40070848311` (`main`, 06:36 UTC
