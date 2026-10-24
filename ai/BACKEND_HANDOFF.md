@@ -176,16 +176,35 @@ Fetched check results for HEAD `580faf6` ([PR #10](https://github.com/rajaryan11
   PostgreSQL" step. Root cause narrowed from the live stack trace (run
   `40070848311`): SQLAlchemy resolved the **psycopg v3 dialect**
   (`site-packages/sqlalchemy/dialects/postgresql/psycopg.py` → `import psycopg`),
-  but `backend/requirements.txt` line 5 declares only
-  `psycopg2-binary>=2.9.0` (the v2 driver, imported as `psycopg2`). So the job's
-  Alembic/database URL is `postgresql+psycopg://…` while only the v2 driver is
-  installed. One-line fix for the infrastructure/CI owner (both files outside
-  `ai/**` — not modified by this workstream): install `psycopg[binary]` in the
-  migration job's environment, or change the job's Alembic URL to
-  `postgresql+psycopg2://…` to match the declared dependency. Not an OCR or
-  backend-code logic failure; pre-existing on `main` (same run proves it).
-  Acceptance check: the "Apply Alembic migrations to fresh PostgreSQL" step
-  completes with exit 0 on a fresh CI run.
+  but the installed environment only supplies the v2 driver
+  (`psycopg2-binary`, imported as `psycopg2`). **VERIFICATION (reproduced
+  locally in the project venv 2026-10-24): the URL is a plain
+  `postgresql://…`** — `.github/workflows/backend-tests.yml` sets
+  `DATABASE_URL: postgresql://aicte_test:…`, `backend/alembic/env.py` injects
+  `DATABASE_URL` into `sqlalchemy.url`, and no `+psycopg` suffix exists
+  anywhere. The v3 import happens because the project's SQLAlchemy **2.1.6**
+  resolves a bare `postgresql://` URL to its unified **psycopg (v3) dialect by
+  default** (the exact failing frame
+  `sqlalchemy/dialects/postgresql/psycopg.py:497 → import psycopg` reproduced
+  identically locally). The earlier hypothesis that the URL carries a
+  `postgresql+psycopg://` suffix was wrong and is corrected here.
+  Verified fix options (both validated locally; the implementing files are
+  backend/infra-owned — not modified by this workstream):
+  - **A (no new dependency, verified working)**: force the declared v2 driver —
+    normalize the URL to `postgresql+psycopg2://` in
+    `backend/alembic/env.py::get_url()` (and optionally
+    `backend/app/db/session.py::get_database_url()`), or pin
+    `SQLAlchemy>=2.0,<2.1` in `backend/requirements.txt`. Local venv proof:
+    `create_engine("postgresql+psycopg2://…")` selects `PGDialect_psycopg2`
+    with `psycopg2 2.9.13` under SQLAlchemy 2.1.6.
+  - **B (new dependency)**: add `psycopg[binary]` to `backend/requirements.txt`
+    to match the SQLAlchemy ≥ 2.1 default dialect.
+  Not an OCR or backend-logic defect on the OCR path; pre-existing on `main`
+  (same run proves it). Acceptance check: `python -m alembic -c
+  backend/alembic.ini upgrade head` against a live `DATABASE_URL` exits 0.
+  Owner correction note 2 (requirements intent): option A keeps the declared
+  dependency unchanged; option B changes a backend-owned requirements file —
+  both require the backend owner's authorization either way.
 - **`optional-ocr-integration` check SUCCESS** — the OCR-specific integration
   gate for this workstream passes.
 - **Both failures pre-exist on `main`**: run `40070848311` (`main`, 06:36 UTC
