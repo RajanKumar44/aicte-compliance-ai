@@ -1,9 +1,11 @@
 # AI/OCR acceptance audit — canonical requirement → evidence
 
-Status as of 2026-10-24, branch `feature/ai-ocr-corruption-slice` at the PSM bake-off
-milestone (`21be8b1` — on top of the `origin/main` merge `14d27fc`, which brings backend
-milestone commits through `4a79d73` and the corpus-gap alignment `7c15e01` into the AI branch;
-update this line with each milestone).
+Status as of 2026-10-24, branch `feature/ai-ocr-corruption-slice` at `4f74b14`, pushed and
+opened for review as **[PR #10](https://github.com/rajaryan1111/aicte-compliance-ai/pull/10)**
+to `origin/main` (OPEN, MERGEABLE — `00065a7` is a strict ancestor); merge remains an owner
+authorization. On top of the `origin/main` merge `14d27fc`, which brings backend milestone
+commits through `4a79d73` and the corpus-gap alignment `7c15e01` into the AI branch;
+update this line with each milestone.
 Sources of truth: [`docs/canonical/prd.md`](../docs/canonical/prd.md),
 [`docs/canonical/phases.md`](../docs/canonical/phases.md),
 [`WORKSTREAMS.md`](../WORKSTREAMS.md), [`ai/EVALUATION.md`](EVALUATION.md),
@@ -41,7 +43,8 @@ Labels: `PASS` (reproducible evidence), `PARTIAL`, `BLOCKED_EXTERNAL`,
 | Faithful Devanagari shaping on this host | BLOCKED_EXTERNAL | Pinned Pillow 11.3.0 official macOS wheels do not bundle libraqm; no system libraqm. Fixing needs an authorized environment change (install libraqm + rebuild Pillow, or run corpora generation on a Linux manylinux-wheel environment). Reports now carry `rendering`/`accuracy_invalid_languages`/`accuracy_valid` so unavailable-shaping measurements are machine-detectable and flagged, never silently quoted. |
 | Real-document accuracy | NOT_AVAILABLE | No human-labelled held-out set of representative scanned AICTE certificates exists. The actionable protocol (strata, annotation discipline, metrics, uncertainty bounds, acceptance pre-registration) is specified in [`ai/REAL_CORPUS_PROTOCOL.md`](REAL_CORPUS_PROTOCOL.md); nothing synthetic is quoted as real-world accuracy. |
 | Backend extraction/corruption gaps (15 remaining of original 17) | BLOCKED_EXTERNAL | Backend commit `eec3a81` (merged via PR #7, now merged into the AI branch) resolved `BND-002` and `HI-005`; corpus metadata migrated them into the scored denominator (56/56 exact, verified live 2026-10-24). The remaining 15 corruption-slice gaps were re-verified still failing against the fixed extractor on the merged branch; details in `ai/BACKEND_HANDOFF.md`. |
-| Backend test font-path portability (`backend/tests/test_ocr_engine_integration.py`) | BLOCKED_EXTERNAL | Backend-owned; hard-coded Linux font path fails on macOS with Tesseract installed (`OSError: cannot open resource`). Documented 2026-10-24 in BACKEND_HANDOFF.md; repo suite is `1 failed, 224 passed` on this host. |
+| Backend test font-path portability (`backend/tests/test_ocr_engine_integration.py`) | BLOCKED_EXTERNAL | Backend-owned; hard-coded Linux font path fails on macOS with Tesseract installed (`OSError: cannot open resource`). Documented 2026-10-24 in BACKEND_HANDOFF.md. Full-repo suite on this branch (re-run 2026-10-24): `2 failed, 388 passed, 21 skipped` — both failures backend-owned. |
+| Windows-drive storage-key traversal (POSIX accepts `C:\...` keys) | BLOCKED_EXTERNAL | Backend-owned; `LocalStorageBackend._resolve_key` (`backend/app/core/storage.py`) accepts a `C:\Windows\system32\cmd.exe` key on POSIX because the drive prefix is not treated as absolute there; reproduced in the storage traversal test 2026-10-24. Documented in BACKEND_HANDOFF.md. |
 | Regulatory rule activation / Phase 0 research | BLOCKED_EXTERNAL | Not AI-owned; phases.md Phase 0 gate remains open; no rule activated. |
 
 ## Rule integrity (verified 2026-10-24)
