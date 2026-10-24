@@ -223,7 +223,9 @@ detect is therefore also a pull-request gate without an AI-specific configuratio
 
 A real accuracy statement needs a labelled, held-out set of representative scanned
 documents with a stated annotation protocol, per-field metrics and error analysis. That does
-not exist yet, so no percentage may be quoted anywhere.
+not exist yet, so no percentage may be quoted anywhere. The full protocol a future
+corpus must follow (strata, annotation discipline, uncertainty bounds, acceptance
+criteria) is specified in [`REAL_CORPUS_PROTOCOL.md`](REAL_CORPUS_PROTOCOL.md).
 
 ## Adding cases
 
