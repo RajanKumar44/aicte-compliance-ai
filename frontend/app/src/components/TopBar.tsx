@@ -1,16 +1,83 @@
-import { Bell, ChevronRight, Command, Menu, Moon, Search, Sun } from "lucide-react";
 import { useLocation } from "react-router-dom";
-import type { RefObject } from "react";
 import { HealthIndicator } from "./HealthIndicator";
+import { useTheme, type ThemeName } from "./ThemeContext";
+import { Shield, ChevronRight, LayoutDashboard, ClipboardCheck, Info, FileLock2, FileText, Menu, X } from "lucide-react";
 
-const PAGE_TITLES: Record<string, string> = { "/": "Overview", "/dashboard": "Overview", "/validate": "Verification workspace", "/about": "Methodology" };
-interface TopBarProps { onMenuClick: () => void; menuOpen: boolean; menuButtonRef: RefObject<HTMLButtonElement | null>; darkMode: boolean; onThemeToggle: () => void; }
+const pageTitles: Record<string, { title: string; description: string; icon: React.ReactNode }> = {
+  "/": {
+    title: "Dashboard",
+    description: "Request overview",
+    icon: <LayoutDashboard className="h-5 w-5" />,
+  },
+  "/validate": {
+    title: "Validate",
+    description: "Document validation workspace",
+    icon: <ClipboardCheck className="h-5 w-5" />,
+  },
+  "/about": {
+    title: "About",
+    description: "Documentation and API reference",
+    icon: <Info className="h-5 w-5" />,
+  },
+  "/privacy": {
+    title: "Privacy notice",
+    description: "Prototype policy draft",
+    icon: <FileLock2 className="h-5 w-5" />,
+  },
+  "/terms": {
+    title: "Terms and conditions",
+    description: "Prototype terms draft",
+    icon: <FileText className="h-5 w-5" />,
+  },
+};
 
-export function TopBar({ onMenuClick, menuOpen, menuButtonRef, darkMode, onThemeToggle }: TopBarProps) {
-  const { pathname } = useLocation();
-  const title = PAGE_TITLES[pathname] || "AICTE Compliance AI";
-  return <header className="flex min-h-20 items-center justify-between gap-4 border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/90 sm:px-6 lg:px-8">
-    <div className="flex min-w-0 items-center gap-3"><button ref={menuButtonRef} onClick={onMenuClick} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden" aria-label="Open navigation menu" aria-expanded={menuOpen} aria-controls="primary-navigation"><Menu className="h-5 w-5" /></button><div className="min-w-0"><div className="hidden items-center gap-2 text-xs text-slate-400 sm:flex"><span>Workspace</span><ChevronRight className="h-3 w-3" /><span className="font-medium text-slate-700 dark:text-slate-200">{title}</span></div><p className="truncate text-sm font-semibold text-slate-900 dark:text-white sm:hidden">{title}</p></div></div>
-    <div className="flex items-center gap-2 sm:gap-3"><label className="hidden h-10 w-64 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-slate-400 dark:border-slate-800 dark:bg-slate-900 md:flex"><Search className="h-4 w-4" /><input className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200" placeholder="Search workspace" aria-label="Search workspace" /><kbd className="flex items-center gap-0.5 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400 dark:border-slate-700 dark:bg-slate-800"><Command className="h-2.5 w-2.5" />K</kbd></label><HealthIndicator /><button type="button" onClick={onThemeToggle} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white" aria-label={darkMode ? "Use light theme" : "Use dark theme"} aria-pressed={darkMode}>{darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button><button type="button" className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white" aria-label="Notifications"><Bell className="h-4 w-4" /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-rose-500" /></button><div className="hidden h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-800 dark:bg-emerald-400/15 dark:text-emerald-300 sm:flex" aria-label="Signed in as Demo Admin">DA</div></div>
-  </header>;
+export function TopBar({ onMenuToggle, mobileMenuOpen }: { onMenuToggle: () => void; mobileMenuOpen: boolean }) {
+  const location = useLocation();
+  const page = pageTitles[location.pathname] || pageTitles["/"];
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <header className="app-topbar sticky top-0 z-30 h-16 border-b border-border bg-bg-0/95">
+      <div className="h-full px-4 md:px-6 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0">
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-bg-2 hover:text-text-heading focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 lg:hidden"
+            onClick={onMenuToggle}
+            aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+            aria-expanded={mobileMenuOpen}
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
+          </button>
+          <div className="flex items-center gap-2 text-text-secondary">
+            <Shield className="h-5 w-5 text-primary-400" aria-hidden="true" />
+            <span className="font-semibold text-text-heading hidden sm:block">AICTE Compliance AI</span>
+          </div>
+          <div className="hidden md:flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-1.5">
+              <span className="text-text-muted">{page.icon}</span>
+              <ChevronRight className="h-3 w-3 text-text-muted" aria-hidden="true" />
+              <span className="font-medium text-text-heading">{page.title}</span>
+            </div>
+            <span className="text-text-muted" aria-hidden="true">/</span>
+            <span className="text-text-secondary">{page.description}</span>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+          <label className="sr-only" htmlFor="theme-select">Appearance theme</label>
+          <select
+            id="theme-select"
+            className="app-control theme-select min-h-10 max-w-32 border border-border bg-bg-1 px-2 text-xs font-medium text-text-heading focus-visible:outline-none sm:max-w-none sm:px-3 sm:text-sm"
+            value={theme}
+            onChange={(event) => setTheme(event.target.value as ThemeName)}
+          >
+            <option value="professional">Professional</option>
+            <option value="neo-brutalism">Neo Brutalism</option>
+          </select>
+          <HealthIndicator />
+        </div>
+      </div>
+    </header>
+  );
 }

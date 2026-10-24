@@ -1,22 +1,209 @@
-import { useEffect, useRef } from "react";
-import { AlertTriangle, ArrowLeft, CalendarDays, CheckCircle2, Clock3, FileX2, Info, RotateCcw, ShieldCheck } from "lucide-react";
-import { Badge } from "./Badge";
-import type { ValidationResponse } from "@/lib/api";
-import { formatDate, formatTimestamp, humanizeApplicationType, humanizeDocName } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { ArrowLeft, AlertTriangle, RefreshCw, Shield, FileX2, Clock, FileText, CheckCircle2, ListChecks, Printer } from "lucide-react";
+import { Card, CardContent } from "./Card";
+import { DocumentChecklist } from "./DocumentChecklist";
+import { FindingsTable } from "./FindingsTable";
+import { Alert } from "./Alert";
+import { Button } from "./Button";
+import { formatTimestamp } from "@/lib/utils";
+import { EmptyState } from "./EmptyState";
+import { RequestComparison } from "./RequestComparison";
+import type { ValidationRequest, ValidationResponse } from "@/lib/api";
 
-interface ValidationResultsProps { data: ValidationResponse; onReset: () => void; }
+interface ValidationResultsProps {
+  data: ValidationResponse;
+  request: ValidationRequest;
+  onReset: () => void;
+}
 
-export function ValidationResults({ data, onReset }: ValidationResultsProps) {
-  const headingRef = useRef<HTMLHeadingElement>(null);
+export function ValidationResults({ data, request, onReset }: ValidationResultsProps) {
   const passed = data.status === "preliminary_checks_passed";
-  const missing = data.missing_documents.length;
-  const expired = data.expired_documents.length;
-  useEffect(() => { headingRef.current?.focus(); }, []);
-  return <div className="mx-auto max-w-[1480px] space-y-6">
-    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400">Verification report</p><h1 ref={headingRef} tabIndex={-1} className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 outline-none dark:text-white">{passed ? "Preliminary check complete." : "Review attention required."}</h1><p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{passed ? "The supplied lists agree. This does not confirm regulatory compliance or document authenticity." : `${missing + expired} checklist observation(s) need reviewer attention.`}</p></div><button type="button" onClick={onReset} className="inline-flex items-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"><RotateCcw className="h-4 w-4" />Run another check</button></div>
-    <section className={`rounded-2xl border p-6 shadow-sm ${passed ? "border-emerald-200 bg-emerald-50 dark:border-emerald-400/20 dark:bg-emerald-400/10" : "border-amber-200 bg-amber-50 dark:border-amber-400/20 dark:bg-amber-400/10"}`}><div className="flex items-start gap-4"><div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${passed ? "bg-emerald-500 text-white" : "bg-amber-500 text-white"}`}>{passed ? <CheckCircle2 className="h-6 w-6" /> : <AlertTriangle className="h-6 w-6" />}</div><div className="flex-1"><div className="flex flex-wrap items-center gap-3"><h2 className="text-lg font-semibold text-slate-950 dark:text-white">{passed ? "Lists agree" : "Attention required"}</h2><Badge variant={passed ? "success" : "warning"}>{data.validation_scope.replace(/_/g, " ")}</Badge></div><div className="mt-4 grid gap-2 text-xs text-slate-600 dark:text-slate-300 sm:grid-cols-2 lg:grid-cols-4"><span><strong className="text-slate-900 dark:text-white">Institution:</strong> {data.institution_id}</span><span><strong className="text-slate-900 dark:text-white">Application:</strong> {humanizeApplicationType(data.application_type)}</span><span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" />{formatTimestamp(data.checked_at)}</span><span className="flex items-center gap-1"><Info className="h-3.5 w-3.5" />{data.source.replace(/_/g, " ")}</span></div></div></div></section>
-    <div className="grid gap-4 sm:grid-cols-3"><div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"><p className="font-mono text-[10px] uppercase tracking-wider text-slate-400">Total observations</p><p className="mt-2 text-3xl font-semibold text-slate-950 dark:text-white">{missing + expired || "--"}</p><p className="mt-1 text-xs text-slate-500">returned by validation</p></div><div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 dark:border-rose-400/20 dark:bg-rose-400/10"><p className="font-mono text-[10px] uppercase tracking-wider text-rose-600">Missing</p><p className="mt-2 text-3xl font-semibold text-rose-700 dark:text-rose-300">{missing}</p><p className="mt-1 text-xs text-rose-700/70 dark:text-rose-300/70">documents not supplied</p></div><div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-400/20 dark:bg-amber-400/10"><p className="font-mono text-[10px] uppercase tracking-wider text-amber-700">Expired</p><p className="mt-2 text-3xl font-semibold text-amber-700 dark:text-amber-300">{expired}</p><p className="mt-1 text-xs text-amber-700/70 dark:text-amber-300/70">dates need review</p></div></div>
-    <div className="grid gap-5 lg:grid-cols-[1.35fr_0.65fr]"><section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-6"><div className="mb-5 flex items-center gap-3"><FileX2 className="h-5 w-5 text-slate-500" /><div><h2 className="font-semibold text-slate-950 dark:text-white">Evidence observations</h2><p className="text-xs text-slate-500">Review each finding against source records.</p></div></div><div className="space-y-3">{data.findings.length ? data.findings.map((finding, index) => <div key={`${finding.code}-${finding.document_type}-${index}`} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"><div className="flex flex-col gap-3 sm:flex-row sm:items-start"><div className="flex-1"><div className="flex flex-wrap items-center gap-2"><Badge variant={finding.code === "MISSING_DOCUMENT" ? "error" : "warning"}>{finding.code === "MISSING_DOCUMENT" ? "Missing" : "Expired"}</Badge><span className="text-sm font-semibold text-slate-900 dark:text-white">{humanizeDocName(finding.document_type)}</span></div><p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400">{finding.message}</p></div><div className="shrink-0 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500 dark:bg-slate-900 dark:text-slate-400">{finding.code === "DOCUMENT_EXPIRED" && finding.evidence.expiry_date ? `Expired ${formatDate(finding.evidence.expiry_date)}` : `Source: ${finding.evidence.source?.replace(/_/g, " ") || "supplied checklist"}`}</div></div></div>) : <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200"><CheckCircle2 className="h-5 w-5" />No missing or expired observations were returned.</div>}</div></section><aside className="space-y-5"><div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-emerald-600" /><h2 className="text-sm font-semibold text-slate-950 dark:text-white">Reviewer next steps</h2></div><ol className="mt-5 space-y-4 text-xs leading-5 text-slate-600 dark:text-slate-400"><li className="flex gap-3"><span className="font-mono text-emerald-600">01</span>Confirm the checklist is the correct source for this application.</li><li className="flex gap-3"><span className="font-mono text-emerald-600">02</span>Verify every missing item against institutional records.</li><li className="flex gap-3"><span className="font-mono text-emerald-600">03</span>Independently check supplied expiry dates.</li></ol></div><div className="rounded-2xl border border-slate-200/80 bg-slate-50 p-5 text-xs leading-5 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400"><div className="flex gap-2"><Clock3 className="h-4 w-4 shrink-0" />{data.notice}</div></div></aside></div>
-    <div className="flex items-center gap-2 border-t border-slate-200 pt-5 font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:border-slate-800"><ArrowLeft className="h-3.5 w-3.5" />Human review remains the final authority for this preliminary result.</div>
-  </div>;
+
+  const missingCount = data.missing_documents.length;
+  const expiredCount = data.expired_documents.length;
+  const totalFindings = data.findings.length;
+  const reviewDocuments = Array.from(new Set([...data.missing_documents, ...data.expired_documents]));
+
+  return (
+    <div className="validation-results animate-fade-in space-y-6">
+      <div className="print-only mb-6">
+        <p className="text-sm font-semibold uppercase tracking-wide">AICTE Compliance AI</p>
+        <h1 className="mt-1 text-2xl font-bold">Preliminary validation summary</h1>
+        <p className="mt-2">Validation scope: {data.validation_scope}</p>
+        <p>Checked at: <time dateTime={data.checked_at}>{data.checked_at}</time></p>
+      </div>
+
+      <div className="no-print flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <Button variant="ghost" size="sm" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={onReset}>
+          Back to Form
+        </Button>
+        <div className={cn(
+          "flex items-center gap-3 border px-4 py-3",
+          passed ? "border-info-border bg-info-bg/70 text-info-text" : "border-warning-border bg-warning-bg/70 text-warning-text"
+        )} role="status" aria-live="polite">
+          {passed ? <CheckCircle2 className="h-6 w-6 shrink-0" aria-hidden="true" /> : <AlertTriangle className="h-6 w-6 shrink-0" aria-hidden="true" />}
+          <div>
+            <p className="font-semibold">{passed ? "Preliminary checks passed" : "Attention required"}</p>
+            {!passed && <p className="text-sm opacity-90">{totalFindings} {totalFindings === 1 ? "issue" : "issues"} found</p>}
+          </div>
+        </div>
+      </div>
+
+      <Card variant="feature">
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              label="Institution"
+              value={data.institution_id}
+              icon={<Shield className="h-5 w-5 text-primary-400" />}
+            />
+            <StatCard
+              label="Application Type"
+              value={data.application_type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+              icon={<AlertTriangle className="h-5 w-5 text-accent-500" />}
+            />
+            <StatCard
+              label="Checked At"
+              value={formatTimestamp(data.checked_at)}
+              icon={<Clock className="h-5 w-5 text-text-muted" />}
+            />
+            <StatCard
+              label="Source"
+              value={data.source}
+              icon={<FileText className="h-5 w-5 text-text-muted" />}
+              valueClassName="text-sm font-mono leading-5"
+            />
+          </div>
+
+          <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              label="Required Documents"
+              value={request.required_documents.length}
+              icon={<ListChecks className="h-5 w-5 text-primary-400" />}
+            />
+            <StatCard
+              label="Submitted Documents"
+              value={request.submitted_documents.length}
+              icon={<FileText className="h-5 w-5 text-primary-400" />}
+            />
+            <StatCard
+              label="Missing Documents"
+              value={missingCount}
+              icon={<FileX2 className="h-6 w-6 text-error-text" />}
+              highlight={missingCount > 0}
+              tone="error"
+            />
+            <StatCard
+              label="Expired Documents"
+              value={expiredCount}
+              icon={<Clock className="h-6 w-6 text-warning-text" />}
+              highlight={expiredCount > 0}
+              tone="warning"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <RequestComparison
+            request={request}
+            missingDocuments={data.missing_documents}
+            expiredDocumentCount={expiredCount}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <div className="mb-4 flex items-center gap-2">
+            <ListChecks className="h-5 w-5 text-primary-400" aria-hidden="true" />
+            <h3 className="text-lg font-semibold text-text-heading">{reviewDocuments.length ? "Documents to Review" : "Document Checklist"}</h3>
+          </div>
+          {reviewDocuments.length > 0 && (
+            <p className="mb-4 text-sm text-text-muted">
+              This API response lists flagged documents, so the checklist below focuses on items that need review.
+            </p>
+          )}
+          {reviewDocuments.length ? (
+            <DocumentChecklist
+              requiredDocs={reviewDocuments}
+              submittedDocs={data.expired_documents}
+              expiryDates={{}}
+              missingDocs={data.missing_documents}
+              expiredDocs={data.expired_documents}
+            />
+          ) : (
+            <EmptyState
+              icon={CheckCircle2}
+              title="No document issues found"
+              description="The preliminary checklist and expiry checks passed for this request."
+              className="py-8"
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      {totalFindings > 0 && (
+        <Card>
+          <CardContent>
+            <h3 className="text-lg font-semibold text-text-heading mb-4">Findings Detail</h3>
+            <FindingsTable findings={data.findings} />
+          </CardContent>
+        </Card>
+      )}
+
+      <Alert variant="info" title="Notice" icon={<Shield className="h-5 w-5" />}>
+        {data.notice}
+      </Alert>
+
+      <div className="no-print flex flex-wrap justify-end gap-3 pt-4">
+        <Button variant="secondary" onClick={() => window.print()} leftIcon={<Printer className="h-4 w-4" />}>
+          Print Summary
+        </Button>
+        <Button onClick={onReset} leftIcon={<RefreshCw className="h-4 w-4" />}>
+          Start New Validation
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  icon,
+  highlight = false,
+  tone = "error",
+  valueClassName,
+}: {
+  label: string;
+  value: string | number;
+  icon: React.ReactNode;
+  highlight?: boolean;
+  tone?: "error" | "warning" | "info";
+  valueClassName?: string;
+}) {
+  const toneStyles = {
+    error: "border-error-border/50 text-error-text",
+    warning: "border-warning-border/50 text-warning-text",
+    info: "border-info-border text-info-text",
+  };
+
+  return (
+    <div
+      className={cn(
+        "p-4 bg-bg-3/50 border border-border rounded-xl transition-all",
+        highlight && toneStyles[tone]
+      )}
+    >
+      <div className="flex items-center gap-3 mb-2">
+        <div className="p-2 bg-bg-2 rounded-lg">{icon}</div>
+        <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">{label}</span>
+      </div>
+      <div className={cn("break-words text-3xl font-bold tracking-tight", highlight ? toneStyles[tone].split(" ")[1] : "text-text-heading", valueClassName)}>
+        {value}
+      </div>
+    </div>
+  );
 }

@@ -1,106 +1,78 @@
-import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
-import { Input } from "./FormField";
-import { Button } from "./Button";
+import { cn } from "@/lib/utils";
+import { CalendarDays } from "lucide-react";
 import { humanizeDocName } from "@/lib/utils";
 
-interface ExpiryDateInputProps {
+const getToday = () => {
+  const now = new Date();
+  const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 10);
+};
+
+export interface ExpiryDateInputProps {
   documents: string[];
-  value: Record<string, string>;
-  onChange: (dates: Record<string, string>) => void;
+  values: Record<string, string>;
+  onChange: (doc: string, date: string) => void;
   disabled?: boolean;
-  id?: string;
-  describedBy?: string;
-  error?: boolean;
 }
 
-export function ExpiryDateInput({
-  documents,
-  value,
-  onChange,
-  disabled = false,
-  id = "expiry_dates",
-  describedBy,
-  error = false,
-}: ExpiryDateInputProps) {
-  const [selectedDoc, setSelectedDoc] = useState("");
+export function ExpiryDateInput({ documents, values, onChange, disabled }: ExpiryDateInputProps) {
+  const today = getToday();
 
-  const availableDocs = documents.filter((d) => !(d in value));
-
-  function addExpiryDate() {
-    if (selectedDoc && !(selectedDoc in value)) {
-      onChange({ ...value, [selectedDoc]: "" });
-      setSelectedDoc("");
-    }
-  }
-
-  function updateDate(doc: string, date: string) {
-    onChange({ ...value, [doc]: date });
-  }
-
-  function removeDate(doc: string) {
-    const next = { ...value };
-    delete next[doc];
-    onChange(next);
-  }
+  if (!documents.length) return null;
 
   return (
-    <div className="space-y-3">
-      {Object.entries(value).map(([doc, date]) => (
-        <div key={doc} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 sm:flex">
-          <label htmlFor={`${id}-${doc}`} className="min-w-0 truncate text-sm text-navy-800">
-            {humanizeDocName(doc)}
-          </label>
-          <Input
-            id={`${id}-${doc}`}
-            type="date"
-            value={date}
-            onChange={(e) => updateDate(doc, e.target.value)}
-            disabled={disabled}
-            aria-invalid={error || undefined}
-            aria-describedby={describedBy}
-            className="w-full sm:max-w-[180px]"
-          />
-          <button
-            type="button"
-            onClick={() => removeDate(doc)}
-            disabled={disabled}
-            className="rounded-md p-2 text-slate-500 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1 disabled:opacity-50"
-            aria-label={`Remove expiry for ${doc}`}
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+    <div className="space-y-1.5">
+      <label className="block text-sm font-medium text-text-secondary">
+        Expiry Dates
+        <span className="ml-2 text-xs text-text-muted font-normal">(Optional)</span>
+      </label>
+      <div className="bg-bg-3 border border-border rounded-lg overflow-hidden">
+        <div className="grid grid-cols-1 gap-1 border-b border-border px-3 py-2 text-xs font-medium text-text-secondary uppercase tracking-wider bg-bg-2 sm:grid-cols-[minmax(0,1fr)_10rem] sm:gap-3">
+          <span>Document</span>
+          <span className="sm:text-right">Expiry Date</span>
         </div>
-      ))}
+        <div className="divide-y divide-border">
+          {documents.map((doc, index) => {
+            const expiry = values[doc] || "";
+            const isExpired = expiry && expiry < today;
 
-      {availableDocs.length > 0 && (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <select
-            id={id}
-            value={selectedDoc}
-            onChange={(e) => setSelectedDoc(e.target.value)}
-            disabled={disabled}
-            aria-describedby={describedBy}
-            aria-invalid={error || undefined}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-navy-900 focus:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-700 sm:max-w-xs"
-          >
-            <option value="">Select document…</option>
-            {availableDocs.map((d) => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </select>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={addExpiryDate}
-            disabled={disabled || !selectedDoc}
-            className="gap-1 text-xs"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add Date
-          </Button>
+            return (
+              <div
+                key={doc}
+                className={cn(
+                  "grid grid-cols-1 items-start gap-2 px-3 py-3 transition-colors sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-center sm:gap-3",
+                  index % 2 === 0 ? "bg-bg-3/50" : "bg-bg-2/50"
+                )}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <CalendarDays className="h-4 w-4 text-text-muted flex-shrink-0" aria-hidden="true" />
+                  <span className="text-sm text-text-body truncate font-medium">
+                    {humanizeDocName(doc)}
+                  </span>
+                </div>
+                <input
+                  type="date"
+                  value={expiry}
+                  onChange={(e) => onChange(doc, e.target.value)}
+                  disabled={disabled}
+                  className={cn(
+                    "app-control h-10 w-full bg-bg-1 border border-border rounded-lg text-text-body sm:h-9 sm:w-40",
+                    "placeholder:text-text-muted",
+                    "focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500",
+                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                    "text-sm transition-colors",
+                    isExpired && "text-warning-text border-warning-border"
+                  )}
+                  aria-label={`Expiry date for ${humanizeDocName(doc)}`}
+                />
+              </div>
+            );
+          })}
         </div>
-      )}
+      </div>
+      <p className="text-xs text-text-muted">
+        Dates in the past are highlighted. Leave blank if not applicable.
+      </p>
     </div>
   );
 }

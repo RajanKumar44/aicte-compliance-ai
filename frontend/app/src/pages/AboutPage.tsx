@@ -1,17 +1,248 @@
-import { AlertTriangle, CheckCircle2, FileSearch, LockKeyhole, Server, ShieldCheck } from "lucide-react";
+import {
+  FileText,
+  Server,
+  Shield,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  ExternalLink,
+} from "lucide-react";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/Card";
 import { Badge } from "@/components/Badge";
 
 export function AboutPage() {
-  const evaluated = [
-    ["Checklist matching", "Required names are compared against submitted names after normalization."],
-    ["Expiry observations", "Caller-supplied dates are checked against the server evaluation date."],
-    ["Evidence visibility", "Finding messages and source evidence remain available to the reviewer."],
-  ];
-  return <div className="mx-auto max-w-[1200px] space-y-6">
-    <div><p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400">Methodology & safeguards</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-4xl">Transparent by design.</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">Understand what the current preliminary workflow observes, what it deliberately does not claim, and how it fits into a human-led review process.</p></div>
-    <section className="grid gap-4 md:grid-cols-3"><div className="rounded-2xl bg-slate-950 p-5 text-white md:col-span-2"><div className="flex items-center gap-2 text-emerald-300"><ShieldCheck className="h-5 w-5" /><span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">Trust boundary</span></div><h2 className="mt-5 text-xl font-semibold">The engine organizes evidence. Reviewers decide.</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">Every result is a preliminary observation based on caller-supplied lists and dates. It is never an official AICTE approval, eligibility determination, or authenticity decision.</p></div><div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-400/20 dark:bg-emerald-400/10"><CheckCircle2 className="h-5 w-5 text-emerald-600" /><p className="mt-5 text-2xl font-semibold text-slate-950 dark:text-white">0</p><p className="mt-1 text-xs text-slate-600 dark:text-slate-300">automated approval decisions</p></div></section>
-    <div className="grid gap-5 lg:grid-cols-2"><section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300"><FileSearch className="h-5 w-5" /></div><div><h2 className="font-semibold text-slate-950 dark:text-white">What is evaluated</h2><p className="text-xs text-slate-500">Deterministic observations from supplied inputs.</p></div></div><div className="mt-6 space-y-4">{evaluated.map(([title, text]) => <div key={title} className="flex gap-3 border-t border-slate-100 pt-4 dark:border-slate-800"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" /></span><div><p className="text-sm font-medium text-slate-900 dark:text-white">{title}</p><p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{text}</p></div></div>)}</div></section><section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300"><AlertTriangle className="h-5 w-5" /></div><div><h2 className="font-semibold text-slate-950 dark:text-white">What remains outside scope</h2><p className="text-xs text-slate-500">Important limitations for every demo.</p></div></div><ul className="mt-6 space-y-3 text-sm text-slate-600 dark:text-slate-300"><li>Official AICTE ruleset loading or regulatory interpretation</li><li>Document authenticity, content, or tamper verification</li><li>Authentication, authorization, tenant isolation, and audit storage</li><li>OCR extraction from uploaded bytes in this prototype</li></ul></section></div>
-    <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex items-center gap-3"><Server className="h-5 w-5 text-slate-500" /><div><h2 className="font-semibold text-slate-950 dark:text-white">Current API surface</h2><p className="text-xs text-slate-500">Contract version 0.1.0-draft</p></div></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-900"><code className="font-mono text-xs text-slate-700 dark:text-slate-300">GET /health</code><Badge variant="success">Connected</Badge></div><div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-900"><code className="font-mono text-xs text-slate-700 dark:text-slate-300">POST /api/v1/validate</code><Badge variant="info">Preliminary</Badge></div></div></section>
-    <div className="flex items-center gap-2 border-t border-slate-200 pt-5 font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:border-slate-800"><LockKeyhole className="h-3.5 w-3.5" />Use synthetic identifiers only. Do not submit real institutional documents or personal data.</div>
-  </div>;
+  return (
+    <div className="mx-auto max-w-6xl space-y-10 animate-slide-up">
+      <div className="space-y-3">
+        <span className="inline-block rounded-md bg-primary-900/30 px-3 py-1 text-xs font-semibold tracking-wider text-primary-300">
+          DOCUMENTATION
+        </span>
+        <h1 className="text-3xl font-bold text-text-heading">About This Tool</h1>
+        <p className="text-text-secondary max-w-2xl leading-relaxed">
+          AICTE Compliance AI compares the document lists and expiry dates supplied with a request.
+          It does not load an authoritative AICTE checklist or rule set.
+        </p>
+      </div>
+
+      <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1.9fr)_minmax(17rem,0.9fr)] lg:gap-8">
+        <div className="min-w-0 space-y-7">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary-500/20 rounded-lg">
+                  <FileText className="h-5 w-5 text-primary-400" aria-hidden="true" />
+                </div>
+                <div>
+                  <CardTitle>What This Tool Evaluates</CardTitle>
+                  <CardDescription>
+                    Checks only the submitted lists and expiry dates in this request
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="flex gap-4">
+                <CheckCircle2 className="h-5 w-5 text-success-text flex-shrink-0 mt-0.5" aria-hidden="true" />
+                <div>
+                  <h4 className="font-medium text-text-heading">Missing Document Detection</h4>
+                  <p className="mt-2 text-sm text-text-secondary leading-relaxed">
+                    Compares the caller-supplied submitted list against the caller-supplied required list. Any
+                    required document not present in the submitted list is flagged with
+                    code <code className="font-mono text-xs bg-bg-3 px-1.5 py-0.5 rounded">MISSING_DOCUMENT</code>.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <Clock className="h-5 w-5 text-warning-text flex-shrink-0 mt-0.5" aria-hidden="true" />
+                <div>
+                  <h4 className="font-medium text-text-heading">Expiry Date Verification</h4>
+                  <p className="mt-2 text-sm text-text-secondary leading-relaxed">
+                    Checks supplied expiry dates against the server's current UTC date. Documents with dates in the
+                    past are flagged with code <code className="font-mono text-xs bg-bg-3 px-1.5 py-0.5 rounded">DOCUMENT_EXPIRED</code>.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <FileText className="h-5 w-5 text-info-text flex-shrink-0 mt-0.5" aria-hidden="true" />
+                <div>
+                  <h4 className="font-medium text-text-heading">Evidence-Linked Findings</h4>
+                  <p className="mt-2 text-sm text-text-secondary leading-relaxed">
+                    Each finding describes a missing or expired document and includes code-specific evidence
+                    explaining why that item was flagged.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-accent-500/20 rounded-lg">
+                  <Server className="h-5 w-5 text-accent-400" aria-hidden="true" />
+                </div>
+                <div>
+                  <CardTitle>API Contract</CardTitle>
+                  <CardDescription>Version 0.1.0-draft</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="min-w-0 space-y-6">
+              <div>
+                  <h4 className="mb-4 font-medium text-text-heading">Endpoints</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[500px]">
+                    <thead>
+                      <tr className="text-left text-text-secondary border-b border-border">
+                        <th className="pb-3 pr-4 font-medium">Endpoint</th>
+                        <th className="pb-3 pr-4 font-medium">Method</th>
+                        <th className="pb-3 font-medium">Purpose</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      <tr>
+                        <td className="py-4 pr-4 font-mono text-text-body"><code>/health</code></td>
+                        <td className="py-4 pr-4"><Badge variant="info" size="sm">GET</Badge></td>
+                        <td className="py-4 text-text-secondary">Service health check</td>
+                      </tr>
+                      <tr>
+                        <td className="py-4 pr-4 font-mono text-text-body"><code>/api/v1/validate</code></td>
+                        <td className="py-4 pr-4"><Badge variant="info" size="sm">POST</Badge></td>
+                        <td className="py-4 text-text-secondary">Compare supplied document lists and expiry dates</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-3 text-sm text-text-secondary">
+                  Invalid request bodies return HTTP 422 with FastAPI's <code className="font-mono text-xs text-text-body">detail</code> error array.
+                </p>
+              </div>
+
+              <div className="pt-4 border-t border-border space-y-4">
+                <div>
+                  <h4 className="font-medium text-text-heading mb-3">Validation Status Values</h4>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="neutral" dot>preliminary_checks_passed</Badge>
+                    <Badge variant="warning" dot>attention_required</Badge>
+                  </div>
+                  <p className="mt-3 text-sm text-text-secondary">
+                    A passing status means only that the supplied lists agree; it is not an AICTE compliance or authenticity decision.
+                  </p>
+                </div>
+
+                <div className="pt-4 border-t border-border">
+                  <h4 className="font-medium text-text-heading mb-3">Finding Codes</h4>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="error" dot>MISSING_DOCUMENT</Badge>
+                    <Badge variant="warning" dot>DOCUMENT_EXPIRED</Badge>
+                  </div>
+                  <p className="mt-3 text-sm text-text-secondary">
+                    Missing-document evidence includes <code className="font-mono text-xs text-text-body">source</code> and <code className="font-mono text-xs text-text-body">observed</code>. Expiry evidence includes <code className="font-mono text-xs text-text-body">source</code>, <code className="font-mono text-xs text-text-body">expiry_date</code>, and <code className="font-mono text-xs text-text-body">evaluation_date</code>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="min-w-0 space-y-5 border-t border-border pt-5">
+                <div>
+                  <h4 className="mb-3 font-medium text-text-heading">Request Fields</h4>
+                  <p className="mb-3 text-sm text-text-secondary">
+                    The institution ID must contain 1 to 100 non-blank characters. Required documents need at least one item; document names must be non-blank and unique after trimming. Submitted documents and expiry dates default to empty values.
+                  </p>
+              <pre tabIndex={0} aria-label="Validation request fields" className="code-example block min-w-0 w-full max-w-full overflow-x-auto overscroll-x-contain rounded-lg border border-border bg-bg-3 px-4 py-4 text-xs font-mono leading-relaxed text-text-secondary">
+{`{
+  "institution_id": "string",
+  "application_type": "eoa" | "new_program" | "intake_change",
+  "required_documents": ["string"],
+  "submitted_documents": ["string"],
+  "expiry_dates": { "doc_name": "YYYY-MM-DD" }
+}`}
+                  </pre>
+                </div>
+
+                <div className="min-w-0 border-t border-border pt-5">
+                  <h4 className="mb-3 font-medium text-text-heading">Response Fields</h4>
+                  <pre tabIndex={0} aria-label="Validation response fields" className="code-example block min-w-0 w-full max-w-full overflow-x-auto overscroll-x-contain rounded-lg border border-border bg-bg-3 px-4 py-4 text-xs font-mono leading-relaxed text-text-secondary">
+{`{
+  "institution_id": "string",
+  "application_type": "eoa" | "new_program" | "intake_change",
+  "status": "preliminary_checks_passed" | "attention_required",
+  "validation_scope": "caller_supplied_checklist_only",
+  "missing_documents": ["string"],
+  "expired_documents": ["string"],
+  "findings": [{
+    "code": "MISSING_DOCUMENT" | "DOCUMENT_EXPIRED",
+    "document_type": "string",
+    "message": "string",
+    "evidence": { "key": "value" }
+  }],
+  "checked_at": "ISO-8601 timestamp with UTC offset",
+  "source": "synthetic_demo_input",
+  "notice": "string"
+}`}
+                  </pre>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <aside className="min-w-0 space-y-5" aria-label="Scope and security information">
+          <Card className="border-warning-border/30">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-warning-text" aria-hidden="true" />
+                What This Tool Does NOT Do
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-3 text-sm text-text-secondary">
+                <li className="flex gap-2 leading-relaxed"><XCircle className="h-4 w-4 text-error-text flex-shrink-0 mt-0.5" /> Authenticate users</li>
+                <li className="flex gap-2 leading-relaxed"><XCircle className="h-4 w-4 text-error-text flex-shrink-0 mt-0.5" /> Persist data</li>
+                <li className="flex gap-2 leading-relaxed"><XCircle className="h-4 w-4 text-error-text flex-shrink-0 mt-0.5" /> Perform OCR or document upload</li>
+                <li className="flex gap-2 leading-relaxed"><XCircle className="h-4 w-4 text-error-text flex-shrink-0 mt-0.5" /> Verify document authenticity</li>
+                <li className="flex gap-2 leading-relaxed"><XCircle className="h-4 w-4 text-error-text flex-shrink-0 mt-0.5" /> Replace human compliance review</li>
+                <li className="flex gap-2 leading-relaxed"><XCircle className="h-4 w-4 text-error-text flex-shrink-0 mt-0.5" /> Submit filings to AICTE</li>
+              </ul>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-text-muted" aria-hidden="true" />
+                Security & Privacy
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-text-secondary">
+              <p className="leading-relaxed">No authentication is configured. This is a stateless prototype.</p>
+              <p className="leading-relaxed">The service does not save application data or maintain history.</p>
+              <p className="leading-relaxed">Requests send the institution ID, document names and expiry dates; file uploads are not supported.</p>
+              <p className="leading-relaxed">Use synthetic institution identifiers in this prototype.</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ExternalLink className="h-5 w-5 text-text-muted" aria-hidden="true" />
+                Resources
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <a href="https://github.com/rajaryan1111/aicte-compliance-ai/blob/main/docs/development/API_CONTRACT.md" target="_blank" rel="noreferrer" className="flex items-center gap-2 text-text-secondary hover:text-text-link transition-colors leading-relaxed">
+                <FileText className="h-4 w-4" /> API Contract v0.1.0-draft
+              </a>
+              <a href="https://www.aicte-india.org/" target="_blank" rel="noreferrer" className="flex items-center gap-2 text-text-secondary hover:text-text-link transition-colors leading-relaxed">
+                <Shield className="h-4 w-4" aria-hidden="true" /> AICTE website
+              </a>
+              <a href="https://github.com/rajaryan1111/aicte-compliance-ai" target="_blank" rel="noreferrer" className="flex items-center gap-2 text-text-secondary hover:text-text-link transition-colors leading-relaxed">
+                <Server className="h-4 w-4" /> Project Repository
+              </a>
+            </CardContent>
+          </Card>
+        </aside>
+      </div>
+    </div>
+  );
 }
