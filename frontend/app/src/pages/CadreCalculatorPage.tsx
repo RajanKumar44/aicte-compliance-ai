@@ -162,204 +162,203 @@ export function CadreCalculatorPage() {
         </CardContent>
       </Card>
 
-      {/* Main Grid: Inputs vs Real-time Deficiency Output */}
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.8fr)]">
-        {/* Left Panel: Inputs */}
-        <div className="space-y-6">
-          <Card className="border-border">
-            <CardHeader className="border-b border-border bg-bg-1 pb-4">
-              <CardTitle className="text-base font-bold text-text-heading flex items-center gap-2">
-                <Users className="h-4 w-4 text-accent-strong" />
-                <span>1. Academic Context</span>
-              </CardTitle>
-            </CardHeader>
+      {/* Section 1: Inputs (Academic Context & Appointed Faculty) */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Left Card: Academic Context */}
+        <Card className="border-border">
+          <CardHeader className="border-b border-border bg-bg-1 pb-4">
+            <CardTitle className="text-base font-bold text-text-heading flex items-center gap-2">
+              <Users className="h-4 w-4 text-accent-strong" />
+              <span>1. Academic Context</span>
+            </CardTitle>
+          </CardHeader>
 
-            <CardContent className="space-y-5 p-5">
+          <CardContent className="space-y-5 p-5">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-text-heading" htmlFor="program-select">
+                Technical Program
+              </label>
+              <select
+                id="program-select"
+                value={programKey}
+                onChange={(e) => {
+                  const k = e.target.value;
+                  setProgramKey(k);
+                  if (k === "management_pg" || k === "mca_pg") setDurationYears(2);
+                  else if (k === "polytechnic_diploma") setDurationYears(3);
+                  else setDurationYears(4);
+                }}
+                className="app-control w-full rounded-md border border-border bg-bg-1 px-3 py-2 text-sm text-text-heading"
+              >
+                <option value="engineering_ug">Engineering & Technology (UG - B.Tech)</option>
+                <option value="management_pg">Management (MBA / PGDM)</option>
+                <option value="mca_pg">Computer Applications (MCA)</option>
+                <option value="polytechnic_diploma">Polytechnic Diploma in Engg.</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-text-heading" htmlFor="program-select">
-                  Technical Program
+                <label className="text-xs font-bold uppercase tracking-wider text-text-heading" htmlFor="intake-input">
+                  Annual Sanctioned Intake
                 </label>
-                <select
-                  id="program-select"
-                  value={programKey}
-                  onChange={(e) => {
-                    const k = e.target.value;
-                    setProgramKey(k);
-                    if (k === "management_pg" || k === "mca_pg") setDurationYears(2);
-                    else if (k === "polytechnic_diploma") setDurationYears(3);
-                    else setDurationYears(4);
-                  }}
+                <input
+                  id="intake-input"
+                  type="number"
+                  min={30}
+                  step={30}
+                  value={annualIntake}
+                  onChange={(e) => setAnnualIntake(Math.max(1, Number(e.target.value)))}
                   className="app-control w-full rounded-md border border-border bg-bg-1 px-3 py-2 text-sm text-text-heading"
-                >
-                  <option value="engineering_ug">Engineering & Technology (UG - B.Tech)</option>
-                  <option value="management_pg">Management (MBA / PGDM)</option>
-                  <option value="mca_pg">Computer Applications (MCA)</option>
-                  <option value="polytechnic_diploma">Polytechnic Diploma in Engg.</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-text-heading" htmlFor="intake-input">
-                    Annual Sanctioned Intake
-                  </label>
-                  <input
-                    id="intake-input"
-                    type="number"
-                    min={30}
-                    step={30}
-                    value={annualIntake}
-                    onChange={(e) => setAnnualIntake(Math.max(1, Number(e.target.value)))}
-                    className="app-control w-full rounded-md border border-border bg-bg-1 px-3 py-2 text-sm text-text-heading"
-                  />
-                  <p className="text-[11px] text-text-muted">Seats per year (e.g. 60, 120, 180)</p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-text-heading" htmlFor="duration-input">
-                    Duration (Years)
-                  </label>
-                  <input
-                    id="duration-input"
-                    type="number"
-                    min={1}
-                    max={5}
-                    value={durationYears}
-                    onChange={(e) => setDurationYears(Math.max(1, Number(e.target.value)))}
-                    className="app-control w-full rounded-md border border-border bg-bg-1 px-3 py-2 text-sm text-text-heading"
-                  />
-                  <p className="text-[11px] text-text-muted">Total batches in campus</p>
-                </div>
+                />
+                <p className="text-[11px] text-text-muted">Seats per year (e.g. 60, 120, 180)</p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-text-heading" htmlFor="fsr-select">
-                  Target AICTE Ratio (FSR)
+                <label className="text-xs font-bold uppercase tracking-wider text-text-heading" htmlFor="duration-input">
+                  Duration (Years)
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setTargetFsr(20)}
-                    className={`rounded-md border p-2 text-center text-xs font-bold transition-all ${
-                      targetFsr === 20
-                        ? "border-primary-500 bg-bg-2 text-text-heading shadow-sm border-2"
-                        : "border-border bg-bg-1 text-text-secondary hover:bg-bg-2"
-                    }`}
-                  >
-                    1:20 (Standard Tier-2)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTargetFsr(15)}
-                    className={`rounded-md border p-2 text-center text-xs font-bold transition-all ${
-                      targetFsr === 15
-                        ? "border-primary-500 bg-bg-2 text-text-heading shadow-sm border-2"
-                        : "border-border bg-bg-1 text-text-secondary hover:bg-bg-2"
-                    }`}
-                  >
-                    1:15 (Accredited Tier-1)
-                  </button>
-                </div>
+                <input
+                  id="duration-input"
+                  type="number"
+                  min={1}
+                  max={5}
+                  value={durationYears}
+                  onChange={(e) => setDurationYears(Math.max(1, Number(e.target.value)))}
+                  className="app-control w-full rounded-md border border-border bg-bg-1 px-3 py-2 text-sm text-text-heading"
+                />
+                <p className="text-[11px] text-text-muted">Total batches in campus</p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Current Faculty Intake */}
-          <Card className="border-border">
-            <CardHeader className="border-b border-border bg-bg-1 pb-4">
-              <CardTitle className="text-base font-bold text-text-heading flex items-center gap-2">
-                <Users className="h-4 w-4 text-accent-strong" />
-                <span>2. Currently Appointed Faculty</span>
-              </CardTitle>
-            </CardHeader>
-
-            <CardContent className="space-y-4 p-5">
-              {/* Professor Input */}
-              <div className="rounded-lg border border-border bg-bg-1 p-3.5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-text-heading block">Professors</span>
-                    <span className="text-[11px] text-text-muted">Mandatory Ph.D. holder</span>
-                  </div>
-                  <input
-                    type="number"
-                    min={0}
-                    value={professors}
-                    onChange={(e) => {
-                      const v = Math.max(0, Number(e.target.value));
-                      setProfessors(v);
-                      if (professorsPhd > v) setProfessorsPhd(v);
-                    }}
-                    className="app-control w-20 rounded border border-border bg-bg-0 p-1.5 text-center font-bold text-sm text-text-heading"
-                  />
-                </div>
-                <div className="flex items-center justify-between pt-1 border-t border-border/60">
-                  <span className="text-[11px] text-text-secondary">Of which holding Ph.D.:</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={professors}
-                    value={professorsPhd}
-                    onChange={(e) => setProfessorsPhd(Math.min(professors, Math.max(0, Number(e.target.value))))}
-                    className="app-control w-20 rounded border border-border bg-bg-0 p-1.5 text-center font-bold text-xs text-text-heading"
-                  />
-                </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-text-heading" htmlFor="fsr-select">
+                Target AICTE Ratio (FSR)
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTargetFsr(20)}
+                  className={`rounded-md border p-2 text-center text-xs font-bold transition-all ${
+                    targetFsr === 20
+                      ? "border-primary-500 bg-bg-2 text-text-heading shadow-sm border-2"
+                      : "border-border bg-bg-1 text-text-secondary hover:bg-bg-2"
+                  }`}
+                >
+                  1:20 (Standard Tier-2)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTargetFsr(15)}
+                  className={`rounded-md border p-2 text-center text-xs font-bold transition-all ${
+                    targetFsr === 15
+                      ? "border-primary-500 bg-bg-2 text-text-heading shadow-sm border-2"
+                      : "border-border bg-bg-1 text-text-secondary hover:bg-bg-2"
+                  }`}
+                >
+                  1:15 (Accredited Tier-1)
+                </button>
               </div>
+            </div>
+          </CardContent>
+        </Card>
 
-              {/* Associate Professor Input */}
-              <div className="rounded-lg border border-border bg-bg-1 p-3.5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-text-heading block">Associate Professors</span>
-                    <span className="text-[11px] text-text-muted">Mandatory Ph.D. holder</span>
-                  </div>
-                  <input
-                    type="number"
-                    min={0}
-                    value={assocProfs}
-                    onChange={(e) => {
-                      const v = Math.max(0, Number(e.target.value));
-                      setAssocProfs(v);
-                      if (assocProfsPhd > v) setAssocProfsPhd(v);
-                    }}
-                    className="app-control w-20 rounded border border-border bg-bg-0 p-1.5 text-center font-bold text-sm text-text-heading"
-                  />
+        {/* Right Card: Current Faculty Intake */}
+        <Card className="border-border">
+          <CardHeader className="border-b border-border bg-bg-1 pb-4">
+            <CardTitle className="text-base font-bold text-text-heading flex items-center gap-2">
+              <Users className="h-4 w-4 text-accent-strong" />
+              <span>2. Currently Appointed Faculty</span>
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent className="space-y-4 p-5">
+            {/* Professor Input */}
+            <div className="rounded-lg border border-border bg-bg-1 p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-text-heading block">Professors</span>
+                  <span className="text-[11px] text-text-muted">Mandatory Ph.D. holder</span>
                 </div>
-                <div className="flex items-center justify-between pt-1 border-t border-border/60">
-                  <span className="text-[11px] text-text-secondary">Of which holding Ph.D.:</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={assocProfs}
-                    value={assocProfsPhd}
-                    onChange={(e) => setAssocProfsPhd(Math.min(assocProfs, Math.max(0, Number(e.target.value))))}
-                    className="app-control w-20 rounded border border-border bg-bg-0 p-1.5 text-center font-bold text-xs text-text-heading"
-                  />
-                </div>
+                <input
+                  type="number"
+                  min={0}
+                  value={professors}
+                  onChange={(e) => {
+                    const v = Math.max(0, Number(e.target.value));
+                    setProfessors(v);
+                    if (professorsPhd > v) setProfessorsPhd(v);
+                  }}
+                  className="app-control w-20 rounded border border-border bg-bg-0 p-1.5 text-center font-bold text-sm text-text-heading"
+                />
               </div>
-
-              {/* Assistant Professor Input */}
-              <div className="rounded-lg border border-border bg-bg-1 p-3.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-text-heading block">Assistant Professors</span>
-                    <span className="text-[11px] text-text-muted">Master's / Ph.D.</span>
-                  </div>
-                  <input
-                    type="number"
-                    min={0}
-                    value={asstProfs}
-                    onChange={(e) => setAsstProfs(Math.max(0, Number(e.target.value)))}
-                    className="app-control w-20 rounded border border-border bg-bg-0 p-1.5 text-center font-bold text-sm text-text-heading"
-                  />
-                </div>
+              <div className="flex items-center justify-between pt-1 border-t border-border/60">
+                <span className="text-[11px] text-text-secondary">Of which holding Ph.D.:</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={professors}
+                  value={professorsPhd}
+                  onChange={(e) => setProfessorsPhd(Math.min(professors, Math.max(0, Number(e.target.value))))}
+                  className="app-control w-20 rounded border border-border bg-bg-0 p-1.5 text-center font-bold text-xs text-text-heading"
+                />
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
 
-        {/* Right Panel: Analysis & Deficiency Findings */}
-        <div className="space-y-6">
+            {/* Associate Professor Input */}
+            <div className="rounded-lg border border-border bg-bg-1 p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-text-heading block">Associate Professors</span>
+                  <span className="text-[11px] text-text-muted">Mandatory Ph.D. holder</span>
+                </div>
+                <input
+                  type="number"
+                  min={0}
+                  value={assocProfs}
+                  onChange={(e) => {
+                    const v = Math.max(0, Number(e.target.value));
+                    setAssocProfs(v);
+                    if (assocProfsPhd > v) setAssocProfsPhd(v);
+                  }}
+                  className="app-control w-20 rounded border border-border bg-bg-0 p-1.5 text-center font-bold text-sm text-text-heading"
+                />
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-border/60">
+                <span className="text-[11px] text-text-secondary">Of which holding Ph.D.:</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={assocProfs}
+                  value={assocProfsPhd}
+                  onChange={(e) => setAssocProfsPhd(Math.min(assocProfs, Math.max(0, Number(e.target.value))))}
+                  className="app-control w-20 rounded border border-border bg-bg-0 p-1.5 text-center font-bold text-xs text-text-heading"
+                />
+              </div>
+            </div>
+
+            {/* Assistant Professor Input */}
+            <div className="rounded-lg border border-border bg-bg-1 p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-text-heading block">Assistant Professors</span>
+                  <span className="text-[11px] text-text-muted">Master's / Ph.D.</span>
+                </div>
+                <input
+                  type="number"
+                  min={0}
+                  value={asstProfs}
+                  onChange={(e) => setAsstProfs(Math.max(0, Number(e.target.value)))}
+                  className="app-control w-20 rounded border border-border bg-bg-0 p-1.5 text-center font-bold text-sm text-text-heading"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Section 2: Real-time Evaluation & Cadre Breakdown */}
+      <div className="w-full min-w-0 space-y-6">
           {/* Key Metrics Banner */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="rounded-xl border border-border bg-bg-1 p-4 space-y-1">
@@ -436,7 +435,7 @@ export function CadreCalculatorPage() {
 
             <CardContent className="p-0">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
+                <table className="w-full min-w-[620px] text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-border bg-bg-2 text-text-muted font-bold uppercase tracking-wider">
                       <th className="p-3.5">Cadre Designation</th>
@@ -560,7 +559,6 @@ export function CadreCalculatorPage() {
             </ul>
           </div>
         </div>
-      </div>
     </div>
   );
 }

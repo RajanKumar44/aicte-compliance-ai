@@ -56,7 +56,7 @@ export function TopBar({ onMenuToggle, mobileMenuOpen }: { onMenuToggle: () => v
   const activeUser = demoUser || (session?.user ? { name: session.user.email?.split("@")[0] || "User", role: "reviewer" } : null);
 
   return (
-    <header className="app-topbar sticky top-0 z-30 h-16 border-b border-border bg-bg-0/95">
+    <header className="app-topbar sticky top-0 z-30 h-16 border-b border-border bg-bg-0">
       <div className="h-full px-4 md:px-6 flex items-center justify-between gap-4">
         <div className="flex items-center gap-4 min-w-0">
           <button
@@ -68,18 +68,18 @@ export function TopBar({ onMenuToggle, mobileMenuOpen }: { onMenuToggle: () => v
           >
             {mobileMenuOpen ? <X className="h-5 w-5" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
           </button>
-          <div className="flex items-center gap-2 text-text-secondary">
-            <Shield className="h-5 w-5 text-primary-400" aria-hidden="true" />
-            <span className="font-semibold text-text-heading hidden sm:block">AICTE Compliance AI</span>
+          <div className="flex items-center gap-2 text-text-secondary lg:hidden">
+            <Shield className="h-5 w-5 text-primary-400 shrink-0" aria-hidden="true" />
+            <span className="font-semibold text-text-heading truncate">AICTE Compliance AI</span>
           </div>
-          <div className="hidden md:flex items-center gap-2 text-sm">
-            <div className="flex items-center gap-1.5">
+          <div className="hidden md:flex items-center gap-2 text-sm min-w-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               <span className="text-text-muted">{page.icon}</span>
               <ChevronRight className="h-3 w-3 text-text-muted" aria-hidden="true" />
               <span className="font-medium text-text-heading">{page.title}</span>
             </div>
-            <span className="text-text-muted" aria-hidden="true">/</span>
-            <span className="text-text-secondary">{page.description}</span>
+            <span className="text-text-muted shrink-0" aria-hidden="true">/</span>
+            <span className="text-text-secondary truncate">{page.description}</span>
           </div>
         </div>
 
