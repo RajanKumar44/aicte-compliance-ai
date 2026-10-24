@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, AlertTriangle, RefreshCw, Shield, FileX2, Clock, FileText, CheckCircle2, ListChecks, Printer, Download } from "lucide-react";
+import { ArrowLeft, AlertTriangle, RefreshCw, Shield, FileX2, Clock, FileText, CheckCircle2, ListChecks, Printer, Download, Sparkles } from "lucide-react";
 import { Card, CardContent } from "./Card";
 import { DocumentChecklist } from "./DocumentChecklist";
 import { FindingsTable } from "./FindingsTable";
@@ -9,6 +9,9 @@ import { Button } from "./Button";
 import { formatTimestamp } from "@/lib/utils";
 import { EmptyState } from "./EmptyState";
 import { RequestComparison } from "./RequestComparison";
+import { NilDeficiencyGapPredictor } from "./NilDeficiencyGapPredictor";
+import { ExpiryWatchdogMatrix } from "./ExpiryWatchdogMatrix";
+import { ScrutinyDossierModal } from "./ScrutinyDossierModal";
 import type { ValidationRequest, ValidationResponse } from "@/lib/api";
 import { downloadValidationCsv } from "@/lib/report";
 
@@ -21,6 +24,7 @@ interface ValidationResultsProps {
 export function ValidationResults({ data, request, onReset }: ValidationResultsProps) {
   const [reportGeneratedAt, setReportGeneratedAt] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [isDossierOpen, setIsDossierOpen] = useState(false);
   const passed = data.status === "preliminary_checks_passed";
 
   const missingCount = data.missing_documents.length;
@@ -42,17 +46,53 @@ export function ValidationResults({ data, request, onReset }: ValidationResultsP
         <Button variant="ghost" size="sm" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={onReset}>
           Back to Form
         </Button>
-        <div className={cn(
-          "flex items-center gap-3 border px-4 py-3",
-          passed ? "border-info-border bg-info-bg/70 text-info-text" : "border-warning-border bg-warning-bg/70 text-warning-text"
-        )} role="status" aria-live="polite">
-          {passed ? <CheckCircle2 className="h-6 w-6 shrink-0" aria-hidden="true" /> : <AlertTriangle className="h-6 w-6 shrink-0" aria-hidden="true" />}
-          <div>
-            <p className="font-semibold">{passed ? "Preliminary checks passed" : "Attention required"}</p>
-            {!passed && <p className="text-sm opacity-90">{totalFindings} {totalFindings === 1 ? "issue" : "issues"} found</p>}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setIsDossierOpen(true)}
+            leftIcon={<Sparkles className="h-4 w-4" />}
+          >
+            Download Scrutiny Dossier
+          </Button>
+          <div className={cn(
+            "flex items-center gap-3 border px-4 py-2 rounded-md",
+            passed ? "border-success-border bg-success-bg/40 text-success-text" : "border-warning-border bg-warning-bg/40 text-warning-text"
+          )} role="status" aria-live="polite">
+            {passed ? <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden="true" /> : <AlertTriangle className="h-5 w-5 shrink-0" aria-hidden="true" />}
+            <span className="font-bold text-xs">{passed ? "Checks Passed" : `${totalFindings} Finding(s)`}</span>
           </div>
         </div>
       </div>
+
+      {/* Flagship Feature 1: AICTE Nil-Deficiency Smart Gap Predictor */}
+      <NilDeficiencyGapPredictor
+        requiredDocuments={request.required_documents}
+        submittedDocuments={request.submitted_documents}
+        expiryDates={request.expiry_dates}
+        institutionId={data.institution_id}
+      />
+
+      {/* Feature 3: Expiry Watchdog & Timeline Matrix */}
+      {Object.keys(request.expiry_dates).length > 0 && (
+        <ExpiryWatchdogMatrix
+          expiryDates={request.expiry_dates}
+          submittedDocuments={request.submitted_documents}
+          institutionId={data.institution_id}
+        />
+      )}
+
+      {/* Official Scrutiny Dossier Package Modal */}
+      <ScrutinyDossierModal
+        isOpen={isDossierOpen}
+        onClose={() => setIsDossierOpen(false)}
+        institutionId={data.institution_id}
+        applicationType={data.application_type}
+        requiredDocuments={request.required_documents}
+        submittedDocuments={request.submitted_documents}
+        expiryDates={request.expiry_dates}
+        checkedAt={data.checked_at}
+      />
 
       <Card variant="feature">
         <CardContent className="space-y-4">
@@ -179,6 +219,13 @@ export function ValidationResults({ data, request, onReset }: ValidationResultsP
       </Alert>
 
       <div className="no-print flex flex-wrap justify-end gap-3 pt-4">
+        <Button
+          variant="primary"
+          onClick={() => setIsDossierOpen(true)}
+          leftIcon={<Sparkles className="h-4 w-4" />}
+        >
+          Download Scrutiny Dossier
+        </Button>
         <Button variant="secondary" onClick={() => {
           setExportError(null);
           try {

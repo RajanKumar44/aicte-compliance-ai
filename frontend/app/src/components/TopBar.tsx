@@ -2,7 +2,7 @@ import { useLocation } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { HealthIndicator } from "./HealthIndicator";
 import { useTheme, type ThemeName } from "./ThemeContext";
-import { Shield, ChevronRight, LayoutDashboard, ClipboardCheck, Info, FileLock2, FileText, Menu, X, Clock3 } from "lucide-react";
+import { Shield, ChevronRight, LayoutDashboard, ClipboardCheck, Info, FileLock2, FileText, Menu, X, Clock3, GraduationCap } from "lucide-react";
 import { useAuth } from "./useAuth";
 
 const pageTitles: Record<string, { title: string; description: string; icon: React.ReactNode }> = {
@@ -15,6 +15,11 @@ const pageTitles: Record<string, { title: string; description: string; icon: Rea
     title: "Validate",
     description: "Document validation workspace",
     icon: <ClipboardCheck className="h-5 w-5" />,
+  },
+  "/cadre-calculator": {
+    title: "Cadre & FSR Calculator",
+    description: "AICTE 1:2:6 ratio & doctoral norms",
+    icon: <GraduationCap className="h-5 w-5" />,
   },
   "/history": {
     title: "Audit History",

@@ -12,6 +12,7 @@ import {
   FileCheck,
   Sparkles,
   ArrowUpRight,
+  GraduationCap,
 } from "lucide-react";
 import { Card, CardContent, CardTitle, CardDescription } from "@/components/Card";
 import { Button } from "@/components/Button";
@@ -258,20 +259,41 @@ export function DashboardPage() {
 
       {/* Quick Launchpad Stations */}
       <section className="space-y-4">
-        <h2 className="text-lg font-bold text-text-heading">Compliance Workstations</h2>
-        <div className="grid gap-5 sm:grid-cols-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-text-heading">Institutional Compliance Workstations</h2>
+          <span className="text-xs font-semibold text-text-muted">4 Core Modules</span>
+        </div>
+
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <Link to="/validate" className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded-lg">
             <Card className="h-full transition-all group-hover:border-primary-400 group-hover:bg-bg-2">
               <CardContent className="space-y-3 p-5">
                 <div className="flex items-center justify-between">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary-500/10 text-primary-400">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary-500/10 text-accent-strong">
                     <ListChecks className="h-5 w-5" />
                   </div>
-                  <ArrowUpRight className="h-4 w-4 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-primary-400" />
+                  <ArrowUpRight className="h-4 w-4 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-accent-strong" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-text-heading group-hover:text-accent-strong transition-colors">Run Preliminary Scrutiny</h3>
-                  <p className="mt-1 text-xs text-text-secondary">Load AICTE approval presets, check checklist names, and audit expiry dates.</p>
+                  <h3 className="font-semibold text-text-heading group-hover:text-accent-strong transition-colors">Run Scrutiny Workspace</h3>
+                  <p className="mt-1 text-xs text-text-secondary">AICTE Nil-Deficiency Gap Predictor, expiry watchdog, and OCR certificate extraction.</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link to="/cadre-calculator" className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded-lg">
+            <Card className="h-full transition-all group-hover:border-primary-400 group-hover:bg-bg-2">
+              <CardContent className="space-y-3 p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-md bg-success-bg/40 text-success-text">
+                    <GraduationCap className="h-5 w-5" />
+                  </div>
+                  <ArrowUpRight className="h-4 w-4 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-success-text" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-text-heading group-hover:text-success-text transition-colors">Cadre & FSR Evaluator</h3>
+                  <p className="mt-1 text-xs text-text-secondary">Evaluate 1:15 / 1:20 ratios, 1:2:6 cadre quota, and Ph.D. requirements to prevent intake reduction.</p>
                 </div>
               </CardContent>
             </Card>
@@ -287,7 +309,7 @@ export function DashboardPage() {
                   <ArrowUpRight className="h-4 w-4 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-info-text" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-text-heading group-hover:text-info-text">Saved Audits & Reports</h3>
+                  <h3 className="font-semibold text-text-heading group-hover:text-info-text transition-colors">Saved Audits & Reports</h3>
                   <p className="mt-1 text-xs text-text-secondary">Inspect previously generated scrutiny reports, search by college, and export CSVs.</p>
                 </div>
               </CardContent>
@@ -304,8 +326,8 @@ export function DashboardPage() {
                   <ArrowUpRight className="h-4 w-4 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-warning-text" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-text-heading group-hover:text-warning-text">AICTE Handbook & Specs</h3>
-                  <p className="mt-1 text-xs text-text-secondary">Read API contracts, synthetic verification test suites, and regulatory boundary notes.</p>
+                  <h3 className="font-semibold text-text-heading group-hover:text-warning-text transition-colors">AICTE Handbook & Specs</h3>
+                  <p className="mt-1 text-xs text-text-secondary">Read APH 2024–2027 statutory criteria, common deficiency pitfalls, and hearing FAQs.</p>
                 </div>
               </CardContent>
             </Card>

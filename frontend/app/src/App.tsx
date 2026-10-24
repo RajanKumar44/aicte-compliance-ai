@@ -6,6 +6,7 @@ import { AboutPage } from "./pages/AboutPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
 import { TermsPage } from "./pages/TermsPage";
 import { HistoryPage } from "./pages/HistoryPage";
+import { CadreCalculatorPage } from "./pages/CadreCalculatorPage";
 import { SignInPage } from "./pages/SignInPage";
 import { RequireAuth } from "./components/RequireAuth";
 
@@ -15,6 +16,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/validate" element={<ValidatePage />} />
+        <Route path="/cadre-calculator" element={<CadreCalculatorPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />

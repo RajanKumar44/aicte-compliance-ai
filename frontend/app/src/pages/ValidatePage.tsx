@@ -18,6 +18,7 @@ import { ExpiryDateInput } from "@/components/ExpiryDateInput";
 import { Alert } from "@/components/Alert";
 import { ValidationResults } from "@/components/ValidationResults";
 import { ScopeNotice } from "@/components/ScopeNotice";
+import { DocumentOcrVerifier } from "@/components/DocumentOcrVerifier";
 import { humanizeDocName } from "@/lib/utils";
 import { validateCompleteRequest, validateValidationStep } from "@/lib/form-validation";
 import { useAuth } from "@/components/useAuth";
@@ -383,6 +384,17 @@ export function ValidatePage() {
                 {step === 2 && (
                   <div className="mt-5 space-y-6">
                     <p className="text-sm leading-relaxed text-text-secondary">Expiry dates are optional. The service compares supplied dates with the server’s current UTC date.</p>
+                    
+                    {/* Feature 4: PDF / Image Metadata & Stamp Verification Assistant (OCR Bridge) */}
+                    <DocumentOcrVerifier
+                      onPopulateDate={(doc, date) => {
+                        if (!form.submitted_documents.includes(doc)) {
+                          handleChange("submitted_documents", [...form.submitted_documents, doc]);
+                        }
+                        handleExpiryChange(doc, date);
+                      }}
+                    />
+
                     <ExpiryDateInput documents={allDocuments} values={form.expiry_dates} onChange={handleExpiryChange} disabled={formState === "loading"} />
                     <div className="grid gap-5 border-t border-border pt-5 sm:grid-cols-2">
                       <ReviewList label="Required document names" values={form.required_documents} />

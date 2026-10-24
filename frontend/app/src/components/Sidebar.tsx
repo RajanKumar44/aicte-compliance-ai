@@ -9,12 +9,14 @@ import {
   ChevronRight,
   Shield,
   X,
+  GraduationCap,
 } from "lucide-react";
 import { Button } from "./Button";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/validate", label: "Validate", icon: ClipboardCheck },
+  { path: "/cadre-calculator", label: "Cadre & FSR Norms", icon: GraduationCap },
   { path: "/history", label: "Audit History", icon: Clock3 },
   { path: "/about", label: "Compliance Guide", icon: Info },
 ] as const;
