@@ -1,8 +1,9 @@
 # AI/OCR acceptance audit — canonical requirement → evidence
 
-Status as of 2026-10-24, branch `feature/ai-ocr-corruption-slice` at the merge of `origin/main`
-(merge commit `14d27fc`, which brings backend milestone commits through `4a79d73` and the
-corpus-gap alignment `7c15e01` into the AI branch — update this line with each milestone).
+Status as of 2026-10-24, branch `feature/ai-ocr-corruption-slice` at the PSM bake-off
+milestone (`21be8b1` — on top of the `origin/main` merge `14d27fc`, which brings backend
+milestone commits through `4a79d73` and the corpus-gap alignment `7c15e01` into the AI branch;
+update this line with each milestone).
 Sources of truth: [`docs/canonical/prd.md`](../docs/canonical/prd.md),
 [`docs/canonical/phases.md`](../docs/canonical/phases.md),
 [`WORKSTREAMS.md`](../WORKSTREAMS.md), [`ai/EVALUATION.md`](EVALUATION.md),
@@ -20,8 +21,8 @@ Labels: `PASS` (reproducible evidence), `PARTIAL`, `BLOCKED_EXTERNAL`,
 | Normalization contract tests | `ai/tests/test_normalize.py` | test suite | PASS |
 | Confidence handling (never invented) | evaluator passes through engine-supplied confidences only; scorer never fabricates values | `ai/tests/test_evaluate.py` confidence passthrough tests | PASS |
 | Evidence/provenance distinction | engine/version/report fields (`engine`, `engine_version`, `dataset_fingerprint`, `rendering`) in every raster report | report schema tests | PASS |
-| Evaluation corpus and accuracy measurement | text corpora (56 extraction cases — all 56 scored after backend fix merged — + 30 corruption cases) + evaluator; raster image benchmark with CER/WER/F1 | `ai/evaluate_extraction.py --check` exit 0; 245 AI tests; extraction slice 56/56 exact | PASS |
-| AI tests | `ai/tests/` | `pytest -q ai/tests` → 245 passed (2026-10-24, post-merge) | PASS |
+| Evaluation corpus and accuracy measurement | text corpora (56 extraction cases — all 56 scored after backend fix merged — + 30 corruption cases) + evaluator; raster image benchmark with CER/WER/F1 | `ai/evaluate_extraction.py --check` exit 0; 249 AI tests; extraction slice 56/56 exact | PASS |
+| AI tests | `ai/tests/` | `pytest -q ai/tests` → 249 passed (2026-10-24, includes 4 PSM-configuration tests) | PASS |
 
 ## Canonical gates (PRD / phases.md)
 
