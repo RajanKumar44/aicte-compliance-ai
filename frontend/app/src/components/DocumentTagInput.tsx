@@ -1,95 +1,166 @@
-import { useState, useRef, type KeyboardEvent } from "react";
-import { X } from "lucide-react";
+import { useState, useRef, type KeyboardEvent, type ChangeEvent } from "react";
 import { cn } from "@/lib/utils";
+import { X } from "lucide-react";
 
-interface DocumentTagInputProps {
-  id: string;
+export interface DocumentTagInputProps {
   value: string[];
   onChange: (tags: string[]) => void;
+  onDuplicate?: () => void;
   placeholder?: string;
+  error?: boolean | string;
   disabled?: boolean;
-  error?: boolean;
-  describedBy?: string;
-  ariaLabel?: string;
+  label?: string;
+  hint?: string;
+  required?: boolean;
+  id?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean;
 }
 
 export function DocumentTagInput({
-  id,
   value,
   onChange,
-  placeholder = "Type document name and press Enter",
-  disabled = false,
-  error = false,
-  describedBy,
-  ariaLabel,
+  onDuplicate,
+  placeholder = "Type a name and press Enter...",
+  error,
+  disabled,
+  label,
+  hint,
+  required,
+  id,
+  "aria-describedby": describedBy,
+  "aria-invalid": ariaInvalid,
 }: DocumentTagInputProps) {
-  const [input, setInput] = useState("");
+  const [inputValue, setInputValue] = useState("");
+  const [focused, setFocused] = useState(false);
+  const [flashingTag, setFlashingTag] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  function addTag(raw: string) {
-    const tag = raw.trim().toLowerCase().replace(/\s+/g, "_");
-    if (tag && !value.includes(tag)) {
-      onChange([...value, tag]);
+  const normalizeTag = (tag: string) => tag.trim();
+
+  const addTag = (tag: string) => {
+    const normalized = normalizeTag(tag);
+    if (!normalized) return;
+    if (value.some((v) => v.trim() === normalized)) {
+      flashTag(normalized);
+      onDuplicate?.();
+      return;
     }
-    setInput("");
-  }
+    onChange([...value, normalized]);
+  };
 
-  function removeTag(tag: string) {
-    onChange(value.filter((t) => t !== tag));
-  }
+  const removeTag = (tag: string) => {
+    onChange(value.filter((v) => v !== tag));
+  };
 
-  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+  const flashTag = (tag: string) => {
+    setFlashingTag(tag);
+    window.setTimeout(() => setFlashingTag((current) => current === tag ? null : current), 350);
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
-      addTag(input);
-    } else if (e.key === "Backspace" && input === "" && value.length > 0) {
+      if (inputValue.trim()) addTag(inputValue);
+      setInputValue("");
+    } else if (e.key === "Backspace" && !inputValue && value.length > 0) {
       removeTag(value[value.length - 1]);
     }
-  }
+  };
+
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value);
+  };
+
+  const handleBlur = () => setFocused(false);
+
+  const handleFocus = () => setFocused(true);
+
+  const handleContainerClick = () => inputRef.current?.focus();
 
   return (
-    <div
-      className={cn(
-        "flex flex-wrap items-center gap-1.5 rounded-md border bg-white px-2 py-1.5 text-sm",
-        "focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500",
-        error ? "border-red-500" : "border-slate-300",
-        disabled && "bg-slate-50 opacity-60"
+    <div className="space-y-1.5">
+      {(label || required) && (
+        <label htmlFor={id} className="block text-sm font-medium text-text-secondary">
+          {label}
+          {required && <span className="ml-1 text-error-text" aria-hidden="true">*</span>}
+        </label>
       )}
-      onClick={() => inputRef.current?.focus()}
-    >
-      {value.map((tag) => (
-        <span
-          key={tag}
-          className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-navy-800"
-        >
-          {tag}
-          {!disabled && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); removeTag(tag); }}
-              className="rounded-sm text-slate-500 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
-              aria-label={`Remove ${tag}`}
-            >
-              <X className="h-3 w-3" />
-            </button>
-          )}
-        </span>
-      ))}
-      <input
-        ref={inputRef}
-        id={id}
-        type="text"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onBlur={() => { if (input.trim()) addTag(input); }}
-        placeholder={value.length === 0 ? placeholder : ""}
-        disabled={disabled}
-        className="min-w-[120px] flex-1 border-none bg-transparent py-1 text-sm outline-none placeholder:text-slate-500"
-        aria-label={ariaLabel}
-        aria-invalid={error || undefined}
+      {hint && <span className="text-xs text-text-muted">{hint}</span>}
+
+      <div
+        ref={containerRef}
+        onClick={handleContainerClick}
+        className={cn(
+          "app-control flex flex-wrap items-center gap-2 min-h-11 bg-bg-3 border rounded-lg transition-all duration-200",
+          "focus-within:ring-2 focus-within:ring-primary-500/30 focus-within:border-primary-500",
+          error && "border-error-border focus-within:ring-error-text/30 focus-within:border-error-text",
+          disabled && "opacity-50 cursor-not-allowed",
+          focused && "border-border-hover"
+        )}
+        role="group"
+        aria-label={label}
         aria-describedby={describedBy}
-      />
+        aria-invalid={ariaInvalid || !!error}
+      >
+        {value.map((tag) => (
+          <span
+            key={tag}
+            data-tag={tag}
+            className={cn(
+              "inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md border border-border bg-bg-2 px-2.5 py-1 text-xs font-bold text-text-heading",
+              "animate-scale-in",
+              flashingTag === tag && "animate-tag-pulse",
+              "transition-colors"
+            )}
+          >
+            <span className="min-w-0 break-all">{tag.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</span>
+            {!disabled && (
+              <button
+                type="button"
+                onClick={() => {
+                  removeTag(tag);
+                }}
+                className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-bg-3 text-text-muted hover:text-text-heading"
+                aria-label={`Remove ${tag}`}
+              >
+                <X className="h-3 w-3" aria-hidden="true" />
+              </button>
+            )}
+          </span>
+        ))}
+
+        <input
+          ref={inputRef}
+          id={id}
+          type="text"
+          value={inputValue}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          placeholder={value.length === 0 ? placeholder : ""}
+          disabled={disabled}
+          aria-describedby={describedBy}
+          aria-invalid={ariaInvalid || !!error}
+          className={cn(
+            "flex-1 min-w-[120px] bg-transparent border-0 outline-none text-text-body placeholder:text-text-muted",
+            "text-sm h-8 px-1"
+          )}
+        />
+      </div>
+
+      {error && (
+        <p className="flex items-center gap-1.5 text-xs text-error-text animate-slide-up">
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          {error === true ? "Invalid input" : error}
+        </p>
+      )}
     </div>
   );
 }

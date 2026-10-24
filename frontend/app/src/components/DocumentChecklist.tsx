@@ -1,61 +1,73 @@
-import { Check, FileX2, Clock, File } from "lucide-react";
-import { Badge } from "./Badge";
+import { cn } from "@/lib/utils";
+import { CheckCircle2, XCircle, AlertTriangle, Clock } from "lucide-react";
 import { humanizeDocName } from "@/lib/utils";
-import type { ValidationResponse } from "@/lib/api";
 
-interface DocumentChecklistProps {
-  data: ValidationResponse;
+const getToday = () => {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+};
+
+export interface DocumentChecklistProps {
+  requiredDocs: string[];
+  submittedDocs: string[];
+  expiryDates: Record<string, string>;
+  missingDocs?: string[];
+  expiredDocs?: string[];
 }
 
-export function DocumentChecklist({ data }: DocumentChecklistProps) {
-  // Build a unified view from all document lists
-  const allDocs = new Set<string>();
-  // We only know the documents mentioned across the response
-  data.missing_documents.forEach((d) => allDocs.add(d));
-  data.expired_documents.forEach((d) => allDocs.add(d));
-  // Add findings document_types
-  data.findings.forEach((f) => allDocs.add(f.document_type));
-
-  // Determine submitted documents by exclusion:
-  // Documents that are not missing are considered submitted.
-  // (The API doesn't return submitted_documents in response)
-
-  if (allDocs.size === 0) {
-    return (
-      <div className="flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800">
-        <Check className="h-4 w-4" />
-        No missing or expired items were returned for the supplied checklist.
-      </div>
-    );
-  }
+export function DocumentChecklist({ requiredDocs, submittedDocs, expiryDates, missingDocs, expiredDocs }: DocumentChecklistProps) {
+  const today = getToday();
 
   return (
-    <div className="space-y-2">
-      {Array.from(allDocs).map((doc) => {
-        const isMissing = data.missing_documents.includes(doc);
-        const isExpired = data.expired_documents.includes(doc);
+    <div className="space-y-2" role="list" aria-label="Document checklist">
+      {requiredDocs.map((doc) => {
+        const isMissing = missingDocs?.includes(doc) ?? !submittedDocs.includes(doc);
+        const isExpiredFinding = expiredDocs?.includes(doc) ?? false;
+        const expiry = expiryDates[doc];
+        const isExpired = expiry && expiry < today;
+
+        let status: "submitted" | "missing" | "expired" = "submitted";
+        if (isMissing) status = "missing";
+        else if (isExpiredFinding || isExpired) status = "expired";
+
+        const statusConfig = {
+          submitted: {
+            icon: <CheckCircle2 className="h-5 w-5 text-success-text" aria-hidden="true" />,
+            badge: <span className="rounded-md border border-success-border bg-success-bg px-2.5 py-0.5 text-xs font-medium text-success-text">Submitted</span>,
+          },
+          missing: {
+            icon: <XCircle className="h-5 w-5 text-error-text" aria-hidden="true" />,
+            badge: <span className="rounded-md border border-error-border bg-error-bg px-2.5 py-0.5 text-xs font-medium text-error-text">Missing</span>,
+          },
+          expired: {
+            icon: <AlertTriangle className="h-5 w-5 text-warning-text" aria-hidden="true" />,
+            badge: (
+              <span className="flex items-center gap-1.5 rounded-md border border-warning-border bg-warning-bg px-2.5 py-0.5 text-xs font-medium text-warning-text">
+                <Clock className="h-3 w-3" aria-hidden="true" />
+                Expired {expiry && `(${expiry})`}
+              </span>
+            ),
+          },
+        };
+
+        const { icon, badge } = statusConfig[status];
 
         return (
           <div
             key={doc}
-            className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3"
+            className={cn(
+              "flex items-center gap-3 p-3 bg-bg-3/50 border border-border rounded-lg animate-slide-up",
+              "transition-colors hover:bg-bg-2/50"
+            )}
+            role="listitem"
           >
-            <div className="flex items-center gap-3">
-              <div className={
-                isMissing ? "text-red-500" :
-                isExpired ? "text-amber-500" :
-                "text-slate-400"
-              }>
-                {isMissing ? <FileX2 className="h-4 w-4" /> :
-                 isExpired ? <Clock className="h-4 w-4" /> :
-                 <File className="h-4 w-4" />}
-              </div>
-              <span className="text-sm font-medium text-navy-900">
-                {humanizeDocName(doc)}
-              </span>
+            <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-bg-2">
+              {icon}
             </div>
-            {isMissing && <Badge variant="error">Not Submitted</Badge>}
-            {isExpired && !isMissing && <Badge variant="warning">Expired</Badge>}
+            <span className="flex-1 text-sm font-medium text-text-body truncate">
+              {humanizeDocName(doc)}
+            </span>
+            {badge}
           </div>
         );
       })}

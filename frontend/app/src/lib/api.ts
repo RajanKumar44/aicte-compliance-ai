@@ -42,6 +42,30 @@ export interface HealthResponse {
   service: string;
 }
 
+export interface InstitutionAccess {
+  id: string;
+  external_ref: string;
+  display_name: string;
+  role: "applicant" | "reviewer" | "institution_admin";
+}
+
+export interface SavedValidationRun {
+  id: string;
+  institution_id: string;
+  institution_name: string;
+  application_type: ApplicationType;
+  created_at: string;
+  checked_at: string;
+  expires_at: string;
+  request: ValidationRequest;
+  result: ValidationResponse;
+}
+
+export interface SavedValidationRunPage {
+  items: SavedValidationRun[];
+  has_more: boolean;
+}
+
 // ── Error types ────────────────────────────────────────────────
 
 export interface ValidationErrorDetail {
@@ -253,4 +277,115 @@ export async function validateDocuments(
       },
     };
   }
+}
+
+async function authenticatedJson<T>(
+  path: string,
+  token: string,
+  init: RequestInit = {},
+  valid: (body: unknown) => body is T,
+): Promise<ApiResult<T>> {
+  try {
+    const headers = new Headers(init.headers);
+    headers.set("Authorization", `Bearer ${token}`);
+    if (init.body) headers.set("Content-Type", "application/json");
+    const { response, body, parseError } = await fetchJson(path, { ...init, headers });
+    if (response.status === 204) return { ok: true, data: undefined as T };
+    if (response.ok && !parseError && valid(body)) return { ok: true, data: body };
+    if (response.ok) {
+      return { ok: false, kind: "invalid_response", status: response.status, errors: { _server: "History service returned an invalid response." }, raw: body };
+    }
+    const mapped = mapValidationErrors(body);
+    return {
+      ok: false,
+      kind: response.status === 422 ? "validation" : "server",
+      status: response.status,
+      errors: Object.keys(mapped).length ? mapped : { _server: historyErrorMessage(response.status, body) },
+      raw: body,
+    };
+  } catch (error) {
+    const timedOut = error instanceof DOMException && error.name === "AbortError";
+    return {
+      ok: false,
+      kind: timedOut ? "timeout" : "network",
+      status: 0,
+      errors: { _network: timedOut ? "History request timed out." : "Unable to reach the history service." },
+    };
+  }
+}
+
+function historyErrorMessage(status: number, body: unknown) {
+  if (isRecord(body) && typeof body.detail === "string") return body.detail;
+  if (status === 401) return "Your session expired. Sign in again.";
+  if (status === 403) return "Your account does not have access to this history action.";
+  if (status === 404) return "The history record or institution was not found.";
+  if (status === 503) return "History is not configured or is temporarily unavailable.";
+  return `History service returned an error (${status}).`;
+}
+
+function isInstitutionList(value: unknown): value is InstitutionAccess[] {
+  return Array.isArray(value) && value.every((item) => isRecord(item)
+    && typeof item.id === "string"
+    && typeof item.external_ref === "string"
+    && typeof item.display_name === "string"
+    && ["applicant", "reviewer", "institution_admin"].includes(String(item.role)));
+}
+
+function isSavedRun(value: unknown): value is SavedValidationRun {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.institution_id === "string"
+    && typeof value.institution_name === "string"
+    && typeof value.application_type === "string"
+    && typeof value.created_at === "string"
+    && typeof value.checked_at === "string"
+    && typeof value.expires_at === "string"
+    && isRecord(value.request)
+    && isValidationResponse(value.result);
+}
+
+function isSavedRunPage(value: unknown): value is SavedValidationRunPage {
+  return isRecord(value) && Array.isArray(value.items)
+    && value.items.every(isSavedRun) && typeof value.has_more === "boolean";
+}
+
+export function fetchInstitutions(token: string) {
+  return authenticatedJson<InstitutionAccess[]>("/api/v1/institutions", token, {}, isInstitutionList);
+}
+
+export function createSavedValidationRun(request: ValidationRequest, token: string) {
+  return authenticatedJson<SavedValidationRun>(
+    "/api/v1/validation-runs",
+    token,
+    { method: "POST", body: JSON.stringify(request) },
+    isSavedRun,
+  );
+}
+
+export function fetchValidationRuns(token: string, limit = 25, offset = 0) {
+  const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  return authenticatedJson<SavedValidationRunPage>(
+    `/api/v1/validation-runs?${query.toString()}`,
+    token,
+    {},
+    isSavedRunPage,
+  );
+}
+
+export function fetchValidationRun(runId: string, token: string) {
+  return authenticatedJson<SavedValidationRun>(
+    `/api/v1/validation-runs/${encodeURIComponent(runId)}`,
+    token,
+    {},
+    isSavedRun,
+  );
+}
+
+export function deleteValidationRun(runId: string, token: string) {
+  return authenticatedJson<{ ok: true }>(
+    `/api/v1/validation-runs/${encodeURIComponent(runId)}`,
+    token,
+    { method: "DELETE" },
+    (body): body is { ok: true } => body === null,
+  );
 }

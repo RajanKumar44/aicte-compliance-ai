@@ -1,8 +1,19 @@
 from datetime import date, datetime, timezone
-from typing import Literal
+from typing import Any, Literal
+from uuid import UUID, uuid4
 
-from fastapi import FastAPI
+import httpx
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
+
+from .history_store import (
+    SupabaseSettings,
+    bearer_token,
+    require_settings,
+    response_rows,
+    rest_request,
+    verify_user,
+)
 
 app = FastAPI(
     title="AICTE Compliance Assistant",
@@ -103,6 +114,65 @@ class ValidationResponse(BaseModel):
     notice: str
 
 
+class InstitutionAccess(BaseModel):
+    id: UUID
+    external_ref: str
+    display_name: str
+    role: Literal["applicant", "reviewer", "institution_admin"]
+
+
+class SavedValidationRun(BaseModel):
+    id: UUID
+    institution_id: str
+    institution_name: str
+    application_type: Literal["eoa", "new_program", "intake_change"]
+    created_at: datetime
+    checked_at: datetime
+    expires_at: datetime
+    request: ValidationRequest
+    result: ValidationResponse
+
+
+class SavedValidationRunPage(BaseModel):
+    items: list[SavedValidationRun]
+    has_more: bool
+
+
+async def _supabase_client():
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+        yield client
+
+
+async def _authenticated_context(
+    authorization: str | None = Header(default=None),
+    client: httpx.AsyncClient = Depends(_supabase_client),
+) -> tuple[SupabaseSettings, str, UUID, httpx.AsyncClient]:
+    settings = require_settings()
+    token = bearer_token(authorization)
+    user_id = await verify_user(client, settings, token)
+    return settings, token, user_id, client
+
+
+def _saved_run(row: dict[str, Any]) -> SavedValidationRun:
+    try:
+        institution = row["institutions"]
+        if isinstance(institution, list):
+            institution = institution[0]
+        return SavedValidationRun(
+            id=row["id"],
+            institution_id=institution["external_ref"],
+            institution_name=institution["display_name"],
+            application_type=row["application_type"],
+            created_at=row["created_at"],
+            checked_at=row["checked_at"],
+            expires_at=row["expires_at"],
+            request=ValidationRequest.model_validate(row["request_snapshot"]),
+            result=ValidationResponse.model_validate(row["response_snapshot"]),
+        )
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail="Stored history record is invalid.") from exc
+
+
 @app.get("/health", response_model=HealthResponse)
 def health_check() -> HealthResponse:
     return HealthResponse(status="ok", service="aicte-compliance-assistant")
@@ -110,6 +180,10 @@ def health_check() -> HealthResponse:
 
 @app.post("/api/v1/validate", response_model=ValidationResponse)
 def validate_application(request: ValidationRequest) -> ValidationResponse:
+    return _validate_application(request)
+
+
+def _validate_application(request: ValidationRequest) -> ValidationResponse:
     required = set(request.required_documents)
     submitted = set(request.submitted_documents)
 
@@ -174,3 +248,161 @@ def validate_application(request: ValidationRequest) -> ValidationResponse:
             "use supplied dates and require appropriate review."
         ),
     )
+
+
+@app.get("/api/v1/institutions", response_model=list[InstitutionAccess])
+async def list_institutions(
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> list[InstitutionAccess]:
+    settings, token, user_id, client = context
+    response = await rest_request(
+        client,
+        settings,
+        token,
+        "GET",
+        "institution_memberships",
+        params={
+            "select": "institution_id,role,institutions(id,external_ref,display_name)",
+            "user_id": f"eq.{user_id}",
+            "order": "institutions(display_name).asc",
+        },
+    )
+    rows = response_rows(response)
+    result: list[InstitutionAccess] = []
+    for row in rows:
+        institution = row.get("institutions")
+        if isinstance(institution, list):
+            institution = institution[0] if institution else None
+        if not isinstance(institution, dict):
+            continue
+        try:
+            result.append(InstitutionAccess(**institution, role=row["role"]))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=503, detail="Institution access data is invalid.") from exc
+    return result
+
+
+@app.post("/api/v1/validation-runs", response_model=SavedValidationRun, status_code=201)
+async def create_validation_run(
+    request: ValidationRequest,
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> SavedValidationRun:
+    settings, token, user_id, client = context
+    institution_response = await rest_request(
+        client,
+        settings,
+        token,
+        "GET",
+        "institution_memberships",
+        params={
+            "select": "role,institutions(id,external_ref,display_name)",
+            "user_id": f"eq.{user_id}",
+        },
+    )
+    membership_rows = response_rows(institution_response)
+    institutions = []
+    for membership in membership_rows:
+        institution = membership.get("institutions")
+        if isinstance(institution, list):
+            institution = institution[0] if institution else None
+        if isinstance(institution, dict) and institution.get("external_ref") == request.institution_id:
+            institutions.append(institution)
+    if not institutions:
+        raise HTTPException(status_code=404, detail="Institution access is not provisioned for this account.")
+
+    institution_id = institutions[0].get("id")
+    if not institution_id:
+        raise HTTPException(status_code=503, detail="Institution access data is invalid.")
+    validation = _validate_application(request)
+    insert_response = await rest_request(
+        client,
+        settings,
+        token,
+        "POST",
+        "validation_runs",
+        body={
+            "institution_id": institution_id,
+            "created_by": str(user_id),
+            "application_type": request.application_type,
+            "validation_scope": validation.validation_scope,
+            "request_snapshot": request.model_dump(mode="json"),
+            "response_snapshot": validation.model_dump(mode="json"),
+            "ruleset_snapshot": [],
+        },
+        prefer="return=representation",
+    )
+    rows = response_rows(insert_response)
+    if not rows:
+        raise HTTPException(status_code=403, detail="This account cannot save history for the selected institution.")
+    row = rows[0]
+    row["institutions"] = institutions[0]
+    return _saved_run(row)
+
+
+@app.get("/api/v1/validation-runs", response_model=SavedValidationRunPage)
+async def list_validation_runs(
+    limit: int = Query(default=25, ge=1, le=50),
+    offset: int = Query(default=0, ge=0, le=100000),
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> SavedValidationRunPage:
+    settings, token, _user_id, client = context
+    response = await rest_request(
+        client,
+        settings,
+        token,
+        "GET",
+        "validation_runs",
+        params={
+            "select": "id,institution_id,application_type,created_at,checked_at,expires_at,request_snapshot,response_snapshot,institutions(external_ref,display_name)",
+            "order": "created_at.desc,id.desc",
+            "limit": str(limit + 1),
+            "offset": str(offset),
+        },
+    )
+    rows = response_rows(response)
+    has_more = len(rows) > limit
+    return SavedValidationRunPage(items=[_saved_run(row) for row in rows[:limit]], has_more=has_more)
+
+
+@app.get("/api/v1/validation-runs/{run_id}", response_model=SavedValidationRun)
+async def get_validation_run(
+    run_id: UUID,
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> SavedValidationRun:
+    settings, token, _user_id, client = context
+    response = await rest_request(
+        client,
+        settings,
+        token,
+        "GET",
+        "validation_runs",
+        params={
+            "select": "id,institution_id,application_type,created_at,checked_at,expires_at,request_snapshot,response_snapshot,institutions(external_ref,display_name)",
+            "id": f"eq.{run_id}",
+            "limit": "1",
+        },
+    )
+    rows = response_rows(response)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Validation history record was not found.")
+    return _saved_run(rows[0])
+
+
+@app.delete("/api/v1/validation-runs/{run_id}", status_code=204)
+async def delete_validation_run(
+    run_id: UUID,
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> None:
+    settings, token, _user_id, client = context
+    response = await rest_request(
+        client,
+        settings,
+        token,
+        "DELETE",
+        "validation_runs",
+        params={"id": f"eq.{run_id}", "select": "id"},
+        prefer="return=representation",
+    )
+    rows = response_rows(response)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Validation history record was not found.")
