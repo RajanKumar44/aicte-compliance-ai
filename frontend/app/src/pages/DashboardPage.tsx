@@ -33,9 +33,10 @@ const capabilities = [
 ];
 
 const workflow = [
-  { number: "01", title: "Enter request details", description: "Use a synthetic institution identifier and choose an application type." },
-  { number: "02", title: "Supply document names", description: "Enter the required list, the submitted list, and any expiry dates." },
-  { number: "03", title: "Review the response", description: "Check each finding and decide what needs human follow-up." },
+  { number: "01", title: "Set application context", description: "Use a synthetic institution identifier and choose an application type." },
+  { number: "02", title: "List document names", description: "Enter required and submitted names. No files are uploaded." },
+  { number: "03", title: "Review dates and input", description: "Optionally add expiry dates and check the request details." },
+  { number: "04", title: "Review returned findings", description: "Search the preliminary response and review its evidence." },
 ];
 
 const limits = [
@@ -85,10 +86,10 @@ export function DashboardPage() {
               </div>
               <div>
                 <h2 className="text-lg font-semibold tracking-tight text-text-heading">Request flow</h2>
-                <CardDescription>Three steps from input to review</CardDescription>
+                <CardDescription>Four steps from input to findings review</CardDescription>
               </div>
             </div>
-            <ol className="space-y-5">
+            <ol className="space-y-4">
               {workflow.map((step, index) => (
                 <li key={step.number} className="relative flex gap-3">
                   {index < workflow.length - 1 && <span className="absolute bottom-[-1.25rem] left-[0.9375rem] top-8 w-px bg-border" aria-hidden="true" />}

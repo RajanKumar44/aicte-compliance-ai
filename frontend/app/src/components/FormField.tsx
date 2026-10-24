@@ -101,7 +101,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             "transition-all duration-200",
             "focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500",
             "disabled:opacity-50 disabled:cursor-not-allowed",
-            "h-10 px-3",
+            "h-11 px-3",
             hasLeft && "pl-10",
             hasRight && "pr-10",
             error && "border-error-border focus:ring-error-text/30 focus:border-error-text",
@@ -145,7 +145,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             "transition-all duration-200",
             "focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500",
             "disabled:opacity-50 disabled:cursor-not-allowed",
-            "h-10 px-3 pr-10",
+            "h-11 px-3 pr-10",
             error && "border-error-border focus:ring-error-text/30 focus:border-error-text",
             className
           )}

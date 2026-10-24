@@ -45,7 +45,11 @@ From `frontend/app/`:
 npm ci
 npm run lint
 npm run build
+npm run test
 ```
+
+`npm run test` uses Node's built-in test runner and TypeScript type stripping; use Node.js
+22.6 or newer. No frontend test dependency is added.
 
 ## First task
 

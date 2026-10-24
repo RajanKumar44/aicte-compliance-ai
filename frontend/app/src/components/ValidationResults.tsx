@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, AlertTriangle, RefreshCw, Shield, FileX2, Clock, FileText, CheckCircle2, ListChecks, Printer } from "lucide-react";
+import { ArrowLeft, AlertTriangle, RefreshCw, Shield, FileX2, Clock, FileText, CheckCircle2, ListChecks, Printer, Download } from "lucide-react";
 import { Card, CardContent } from "./Card";
 import { DocumentChecklist } from "./DocumentChecklist";
 import { FindingsTable } from "./FindingsTable";
@@ -9,6 +10,7 @@ import { formatTimestamp } from "@/lib/utils";
 import { EmptyState } from "./EmptyState";
 import { RequestComparison } from "./RequestComparison";
 import type { ValidationRequest, ValidationResponse } from "@/lib/api";
+import { downloadValidationCsv } from "@/lib/report";
 
 interface ValidationResultsProps {
   data: ValidationResponse;
@@ -17,6 +19,8 @@ interface ValidationResultsProps {
 }
 
 export function ValidationResults({ data, request, onReset }: ValidationResultsProps) {
+  const [reportGeneratedAt, setReportGeneratedAt] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const passed = data.status === "preliminary_checks_passed";
 
   const missingCount = data.missing_documents.length;
@@ -31,6 +35,7 @@ export function ValidationResults({ data, request, onReset }: ValidationResultsP
         <h1 className="mt-1 text-2xl font-bold">Preliminary validation summary</h1>
         <p className="mt-2">Validation scope: {data.validation_scope}</p>
         <p>Checked at: <time dateTime={data.checked_at}>{data.checked_at}</time></p>
+        {reportGeneratedAt && <p>Report generated at: <time dateTime={reportGeneratedAt}>{reportGeneratedAt}</time></p>}
       </div>
 
       <div className="no-print flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -144,27 +149,60 @@ export function ValidationResults({ data, request, onReset }: ValidationResultsP
         </CardContent>
       </Card>
 
-      {totalFindings > 0 && (
-        <Card>
-          <CardContent>
-            <h3 className="text-lg font-semibold text-text-heading mb-4">Findings Detail</h3>
+      <Card>
+        <CardContent className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold text-text-heading">Findings review</h3>
+            <p className="mt-1 text-sm leading-relaxed text-text-secondary">
+              A missing finding means a required name is absent from the submitted list. An expired finding means a supplied expiry date is before the server’s current UTC date.
+            </p>
+          </div>
+          <dl className="grid gap-3 border-y border-border py-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div><dt className="text-xs font-semibold uppercase tracking-wide text-text-muted">API status</dt><dd className="mt-1 break-words text-sm text-text-heading">{data.status}</dd></div>
+            <div><dt className="text-xs font-semibold uppercase tracking-wide text-text-muted">Validation scope</dt><dd className="mt-1 break-words text-sm text-text-heading">{data.validation_scope}</dd></div>
+            <div><dt className="text-xs font-semibold uppercase tracking-wide text-text-muted">Checked at</dt><dd className="mt-1 break-words text-sm text-text-heading"><time dateTime={data.checked_at}>{data.checked_at}</time></dd></div>
+            <div><dt className="text-xs font-semibold uppercase tracking-wide text-text-muted">Source</dt><dd className="mt-1 break-words font-mono text-xs text-text-heading">{data.source}</dd></div>
+          </dl>
+          {totalFindings > 0 ? (
             <FindingsTable findings={data.findings} />
-          </CardContent>
-        </Card>
-      )}
+          ) : (
+            <div className="border-l-2 border-info-border bg-info-bg/40 p-4" role="status">
+              <h4 className="font-semibold text-text-heading">No findings were returned</h4>
+              <p className="mt-1 text-sm leading-relaxed text-text-secondary">This describes this caller-supplied comparison only. It is not an official compliance determination.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Alert variant="info" title="Notice" icon={<Shield className="h-5 w-5" />}>
         {data.notice}
       </Alert>
 
       <div className="no-print flex flex-wrap justify-end gap-3 pt-4">
-        <Button variant="secondary" onClick={() => window.print()} leftIcon={<Printer className="h-4 w-4" />}>
+        <Button variant="secondary" onClick={() => {
+          setExportError(null);
+          try {
+            downloadValidationCsv(request, data);
+          } catch {
+            setExportError("The CSV could not be generated. The validation result is still available on this page.");
+          }
+        }} leftIcon={<Download className="h-4 w-4" />}>
+          Download CSV
+        </Button>
+        <Button variant="secondary" onClick={() => {
+          setReportGeneratedAt(new Date().toISOString());
+          window.setTimeout(() => window.print(), 0);
+        }} leftIcon={<Printer className="h-4 w-4" />}>
           Print Summary
         </Button>
         <Button onClick={onReset} leftIcon={<RefreshCw className="h-4 w-4" />}>
           Start New Validation
         </Button>
       </div>
+      {exportError && <p className="no-print text-right text-sm text-error-text" role="alert">{exportError}</p>}
+      <p className="no-print text-right text-xs text-text-muted">
+        CSV cells are quoted and formula-leading values are prefixed with an apostrophe for spreadsheet safety.
+      </p>
     </div>
   );
 }

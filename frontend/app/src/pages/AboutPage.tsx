@@ -185,6 +185,18 @@ export function AboutPage() {
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Exporting a result</CardTitle>
+              <CardDescription>Downloads contain only the current validation request and API response.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm leading-relaxed text-text-secondary">
+              <p>CSV includes request context, response status and scope, the API checked-at timestamp, a separate report-generation timestamp, findings, evidence, source, and the API limitation notice.</p>
+              <p>CSV values are quoted and quotes are escaped. Values that begin with a spreadsheet formula character, including after whitespace, receive a leading apostrophe in the exported cell. The in-page result is unchanged.</p>
+              <p>Print Summary opens the browser print dialog. You can choose a PDF destination. The report remains a preliminary caller-supplied comparison and is not saved by this service.</p>
+            </CardContent>
+          </Card>
         </div>
 
         <aside className="min-w-0 space-y-5" aria-label="Scope and security information">

@@ -138,6 +138,7 @@
     break-inside: avoid;
     border-top: 1px solid #9ca3af;
     padding-top: 8px;
+    overflow-wrap: anywhere;
   }
 
   table {
@@ -150,6 +151,10 @@
   td {
     overflow-wrap: anywhere;
     padding: 5px !important;
+  }
+
+  tr {
+    break-inside: avoid;
   }
 }
 

@@ -56,7 +56,7 @@ export function ExpiryDateInput({ documents, values, onChange, disabled }: Expir
                   onChange={(e) => onChange(doc, e.target.value)}
                   disabled={disabled}
                   className={cn(
-                    "app-control h-10 w-full bg-bg-1 border border-border rounded-lg text-text-body sm:h-9 sm:w-40",
+                    "app-control h-11 w-full bg-bg-1 border border-border rounded-lg text-text-body sm:w-40",
                     "placeholder:text-text-muted",
                     "focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500",
                     "disabled:opacity-50 disabled:cursor-not-allowed",

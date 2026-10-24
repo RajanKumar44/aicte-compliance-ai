@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 export interface DocumentTagInputProps {
   value: string[];
   onChange: (tags: string[]) => void;
+  onDuplicate?: () => void;
   placeholder?: string;
   error?: boolean | string;
   disabled?: boolean;
@@ -19,6 +20,7 @@ export interface DocumentTagInputProps {
 export function DocumentTagInput({
   value,
   onChange,
+  onDuplicate,
   placeholder = "Type a name and press Enter...",
   error,
   disabled,
@@ -35,13 +37,14 @@ export function DocumentTagInput({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const normalizeTag = (tag: string) => tag.trim().toLowerCase().replace(/\s+/g, "_");
+  const normalizeTag = (tag: string) => tag.trim();
 
   const addTag = (tag: string) => {
     const normalized = normalizeTag(tag);
     if (!normalized) return;
-    if (value.some((v) => v.toLowerCase() === normalized)) {
+    if (value.some((v) => v.trim() === normalized)) {
       flashTag(normalized);
+      onDuplicate?.();
       return;
     }
     onChange([...value, normalized]);
@@ -90,7 +93,7 @@ export function DocumentTagInput({
         ref={containerRef}
         onClick={handleContainerClick}
         className={cn(
-          "app-control flex flex-wrap items-center gap-2 min-h-[40px] bg-bg-3 border rounded-lg transition-all duration-200",
+          "app-control flex flex-wrap items-center gap-2 min-h-11 bg-bg-3 border rounded-lg transition-all duration-200",
           "focus-within:ring-2 focus-within:ring-primary-500/30 focus-within:border-primary-500",
           error && "border-error-border focus-within:ring-error-text/30 focus-within:border-error-text",
           disabled && "opacity-50 cursor-not-allowed",
@@ -119,7 +122,7 @@ export function DocumentTagInput({
                 onClick={() => {
                   removeTag(tag);
                 }}
-                className="flex h-11 w-11 items-center justify-center rounded-md transition-colors hover:bg-primary-700/50 md:h-7 md:w-7"
+                className="flex h-11 w-11 items-center justify-center rounded-md transition-colors hover:bg-primary-700/50"
                 aria-label={`Remove ${tag}`}
               >
                 <X className="h-3 w-3" aria-hidden="true" />
