@@ -3,7 +3,9 @@
 Status as of 2026-10-24, branch `feature/ai-ocr-corruption-slice` at `4f74b14`, pushed and
 opened for review as **[PR #10](https://github.com/rajaryan1111/aicte-compliance-ai/pull/10)**
 to `origin/main` (OPEN, MERGEABLE — `00065a7` is a strict ancestor); merge remains an owner
-authorization. On top of the `origin/main` merge `14d27fc`, which brings backend milestone
+authorization. Checks: `optional-ocr-integration` **SUCCESS**; `backend-tests` and
+`real-infrastructure-integration` failures both verified pre-existing on `main`
+(run `40070848311`) — see BACKEND_HANDOFF.md CI section. On top of the `origin/main` merge `14d27fc`, which brings backend milestone
 commits through `4a79d73` and the corpus-gap alignment `7c15e01` into the AI branch;
 update this line with each milestone.
 Sources of truth: [`docs/canonical/prd.md`](../docs/canonical/prd.md),
@@ -44,7 +46,7 @@ Labels: `PASS` (reproducible evidence), `PARTIAL`, `BLOCKED_EXTERNAL`,
 | Real-document accuracy | NOT_AVAILABLE | No human-labelled held-out set of representative scanned AICTE certificates exists. The actionable protocol (strata, annotation discipline, metrics, uncertainty bounds, acceptance pre-registration) is specified in [`ai/REAL_CORPUS_PROTOCOL.md`](REAL_CORPUS_PROTOCOL.md); nothing synthetic is quoted as real-world accuracy. |
 | Backend extraction/corruption gaps (15 remaining of original 17) | BLOCKED_EXTERNAL | Backend commit `eec3a81` (merged via PR #7, now merged into the AI branch) resolved `BND-002` and `HI-005`; corpus metadata migrated them into the scored denominator (56/56 exact, verified live 2026-10-24). The remaining 15 corruption-slice gaps were re-verified still failing against the fixed extractor on the merged branch; details in `ai/BACKEND_HANDOFF.md`. |
 | Backend test font-path portability (`backend/tests/test_ocr_engine_integration.py`) | BLOCKED_EXTERNAL | Backend-owned; hard-coded Linux font path fails on macOS with Tesseract installed (`OSError: cannot open resource`). Documented 2026-10-24 in BACKEND_HANDOFF.md. Full-repo suite on this branch (re-run 2026-10-24): `2 failed, 388 passed, 21 skipped` — both failures backend-owned. |
-| Windows-drive storage-key traversal (POSIX accepts `C:\...` keys) | BLOCKED_EXTERNAL | Backend-owned; `LocalStorageBackend._resolve_key` (`backend/app/core/storage.py`) accepts a `C:\Windows\system32\cmd.exe` key on POSIX because the drive prefix is not treated as absolute there; reproduced in the storage traversal test 2026-10-24. Documented in BACKEND_HANDOFF.md. |
+| Windows-drive storage-key traversal (POSIX accepts `C:\...` keys) | BLOCKED_EXTERNAL | Backend-owned; `LocalStorageBackend._resolve_key` (`backend/app/core/storage.py`) accepts a `C:\Windows\system32\cmd.exe` key on POSIX because the drive prefix is not treated as absolute there; reproduced in the storage traversal test 2026-10-24. **CI-confirmed on Linux** (branch run `40104526342`; identical pre-existing failure on `main` run `40070848311`) — the PR's `backend-tests` red is this pre-existing main-branch defect, not a branch regression. Documented in BACKEND_HANDOFF.md. |
 | Regulatory rule activation / Phase 0 research | BLOCKED_EXTERNAL | Not AI-owned; phases.md Phase 0 gate remains open; no rule activated. |
 
 ## Rule integrity (verified 2026-10-24)

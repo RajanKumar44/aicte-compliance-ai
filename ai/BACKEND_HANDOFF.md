@@ -158,3 +158,29 @@ test_ocr_engine_integration.py` on macOS with `tesseract` in PATH.
 - Attribution: backend-owned file — not modified by the AI/OCR workstream.
   Evidence recorded here because the failure invalidates the historical
   `pytest -q` full-suite counts reported for this branch.
+
+## CI verification (2026-10-24): GitHub Actions on this branch and `main`
+
+Fetched check results for HEAD `580faf6` ([PR #10](https://github.com/rajaryan1111/aicte-compliance-ai/pull/10) state OPEN, MERGEABLE):
+
+- **`backend-tests` check FAILURE** (run `40104526342`, 19 s): exactly the
+  Windows-drive traversal defect above on Linux CI —
+  `FAILED backend/tests/integration/test_security_and_failure_paths.py::
+  test_storage_directory_traversal_prevention - Failed: DID NOT RAISE
+  PathTraversalError`, suite `1 failed, 388 passed, 22 skipped`. Confirms the
+  finding is OS-independent despite the macOS-specific test page: the traversal
+  gap reproduces on every platform. The font-path test **passes on Linux CI**
+  as predicted by its section above (hard-coded Linux path resolves there).
+- **`real-infrastructure-integration` check FAILURE**: `ModuleNotFoundError:
+  No module named 'psycopg'` in the "Apply Alembic migrations to fresh
+  PostgreSQL" step — a CI dependency/environment issue in another workstream's
+  integration job (either the job needs `psycopg`/`psycopg[binary]` installed or
+  its Alembic URL dialect changed), not an OCR or backend-code logic failure.
+  Not AI-owned; recorded for the infrastructure/CI owner.
+- **`optional-ocr-integration` check SUCCESS** — the OCR-specific integration
+  gate for this workstream passes.
+- **Both failures pre-exist on `main`**: run `40070848311` (`main`, 06:36 UTC
+  same day) shows the identical traversal failure (`1 failed, 388 passed,
+  22 skipped`) and the identical psycopg migration error. PR #10 therefore
+  introduces **no new check failure**; merge-readiness is not degraded by the
+  branch. Both reds remain backend/CI-owner action items.
