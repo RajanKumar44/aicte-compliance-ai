@@ -324,6 +324,8 @@ class TestLineBoundaryPreservation:
         """Create a RealTesseractEngine with mocked availability (no real binary needed)."""
         engine = RealTesseractEngine.__new__(RealTesseractEngine)
         engine.language = "eng"
+        engine.psm = 6
+        engine.psm = 6
         engine._available = True
         engine.engine_version = "5.5.3"
         engine._available_languages = {"eng"}
@@ -554,6 +556,7 @@ class TestEnhancedReport:
 
         engine = RealTesseractEngine.__new__(RealTesseractEngine)
         engine.language = "eng"
+        engine.psm = 6
         engine._available = True
         engine.engine_version = "5.5.3"
         engine._available_languages = {"eng"}  # hin NOT available
@@ -577,6 +580,7 @@ class TestEnhancedReport:
 
         engine = RealTesseractEngine.__new__(RealTesseractEngine)
         engine.language = "eng"
+        engine.psm = 6
         engine._available = True
         engine.engine_version = "5.5.3"
         engine._available_languages = {"eng"}
@@ -1130,3 +1134,92 @@ class TestRenderingCapabilitySignalling:
         assert "hi" in report["accuracy_invalid_languages"]
         for psr in report["per_seed"]:
             assert "hi" in psr["accuracy_invalid_languages"]
+
+
+# ---------------------------------------------------------------------------
+# PSM configuration bake-off support (added for the engine-comparison milestone)
+# ---------------------------------------------------------------------------
+
+
+class TestTesseractPSMConfiguration:
+    """RealTesseractEngine PSM selection: contract path vs benchmark-only direct path."""
+
+    @staticmethod
+    def _engine(**kwargs):
+        """Build via __new__ without requiring the real binary, with minimal state."""
+        engine = RealTesseractEngine.__new__(RealTesseractEngine)
+        engine.language = "eng"
+        engine._available = True
+        return engine
+
+    def test_invalid_psm_values_raise(self):
+        for bad in (14, -1, "6", True, 6.0, None):
+            with pytest.raises(ValueError):
+                RealTesseractEngine(language="eng", psm=bad)
+
+    def test_psm_attribute_records_mode(self):
+        """A valid psm is stored unmodified on the instance (needs the binary; skip otherwise)."""
+        import shutil
+        if shutil.which("tesseract") is None:
+            pytest.skip("tesseract binary not installed")
+        engine = RealTesseractEngine(language="eng", psm=3)
+        assert engine.psm == 3
+        assert engine.engine_name == "tesseract-psm3"
+        engine6 = RealTesseractEngine(language="eng")
+        assert engine6.psm == 6
+        assert engine6.engine_name == "tesseract"
+
+    def test_default_psm_is_six_and_uses_backend_adapter_label(self):
+        engine = self._engine()
+        engine.psm = 6
+        engine.engine_name = RealTesseractEngine.engine_name
+        from unittest.mock import MagicMock, patch
+
+        mock_word = MagicMock(text="Hi", confidence=95.0, page_number=1, line_number=1)
+        mock_raw = MagicMock(words=[mock_word])
+        with patch(
+            "backend.app.ocr_pipeline.TesseractOCRAdapter",
+            return_value=MagicMock(recognize=MagicMock(return_value=mock_raw)),
+        ) as mock_adapter_cls, patch(
+            "backend.app.ocr_pipeline.extract_institution_fields", return_value={}
+        ):
+            result = engine.extract_from_bytes(b"img")
+        assert mock_adapter_cls.call_args.kwargs.get("language") == "eng"
+        assert result["engine"] == "tesseract"
+        assert result["psm"] == 6
+        assert result["recognition_vehicle"] == "backend_adapter"
+
+    def test_psm3_runs_direct_path_with_config_and_label(self, monkeypatch):
+        engine = self._engine()
+        engine.psm = 3
+        engine.engine_name = "tesseract-psm3"
+        engine.engine_version = "5.5.3"
+
+        import pytesseract
+
+        data = {
+            "text": ["Institution", "Name:", "Alpha", "Certificate", "No:", "CERT/2026/0001"],
+            "conf": [95, 95, 90, 95, 95, 90],
+            "page_num": [1, 1, 1, 1, 1, 1],
+            "line_num": [1, 1, 1, 2, 2, 2],
+        }
+        calls = {}
+
+        def fake_image_to_data(image, lang, config, output_type):
+            calls["config"] = config
+            calls["lang"] = lang
+            return data
+
+        monkeypatch.setattr(pytesseract, "image_to_data", fake_image_to_data)
+        # A real decodable PNG so the mirrored preprocessing passes.
+        import io as _io
+        from PIL import Image as _PILImage
+
+        buf = _io.BytesIO()
+        _PILImage.new("L", (8, 8), 255).save(buf, format="PNG")
+        result = engine.extract_from_bytes(buf.getvalue())
+        assert calls["config"] == "--psm 3"
+        assert calls["lang"] == "eng"
+        assert result["engine"] == "tesseract-psm3"
+        assert result["recognition_vehicle"] == "direct_pytesseract"
+        assert result["transcription"] == "Institution Name: Alpha\nCertificate No: CERT/2026/0001"

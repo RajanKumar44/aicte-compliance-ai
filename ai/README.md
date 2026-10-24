@@ -34,7 +34,7 @@ engine contract tests. The working OCR implementation is still in `backend/`
 |---|---|
 | [`evaluate_extraction.py`](evaluate_extraction.py) | Corpus-driven extraction scorer with CLI (`--check`, `--json`, `--compare`, `--engine`, `--normalize`). |
 | [`ocr_benchmark.py`](ocr_benchmark.py) | OCR engine adapter contract (`OCREngine` ABC), transcription metrics (CER, WER), structured-field scoring, synthetic case generation, corpus I/O, and held-out partitioning. |
-| [`raster_benchmark.py`](raster_benchmark.py) | Genuine raster-image OCR evaluation: synthetic document image rendering (Pillow), pixel-level corruptions (blur, skew, low-res, JPEG compression, contrast, noise, rotation), paired clean/corrupted benchmark, and engine evaluation. |
+| [`raster_benchmark.py`](raster_benchmark.py) | Genuine raster-image OCR evaluation: synthetic document image rendering (Pillow), pixel-level corruptions (blur, skew, low-res, JPEG compression, contrast, noise, rotation), paired clean/corrupted benchmark, engine evaluation, and the `--tess-psm` configuration bake-off vehicle. |
 | [`normalize.py`](normalize.py) | Conservative text normalization with provenance (zero-width removal, NFKC, line-break unification). |
 | [`corpus/extraction_cases.jsonl`](corpus/extraction_cases.jsonl) | 56 labelled extraction cases, all 56 scored (the 2 former known gaps were resolved by backend commit `eec3a81`). |
 | [`corpus/ocr_corruption_cases.jsonl`](corpus/ocr_corruption_cases.jsonl) | 30 OCR corruption cases (15 scored, 15 documented known gaps). |

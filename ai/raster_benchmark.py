@@ -522,9 +522,25 @@ class RealTesseractEngine(RasterOCREngine):
     """
 
     engine_name = "tesseract"
+    _VALID_PSM_RANGE = range(0, 14)
 
-    def __init__(self, language: str = "eng"):
+    def __init__(self, language: str = "eng", psm: int = 6):
+        """Configure the real Tesseract engine.
+
+        ``psm=6`` (the backend contract default) routes through
+        ``backend.app.ocr_pipeline.TesseractOCRAdapter`` unmodified. Any other
+        page-segmentation mode uses a direct ``pytesseract`` call that mirrors
+        the backend preprocessing exactly (grayscale, autocontrast, upscale) and
+        is labelled ``tesseract-psm<N>`` so a configuration bake-off cannot be
+        confused with the backend contract path.
+        """
+        if not isinstance(psm, int) or isinstance(psm, bool) or psm not in self._VALID_PSM_RANGE:
+            raise ValueError(f"psm must be an integer in {[int(ps) for ps in self._VALID_PSM_RANGE]}, got {psm!r}")
         self.language = language
+        self.psm = psm
+        if psm != 6:
+            # Instance-level override so reports distinguish configurations.
+            self.engine_name = f"tesseract-psm{psm}"
         self._available = shutil.which("tesseract") is not None
         self.engine_version: Optional[str] = None
         self._available_languages: set[str] = set()
@@ -568,8 +584,13 @@ class RealTesseractEngine(RasterOCREngine):
             raise RuntimeError(f"Failed to import backend OCR adapter: {exc}") from exc
 
         lang = language or self.language
-        adapter = TesseractOCRAdapter(language=lang)
-        raw_result = adapter.recognize(image_bytes)
+        if self.psm == 6:
+            adapter = TesseractOCRAdapter(language=lang)
+            raw_result = adapter.recognize(image_bytes)
+            recognition_vehicle = "backend_adapter"
+        else:
+            raw_result = self._direct_recognize(image_bytes, lang)
+            recognition_vehicle = "direct_pytesseract"
 
         # Group words by (page, line) to preserve line boundaries required by
         # extract_institution_fields (which uses ^…$ regex patterns per line).
@@ -595,9 +616,91 @@ class RealTesseractEngine(RasterOCREngine):
             "transcription": text,
             "fields": plain_fields,
             "confidence": avg_conf,
-            "engine": "tesseract",
+            "engine": self.engine_name,
             "engine_version": self.engine_version,
+            "recognition_vehicle": recognition_vehicle,
+            "psm": self.psm,
         }
+
+    def _direct_recognize(self, image_bytes: bytes, lang: str) -> dict[str, Any]:
+        """Benchmark-only recognition with a configurable PSM (non-contract path).
+
+        Deliberately mirrors the preprocessing of
+        ``backend.app.ocr_pipeline.TesseractOCRAdapter.recognize`` (grayscale,
+        autocontrast, min-700px upscale) with the same defensive decoding so a
+        PSM bake-off differs from the backend contract path only in the
+        segmentation mode. Not used for production extraction.
+        """
+        import os
+
+        if len(image_bytes) > 10 * 1024 * 1024:
+            raise RuntimeError("Image exceeds the 10 MiB processing limit.")
+        try:
+            import pytesseract
+            from PIL import Image, ImageOps
+        except ImportError as exc:
+            raise RuntimeError(f"OCR dependencies missing: {exc}") from exc
+
+        try:
+            with Image.open(io.BytesIO(image_bytes)) as source:
+                source.load()
+                image = ImageOps.grayscale(source)
+                image = ImageOps.autocontrast(image)
+                if min(image.size) < 700:
+                    scale = min(2.0, 700 / max(1, min(image.size)))
+                    new_size = (
+                        max(1, int(image.width * scale)),
+                        max(1, int(image.height * scale)),
+                    )
+                    image = image.resize(new_size)
+        except Exception as exc:
+            raise RuntimeError(f"Image could not be decoded safely: {exc}") from exc
+
+        try:
+            data = pytesseract.image_to_data(
+                image, lang=lang, config=f"--psm {self.psm}", output_type=pytesseract.Output.DICT
+            )
+        except Exception as exc:
+            raise RuntimeError(f"Tesseract OCR failed; no result was produced: {exc}") from exc
+
+        words: list[dict[str, Any]] = []
+        texts = data.get("text") or []
+        confs = data.get("conf") or []
+        pages = data.get("page_num") or []
+        lines = data.get("line_num") or []
+        for index, raw_text in enumerate(texts):
+            if raw_text is None or not str(raw_text).strip():
+                continue
+            try:
+                conf_val = float(confs[index])
+            except (IndexError, TypeError, ValueError):
+                conf_val = 0.0
+            if conf_val < 0:
+                continue
+            try:
+                page = max(1, int(pages[index]))
+            except (IndexError, TypeError, ValueError):
+                page = 1
+            try:
+                line = max(1, int(lines[index]))
+            except (IndexError, TypeError, ValueError):
+                line = 1
+            words.append({"text": str(raw_text), "confidence": conf_val, "page": page, "line": line})
+        if not words and os.getenv("RASTER_BM_STRICT_WORDS") == "1":
+            raise RuntimeError("No words recognized under the benchmark PSM configuration.")
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            words=[
+                SimpleNamespace(
+                    text=w["text"],
+                    confidence=w["confidence"],
+                    page_number=w["page"],
+                    line_number=w["line"],
+                )
+                for w in words
+            ]
+        )
 
 
 class MockRasterOCREngine(RasterOCREngine):
@@ -1247,6 +1350,16 @@ def main() -> int:
         default="eng",
         help="Default Tesseract language code for real engine (e.g. eng, hin, eng+hin)",
     )
+    parser.add_argument(
+        "--tess-psm",
+        type=int,
+        default=6,
+        help=(
+            "Tesseract page-segmentation mode for the real engine (0-13). "
+            "Default 6 uses the backend OCR adapter contract path; other values "
+            "run a benchmark-only direct call labelled tesseract-psm<N>."
+        ),
+    )
     args = parser.parse_args()
 
     if args.count < 1:
@@ -1288,7 +1401,11 @@ def main() -> int:
 
     engine: RasterOCREngine
     if args.real_engine:
-        engine = RealTesseractEngine(language=args.language)
+        try:
+            engine = RealTesseractEngine(language=args.language, psm=args.tess_psm)
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
         if not engine.is_available():
             print("ERROR: Real Tesseract engine requested, but 'tesseract' was not found in PATH.")
             return 1

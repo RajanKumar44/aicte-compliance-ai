@@ -334,4 +334,36 @@ Sample artifacts: `ai/reports/tesseract_5.5.3_multiseed_s11_s23_count8_fontfix.j
 (real Tesseract 5.5.3, seeds 11/23, 16/16 pairs evaluated — corrupted CER spread across
 seeds was ±0.005) and the historical older reports in the same directory.
 
+### Engine-configuration comparison (`--tess-psm`)
+
+The backend OCR adapter hard-codes `--psm 6`. To make the canonical
+"engine/version selection via a labelled synthetic-data bake-off" requirement
+measurable without new dependencies, `RealTesseractEngine` accepts `psm=` (0–13,
+validated; CLI `--tess-psm`). `psm=6` keeps the backend-adapter contract path;
+any other value runs a benchmark-only direct `pytesseract` call labelled
+`tesseract-psm<N>` that mirrors the backend preprocessing exactly — the two
+vehicles are distinguishable in every measurement (`recognition_vehicle`,
+`engine` name, `psm` field), so a configuration comparison can never be
+confused with the backend contract path.
+
+Measured comparison (same seeds 11/23, count 8, count 16 pooled pairs, dataset
+fingerprints identical per seed — the same raster images were scored):
+
+| Metric (pooled) | psm 6 (backend, `…fontfix.json`) | psm 3 (`…psm3…json`) |
+|---|---|---|
+| clean CER / WER / F1 | **0.266 / 0.410 / 0.400** | 0.422 / 0.569 / 0.261 |
+| corrupted CER / WER / F1 | 0.511 / 1.070 / **0.222** | 0.540 / 0.754 / 0.140 |
+| degradation +CER / −F1 | 0.245 / **0.178** | 0.117 / 0.121 |
+
+**Recommendation (owner decision pending):** keep `--psm 6` for field
+extraction — it dominates psm 3 on clean and corrupted F1 and on corrupted
+CER on this corpus. Corrupted WER is the one metric favouring psm 3 (1.070 vs
+0.754): inspection shows the difference is spurious-word insertion on the
+rotated/blur corruptions, not stronger recovery. Limitations: small pooled
+sample (16 pairs), synthetic single-institution naming, and hi/bilingual
+strata are rendering-invalid in this environment (no libraqm) — this
+comparison is registered as a configuration bake-off, not cross-engine
+evidence and not real-world accuracy. A cross-engine bake-off needs a second
+installable OCR engine, blocked externally (dependency + licensing review).
+
 

@@ -27,7 +27,7 @@ Labels: `PASS` (reproducible evidence), `PARTIAL`, `BLOCKED_EXTERNAL`,
 
 | Requirement | Evidence | Status |
 |---|---|---|
-| OCR engine/version selection via a labelled synthetic-data bake-off (PRD open blocker) | evaluation half exists (`--engine module:attribute` bake-off; real/mock raster benchmark with recorded engine/version/seeds); the *decision* of which engine/versions to adopt is an owner decision backed by real-engine bake-off artifacts | PARTIAL |
+| OCR engine/version selection via a labelled synthetic-data bake-off (PRD open blocker) | evaluation half exists (`--engine module:attribute` bake-off; real/mock raster benchmark with recorded engine/version/seeds). Configuration-level comparison measured 2026-10-24: Tesseract 5.5.3 psm 6 vs psm 3 on identical datasets (`--tess-psm`; seeds 11/23, 16 pooled pairs, fingerprints matched) — recommendation recorded in EVALUATION.md (keep psm 6). Cross-engine comparison requires a second installable OCR engine (dependency + licensing review — BLOCKED_EXTERNAL); the final adoption decision remains an owner decision | PARTIAL (measured config evidence; pending owner decision) |
 | Phase 6 gate: labelled synthetic corpus + OCR evaluation; claims supported by recorded measurements | corpora + evaluator + raster/multiseed artifacts; EVALUATION.md states exactly what each measurement does and does not mean; no unmeasured performance claim | PASS (with recorded synthetic-only scope) |
 | Phase 6: performance observations | evaluator performance note measured (600 cases ≈ 0.08 s); no unmeasured claims elsewhere | PASS (scoped) |
 | Phase 6: accessibility, demo script, deployment fallback | frontend/demo workstreams; not AI-owned | NOT_REQUIRED (other owner) |
