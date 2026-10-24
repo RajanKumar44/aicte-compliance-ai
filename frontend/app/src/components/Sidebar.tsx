@@ -1,82 +1,111 @@
-import { NavLink } from "react-router-dom";
-import type { RefObject } from "react";
-import { LayoutDashboard, ClipboardCheck, Info, Shield, X } from "lucide-react";
+import { Link, useLocation, NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import {
+  LayoutDashboard,
+  ClipboardCheck,
+  Clock3,
+  Info,
+  ChevronLeft,
+  ChevronRight,
+  Shield,
+  X,
+} from "lucide-react";
+import { Button } from "./Button";
+import { useAuth } from "./useAuth";
 
-const NAV_ITEMS = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/validate", icon: ClipboardCheck, label: "Validate" },
-  { to: "/about", icon: Info, label: "About" },
-];
+const navItems = [
+  { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/validate", label: "Validate", icon: ClipboardCheck },
+  { path: "/about", label: "About", icon: Info },
+] as const;
 
-interface SidebarProps {
+export function Sidebar({
+  collapsed,
+  onToggle,
+  open,
+  onClose,
+}: {
+  collapsed: boolean;
+  onToggle: () => void;
   open: boolean;
-  mobile: boolean;
-  closeButtonRef: RefObject<HTMLButtonElement | null>;
   onClose: () => void;
-}
+}) {
+  const location = useLocation();
+  const { session } = useAuth();
+  const items = session
+    ? [...navItems, { path: "/history", label: "History", icon: Clock3 }]
+    : navItems;
 
-export function Sidebar({ open, mobile, closeButtonRef, onClose }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-navy-900 text-white transition-transform duration-200 lg:static lg:translate-x-0",
-        open || !mobile ? "translate-x-0" : "-translate-x-full"
+        "app-sidebar fixed inset-y-0 left-0 z-50 bg-bg-1 border-r border-border transition-transform duration-200 ease-out",
+        "flex flex-col",
+        "w-[min(260px,calc(100vw-3rem))] lg:w-[260px]",
+        collapsed && "lg:w-[72px]",
+        open ? "translate-x-0 visible" : "-translate-x-full invisible lg:visible lg:translate-x-0"
       )}
-      id="primary-navigation"
-      aria-label="Primary navigation"
-      aria-hidden={mobile && !open}
+      aria-label="Main navigation"
     >
-      {/* Brand */}
-      <div className="flex h-16 items-center gap-3 px-5 border-b border-navy-700">
-        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-teal-600">
-          <Shield className="h-5 w-5 text-white" />
-        </div>
-        <div className="flex flex-col">
-          <span className="text-sm font-semibold tracking-tight">AICTE Compliance</span>
-          <span className="text-[11px] text-slate-400">Document Validation</span>
-        </div>
-        <button
-          ref={closeButtonRef}
-          onClick={onClose}
-          tabIndex={mobile && !open ? -1 : undefined}
-          className="ml-auto rounded-md p-2 text-slate-400 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 lg:hidden"
-          aria-label="Close sidebar"
+      <div className="flex h-16 items-center justify-between px-4 border-b border-border">
+        <Link to="/" className="flex items-center gap-2 min-w-0" aria-label="AICTE Compliance AI Home" onClick={onClose}>
+          <div className="p-2 bg-primary-700 rounded-md shrink-0">
+            <Shield className="h-5 w-5 text-white" aria-hidden="true" />
+          </div>
+          <span className={cn("font-bold text-text-heading truncate", collapsed && "lg:hidden")}>AICTE Compliance</span>
+        </Link>
+        {collapsed && (
+          <span className="hidden lg:block" />
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggle}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="hidden lg:inline-flex text-text-muted hover:text-text-body"
         >
-          <X className="h-5 w-5" />
-        </button>
+          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close navigation" className="lg:hidden text-text-muted">
+          <X className="h-4 w-4" />
+        </Button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
-        {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            onClick={onClose}
-            tabIndex={mobile && !open ? -1 : undefined}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-navy-700 text-white"
-                  : "text-slate-400 hover:bg-navy-800 hover:text-slate-200"
-              )
-            }
-            end={to === "/"}
-          >
-            <Icon className="h-[18px] w-[18px]" />
-            {label}
-          </NavLink>
-        ))}
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" aria-label="Navigation">
+        {items.map((item) => {
+          const Icon = item.icon;
+          const isActive = location.pathname === item.path;
+
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive: active }) => cn(
+                "flex items-center gap-3 px-3 py-2.5 min-h-10 rounded-lg border-l-[3px] border-transparent transition-all duration-200",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
+                active
+                  ? "bg-primary-500/10 text-text-heading border-l-primary-500 pl-2"
+                  : "text-text-secondary hover:bg-bg-2 hover:text-text-body",
+                collapsed && "lg:justify-center lg:px-2"
+              )}
+              aria-current={isActive ? "page" : undefined}
+              title={collapsed ? item.label : undefined}
+              onClick={onClose}
+            >
+              <Icon className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
+              <span className={cn("font-medium", collapsed && "lg:hidden")}>{item.label}</span>
+            </NavLink>
+          );
+        })}
       </nav>
 
-      {/* Footer */}
-      <div className="border-t border-navy-700 px-5 py-4">
-        <p className="text-[11px] leading-relaxed text-slate-300">
-          Preliminary checks only.<br />
-          Not an official decision.
-        </p>
+      <div className="p-4 border-t border-border">
+        <div className={cn("space-y-3", collapsed && "lg:hidden")}>
+          <div className="space-y-3">
+            <p className="text-xs font-medium text-text-secondary">Review scope</p>
+            <p className="text-xs text-text-muted">EoA 2026–27 rule review is pending. Current checks use only the lists supplied.</p>
+          </div>
+        </div>
       </div>
     </aside>
   );

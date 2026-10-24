@@ -1,115 +1,158 @@
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import {
-  ClipboardCheck, ArrowRight, Shield, FileSearch, AlertTriangle,
-  BookOpen
+  ArrowRight,
+  BookOpen,
+  CalendarDays,
+  FileSearch,
+  ListChecks,
+  Shield,
 } from "lucide-react";
-import { Card, CardHeader, CardTitle } from "@/components/Card";
-import { Button } from "@/components/Button";
+import { Card, CardContent, CardTitle, CardDescription } from "@/components/Card";
 import { ScopeNotice } from "@/components/ScopeNotice";
-import { Badge } from "@/components/Badge";
-import { PageHeader } from "@/components/PageHeader";
+
+const capabilities = [
+  {
+    icon: FileSearch,
+    color: "text-primary-300 bg-primary-900/30",
+    title: "List comparison",
+    description: "Compares the required document names with the names supplied as submitted.",
+  },
+  {
+    icon: CalendarDays,
+    color: "text-warning-text bg-warning-bg/40",
+    title: "Expiry date checks",
+    description: "Flags supplied dates earlier than the server's current UTC date.",
+  },
+  {
+    icon: BookOpen,
+    color: "text-info-text bg-info-bg/50",
+    title: "Reviewable findings",
+    description: "Shows the list or date evidence behind each preliminary finding.",
+  },
+];
+
+const workflow = [
+  { number: "01", title: "Set application context", description: "Use a synthetic institution identifier and choose an application type." },
+  { number: "02", title: "List document names", description: "Enter required and submitted names. No files are uploaded." },
+  { number: "03", title: "Review dates and input", description: "Optionally add expiry dates and check the request details." },
+  { number: "04", title: "Review returned findings", description: "Search the preliminary response and review its evidence." },
+];
+
+const limits = [
+  "The service does not load an authoritative AICTE checklist.",
+  "No document upload or OCR route is available.",
+  "Signed-in users can opt in to save a validation run for up to 365 days.",
+  "The initial EoA 2026–27 rule scope remains inactive pending expert review.",
+  "Use synthetic sample data. Results need human review.",
+];
 
 export function DashboardPage() {
-  const navigate = useNavigate();
-
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
-      <PageHeader
-        eyebrow="Evidence-first workspace"
-        title="Preliminary document checks"
-        description="Compare a required-document list with the submitted list you provide, then review missing items and supplied expiry dates before human review."
-        actions={<Badge variant="neutral">Demo · preliminary checks only</Badge>}
-      />
+    <div className="mx-auto max-w-6xl space-y-12 animate-fade-in">
+      <section className="grid items-start gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]" aria-labelledby="dashboard-title">
+        <div className="min-w-0 space-y-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-300">
+            AICTE application document review
+          </p>
+          <h1 id="dashboard-title" className="max-w-3xl text-3xl font-bold leading-tight tracking-tight text-text-heading sm:text-4xl">
+            Check the document lists supplied with a request
+          </h1>
+          <p className="max-w-2xl text-base leading-relaxed text-text-body sm:text-lg">
+            Enter required and submitted document names, then review missing items and supplied expiry dates.
+          </p>
+          <div className="flex flex-wrap items-center gap-4 pt-2">
+            <Link
+              to="/validate"
+              className="app-button app-button-primary group inline-flex min-h-12 items-center justify-center gap-2 px-5 py-3 text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-0"
+            >
+              Open validation form
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+            <Link to="/about" className="text-sm font-medium text-text-body underline decoration-border-hover underline-offset-4 transition-colors hover:text-text-heading">
+              Read how checks work
+            </Link>
+          </div>
+          <div className="flex items-start gap-3 border-l-2 border-primary-500 pl-4 pt-1 text-sm text-text-secondary">
+            <Shield className="mt-0.5 h-4 w-4 shrink-0 text-primary-300" aria-hidden="true" />
+            <p>Preliminary checks only. This tool does not determine AICTE compliance or verify document authenticity.</p>
+          </div>
+        </div>
 
-      <ScopeNotice />
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
-        <Card className="border-teal-200 bg-white p-6 shadow-sm sm:p-8">
-          <div className="flex h-full flex-col justify-between gap-10">
-            <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700">
-                <ClipboardCheck className="h-6 w-6" />
+        <Card className="min-w-0 border-border bg-bg-1">
+          <CardContent className="space-y-5">
+            <div className="flex items-center gap-3 border-b border-border pb-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary-700 bg-primary-950 text-primary-200">
+                <ListChecks className="h-5 w-5" aria-hidden="true" />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-700">Next action</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-900">
-                  Start a preliminary check
-                </h2>
-                <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
-                  Enter institution details and caller-supplied document lists.
-                  No files are uploaded or authenticated by this prototype.
-                </p>
+                <h2 className="text-lg font-semibold tracking-tight text-text-heading">Request flow</h2>
+                <CardDescription>Four steps from input to findings review</CardDescription>
               </div>
             </div>
-            <div className="flex flex-col gap-4 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-slate-600">Typical flow: context → lists → findings</p>
-              <Button onClick={() => navigate("/validate")} className="gap-2">
-                Begin check
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+            <ol className="space-y-4">
+              {workflow.map((step, index) => (
+                <li key={step.number} className="relative flex gap-3">
+                  {index < workflow.length - 1 && <span className="absolute bottom-[-1.25rem] left-[0.9375rem] top-8 w-px bg-border" aria-hidden="true" />}
+                  <span className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-bg-2 font-mono text-xs font-semibold text-text-body">
+                    {step.number}
+                  </span>
+                  <div className="min-w-0 pt-0.5">
+                    <h2 className="text-sm font-semibold text-text-heading">{step.title}</h2>
+                    <p className="mt-1 text-sm leading-relaxed text-text-secondary">{step.description}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </CardContent>
         </Card>
+      </section>
 
-        <Card className="border-navy-800 bg-navy-900 p-6 text-white shadow-sm sm:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-300">How it works</p>
-          <ol className="mt-6 space-y-5">
-            {[
-              "Choose an application type and identify the institution.",
-              "Compare the required and submitted document names.",
-              "Review missing or expired observations with their evidence.",
-            ].map((step, index) => (
-              <li key={step} className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-navy-600 text-xs font-semibold text-teal-300">
-                  {index + 1}
-                </span>
-                <span className="text-sm leading-6 text-slate-200">{step}</span>
-              </li>
-            ))}
-          </ol>
-        </Card>
-      </div>
+      <section aria-label="Prototype scope notice">
+        <ScopeNotice />
+      </section>
 
-      <div>
-        <div className="mb-4 flex items-end justify-between gap-4">
+      <section className="space-y-6" aria-labelledby="capabilities-heading">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Supported today</p>
-            <h2 className="mt-1 text-xl font-semibold tracking-tight text-navy-900">A focused review surface</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">What the endpoint checks</p>
+            <h2 id="capabilities-heading" className="mt-1 text-xl font-semibold text-text-heading">Request-based comparisons</h2>
           </div>
+          <p className="max-w-lg text-sm leading-relaxed text-text-secondary">The result reflects only the lists and dates provided in that request.</p>
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {[
-            { icon: FileSearch, title: "Checklist comparison", text: "Compares your required-document list against submitted documents to identify missing items." },
-            { icon: AlertTriangle, title: "Expiry observations", text: "Checks supplied expiry dates against the server date; the dates still require independent review." },
-            { icon: BookOpen, title: "Evidence review", text: "Keeps finding messages and evidence visible so a reviewer can understand the observation." },
-          ].map(({ icon: Icon, title, text }) => (
-            <Card key={title} className="p-5 shadow-sm">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
-                <Icon className="h-5 w-5" />
-              </div>
-              <h3 className="mt-4 text-sm font-semibold text-navy-900">{title}</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{text}</p>
-            </Card>
-          ))}
+        <div className="grid items-stretch gap-5 md:grid-cols-3">
+          {capabilities.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Card key={item.title} className="h-full transition-colors duration-200 hover:border-border-hover">
+                <CardContent className="space-y-5">
+                  <div className={cn("flex h-10 w-10 items-center justify-center rounded-md", item.color)}>
+                    <Icon className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <CardTitle>{item.title}</CardTitle>
+                    <CardDescription className="text-text-body">{item.description}</CardDescription>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
-      </div>
+      </section>
 
-      <Card className="border-slate-200 bg-slate-100/70 p-6 shadow-none sm:p-8">
-        <CardHeader className="mb-5">
-          <div className="flex items-center gap-2">
-            <Shield className="h-4 w-4 text-slate-600" />
-            <CardTitle className="text-sm">Prototype boundaries</CardTitle>
-          </div>
-        </CardHeader>
-        <div className="grid gap-4 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-3">
-          <p>No official AICTE regulatory ruleset is loaded.</p>
-          <p>Document authenticity is not verified.</p>
-          <p>No persistent storage or activity history exists.</p>
-          <p>No authentication or role-based access exists.</p>
-          <p>No document upload or OCR capability is exposed.</p>
-          <p>Results are preliminary observations for human review.</p>
+      <section className="space-y-5 border-t border-border pt-8" aria-labelledby="scope-heading">
+        <div className="flex items-center gap-3">
+          <Shield className="h-5 w-5 text-warning-text" aria-hidden="true" />
+          <h2 id="scope-heading" className="text-lg font-semibold text-text-heading">Prototype limits</h2>
         </div>
-      </Card>
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {limits.map((item) => (
+            <li key={item} className="border-l border-warning-border pl-3 text-sm leading-relaxed text-text-body">
+              {item}
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }

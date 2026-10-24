@@ -1,83 +1,62 @@
-import { Outlet, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, Outlet } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
-import { useEffect, useRef, useState } from "react";
 
 export function Layout() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const mainRef = useRef<HTMLElement>(null);
-  const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const wasSidebarOpen = useRef(false);
-  const { pathname } = useLocation();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(max-width: 1023px)");
-    const update = () => setIsMobile(mediaQuery.matches);
-    update();
-    mediaQuery.addEventListener("change", update);
-    return () => mediaQuery.removeEventListener("change", update);
-  }, []);
-
-  useEffect(() => {
-    if (sidebarOpen && isMobile) {
-      closeButtonRef.current?.focus();
-    } else if (wasSidebarOpen.current && !sidebarOpen) {
-      menuButtonRef.current?.focus();
-    }
-    wasSidebarOpen.current = sidebarOpen;
-  }, [isMobile, sidebarOpen]);
-
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape" && sidebarOpen) setSidebarOpen(false);
-    }
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [sidebarOpen]);
-
-  useEffect(() => {
-    mainRef.current?.focus();
-  }, [pathname]);
+    if (!mobileSidebarOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileSidebarOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [mobileSidebarOpen]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-navy-900 focus:shadow-lg"
-      >
-        Skip to main content
-      </a>
-      {/* Mobile overlay */}
-      {sidebarOpen && isMobile && (
-        <div
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
+    <div className="app-shell min-h-screen bg-bg-0 flex">
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        open={mobileSidebarOpen}
+        onClose={() => setMobileSidebarOpen(false)}
+      />
+
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          className="no-print fixed inset-0 z-40 bg-bg-0/70 backdrop-blur-sm lg:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+          aria-label="Close navigation menu"
         />
       )}
 
-      <Sidebar
-        open={sidebarOpen}
-        mobile={isMobile}
-        closeButtonRef={closeButtonRef}
-        onClose={() => setSidebarOpen(false)}
-      />
-
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div
+        className={cn(
+          "flex-1 flex flex-col min-w-0 transition-[padding] duration-300",
+          sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-[260px]"
+        )}
+      >
         <TopBar
-          menuOpen={sidebarOpen}
-          menuButtonRef={menuButtonRef}
-          onMenuClick={() => setSidebarOpen(true)}
+          onMenuToggle={() => setMobileSidebarOpen((open) => !open)}
+          mobileMenuOpen={mobileSidebarOpen}
         />
-        <main
-          ref={mainRef}
-          id="main-content"
-          tabIndex={-1}
-          className="flex-1 overflow-x-hidden overflow-y-auto bg-[#f7f9fb] p-4 outline-none sm:p-6 lg:p-8 xl:p-10"
-        >
-          <Outlet />
+
+        <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[1280px] px-4 py-6 md:px-6 md:py-8 lg:px-8 lg:py-10">
+            <Outlet />
+            <footer className="app-footer mt-12 flex flex-col gap-4 border-t border-border pt-5 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <p className="max-w-2xl text-text-secondary">Prototype only. Results require human review and do not establish AICTE compliance.</p>
+              <nav className="flex items-center gap-5" aria-label="Legal information">
+                <Link to="/privacy" className="text-text-body underline decoration-border-hover underline-offset-4 hover:text-text-heading">Privacy</Link>
+                <Link to="/terms" className="text-text-body underline decoration-border-hover underline-offset-4 hover:text-text-heading">Terms</Link>
+              </nav>
+            </footer>
+          </div>
         </main>
       </div>
     </div>

@@ -1,21 +1,35 @@
 import { cn } from "@/lib/utils";
-import type { ReactNode } from "react";
+import { Button, ButtonProps } from "./Button";
+import { LucideIcon } from "lucide-react";
 
-interface EmptyStateProps {
-  icon: ReactNode;
+export interface EmptyStateProps {
+  icon: LucideIcon;
   title: string;
-  description: string;
-  action?: ReactNode;
+  description?: string;
+  action?: ButtonProps & { label: string };
   className?: string;
 }
 
-export function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
+export function EmptyState({ icon: Icon, title, description, action, className }: EmptyStateProps) {
   return (
-    <div className={cn("flex flex-col items-center justify-center py-16 text-center", className)}>
-      <div className="mb-4 text-slate-300">{icon}</div>
-      <h3 className="text-base font-semibold text-navy-900">{title}</h3>
-      <p className="mt-1 max-w-sm text-sm text-slate-500">{description}</p>
-      {action && <div className="mt-6">{action}</div>}
+    <div
+      className={cn(
+        "flex flex-col items-center justify-center text-center py-16 px-4",
+        className
+      )}
+    >
+      <div className="mb-6 p-4 bg-bg-2 rounded-2xl border border-border">
+        <Icon className="h-12 w-12 text-text-muted" aria-hidden="true" />
+      </div>
+      <h3 className="text-xl font-semibold text-text-heading mb-2">{title}</h3>
+      {description && (
+        <p className="text-text-secondary max-w-xs mb-6">{description}</p>
+      )}
+      {action && (
+        <Button {...action} className={cn("mt-2", action.className)}>
+          {action.label}
+        </Button>
+      )}
     </div>
   );
 }
