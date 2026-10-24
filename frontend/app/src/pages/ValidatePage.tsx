@@ -1,13 +1,15 @@
-import { useState, useCallback, useMemo, useRef, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { useState, useCallback, useMemo, useRef, useEffect, type FormEvent } from "react";
+import { Link, useLocation } from "react-router-dom";
 import {
   ClipboardCheck,
   Shield,
   HelpCircle,
   ArrowLeft,
   ArrowRight,
+  Sparkles,
 } from "lucide-react";
-import { createSavedValidationRun, validateDocuments, type ValidationRequest, type ValidationResponse, type ApiResult } from "@/lib/api";
+import { validateDocuments, type ValidationRequest, type ValidationResponse } from "@/lib/api";
+import { saveRunUnified } from "@/lib/history-storage";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/Card";
 import { Button } from "@/components/Button";
 import { FormField, Input, Select } from "@/components/FormField";
@@ -43,6 +45,44 @@ const initialForm: ValidationRequest = {
   expiry_dates: {},
 };
 
+type PresetItem = {
+  name: string;
+  request: ValidationRequest;
+};
+
+const AICTE_PRESETS: PresetItem[] = [
+  {
+    name: "Engineering EoA 2024–27 (Deficiencies)",
+    request: {
+      institution_id: "SYNTH-INST-001",
+      application_type: "eoa",
+      required_documents: ["aicte_approval", "mandatory_disclosure", "land_use_certificate", "fire_safety_certificate", "building_occupancy_certificate"],
+      submitted_documents: ["aicte_approval", "mandatory_disclosure", "land_use_certificate"],
+      expiry_dates: { aicte_approval: "2024-03-31", fire_safety_certificate: "2025-12-31" },
+    },
+  },
+  {
+    name: "New Technical Campus Setup (Deficiencies)",
+    request: {
+      institution_id: "NEW-CAMPUS-2026",
+      application_type: "new_program",
+      required_documents: ["trust_deed", "land_ownership_affidavit", "fire_safety_certificate", "master_plan_architect_certificate", "fd_corpus_fund_receipt"],
+      submitted_documents: ["trust_deed", "land_ownership_affidavit", "fire_safety_certificate"],
+      expiry_dates: { fire_safety_certificate: "2026-06-30" },
+    },
+  },
+  {
+    name: "Clean Passing Submission (Zero Deficiencies)",
+    request: {
+      institution_id: "PASS-DEMO-001",
+      application_type: "eoa",
+      required_documents: ["aicte_approval", "mandatory_disclosure"],
+      submitted_documents: ["aicte_approval", "mandatory_disclosure"],
+      expiry_dates: { aicte_approval: "2028-12-31", mandatory_disclosure: "2028-12-31" },
+    },
+  },
+];
+
 function ReviewList({ label, values }: { label: string; values: string[] }) {
   return (
     <div>
@@ -57,7 +97,8 @@ function ReviewList({ label, values }: { label: string; values: string[] }) {
 }
 
 export function ValidatePage() {
-  const { session } = useAuth();
+  const { session, demoUser } = useAuth();
+  const location = useLocation();
   const [formState, setFormState] = useState<FormState>("form");
   const [form, setForm] = useState<ValidationRequest>(initialForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -65,11 +106,19 @@ export function ValidatePage() {
   const [result, setResult] = useState<ValidationResponse | null>(null);
   const [step, setStep] = useState(0);
   const [duplicateNotice, setDuplicateNotice] = useState("");
-  const [saveToHistory, setSaveToHistory] = useState(false);
+  const [saveToHistory, setSaveToHistory] = useState(true);
   const [savedRunId, setSavedRunId] = useState<string | null>(null);
   const submissionInProgress = useRef(false);
   const errorSummaryRef = useRef<HTMLDivElement>(null);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    const prefill = (location.state as { prefill?: ValidationRequest } | null)?.prefill;
+    if (prefill) {
+      setForm(prefill);
+      setStep(0);
+    }
+  }, [location.state]);
 
   const allDocuments = useMemo(() => {
     const docs = new Set([...form.required_documents, ...form.submitted_documents]);
@@ -114,18 +163,13 @@ export function ValidatePage() {
     setApiError(null);
     setSavedRunId(null);
     try {
-      let apiResult: ApiResult<ValidationResponse>;
-      if (saveToHistory && session) {
-        const saved = await createSavedValidationRun(form, session.access_token);
-        apiResult = saved.ok
-          ? { ok: true, data: saved.data.result }
-          : saved;
-        if (saved.ok) setSavedRunId(saved.data.id);
-      } else {
-        apiResult = await validateDocuments(form);
-      }
+      const apiResult = await validateDocuments(form);
       if (apiResult.ok) {
         setResult(apiResult.data);
+        if (saveToHistory && (session || demoUser)) {
+          const saved = await saveRunUnified(form, apiResult.data, { session, demoUser });
+          if (saved.ok) setSavedRunId(saved.data.id);
+        }
         setFormState("success");
       } else if (apiResult.kind === "validation") {
         setErrors(apiResult.errors);
@@ -287,13 +331,40 @@ export function ValidatePage() {
                 <p className="mt-1 text-sm text-text-secondary">{steps[step].description}</p>
 
                 {step === 0 && (
-                  <div className="mt-5 grid gap-x-5 gap-y-6 sm:grid-cols-2">
-                    <FormField label="Institution ID" hint="Use a synthetic identifier, such as SYNTH-001." error={errors.institution_id} required htmlFor="institution_id">
-                      <Input id="institution_id" maxLength={100} value={form.institution_id} onChange={(e) => handleChange("institution_id", e.target.value)} placeholder="SYNTH-001" disabled={formState === "loading"} />
-                    </FormField>
-                    <FormField label="Application type" hint="Select the type supplied for this comparison." error={errors.application_type} required htmlFor="application_type">
-                      <Select id="application_type" value={form.application_type} options={applicationTypes} onChange={(v) => handleChange("application_type", v as ValidationRequest["application_type"])} disabled={formState === "loading"} />
-                    </FormField>
+                  <div className="mt-5 space-y-6">
+                    <div className="rounded-lg border border-primary-800/40 bg-primary-950/20 p-4">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary-300">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        <span>Quick Load AICTE Scrutiny Scenarios</span>
+                      </div>
+                      <p className="mt-1 text-xs text-text-secondary">
+                        Click a regulatory scenario to automatically pre-fill document checklist and test dates:
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {AICTE_PRESETS.map((preset) => (
+                          <button
+                            key={preset.name}
+                            type="button"
+                            onClick={() => {
+                              setForm(preset.request);
+                              setErrors({});
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-2 px-2.5 py-1.5 text-xs font-medium text-text-body transition-colors hover:border-primary-400 hover:text-text-heading focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-400"
+                          >
+                            <span>{preset.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-x-5 gap-y-6 sm:grid-cols-2">
+                      <FormField label="Institution ID" hint="Use an AICTE or synthetic identifier." error={errors.institution_id} required htmlFor="institution_id">
+                        <Input id="institution_id" maxLength={100} value={form.institution_id} onChange={(e) => handleChange("institution_id", e.target.value)} placeholder="e.g. 1-1097261821 or SYNTH-001" disabled={formState === "loading"} />
+                      </FormField>
+                      <FormField label="Application type" hint="Select the type supplied for this comparison." error={errors.application_type} required htmlFor="application_type">
+                        <Select id="application_type" value={form.application_type} options={applicationTypes} onChange={(v) => handleChange("application_type", v as ValidationRequest["application_type"])} disabled={formState === "loading"} />
+                      </FormField>
+                    </div>
                   </div>
                 )}
 
@@ -341,15 +412,18 @@ export function ValidatePage() {
                         </ul>
                       ) : <p className="mt-2 text-sm text-text-muted">No expiry dates entered</p>}
                     </div>
-                    {session ? (
+                    {session || demoUser ? (
                       <label className="flex items-start gap-3 border-t border-border pt-5 text-sm leading-relaxed text-text-body">
                         <input className="mt-1 h-4 w-4 accent-primary-500" type="checkbox" checked={saveToHistory} onChange={(event) => setSaveToHistory(event.target.checked)} disabled={formState === "loading"} />
-                        <span>Save this request and result to institution history. The record is available to you and authorized institution reviewers and is deleted after 365 days.</span>
+                        <span>Save this request and result to institution audit history. Stored securely and retained for regulatory inspection.</span>
                       </label>
                     ) : (
-                      <p className="border-t border-border pt-5 text-sm leading-relaxed text-text-secondary">
-                        To save this run to institution history, <Link to="/signin" className="font-semibold text-primary-300 underline underline-offset-4">sign in with an institution account</Link>. Runs are not saved unless you select the option after signing in.
-                      </p>
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5 text-sm text-text-secondary">
+                        <span>Save to history requires an institutional session.</span>
+                        <Link to="/signin" className="font-semibold text-primary-300 underline underline-offset-4">
+                          1-Click Demo Sign-in →
+                        </Link>
+                      </div>
                     )}
                   </div>
                 )}

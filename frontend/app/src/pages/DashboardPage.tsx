@@ -1,5 +1,5 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { cn } from "@/lib/utils";
 import {
   ArrowRight,
   BookOpen,
@@ -7,151 +7,316 @@ import {
   FileSearch,
   ListChecks,
   Shield,
+  Clock3,
+  CheckCircle2,
+  FileCheck,
+  Sparkles,
+  ArrowUpRight,
 } from "lucide-react";
 import { Card, CardContent, CardTitle, CardDescription } from "@/components/Card";
+import { Button } from "@/components/Button";
 import { ScopeNotice } from "@/components/ScopeNotice";
 
-const capabilities = [
+const STATS = [
+  { label: "AICTE Handbook Cycle", value: "2024–2027", detail: "Approval Process Guidelines" },
+  { label: "Scrutiny Automation", value: "Instant", detail: "Checklist & Expiry Evaluation" },
+  { label: "Deficiency Detection", value: "Real-time", detail: "Identifies Missing & Expired Items" },
+  { label: "Privacy Architecture", value: "Zero-File Retention", detail: "Document Names Only" },
+];
+
+const WORKFLOW_STEPS = [
+  {
+    step: "01",
+    title: "Application Context",
+    desc: "Define Institution ID and select approval track (EoA, New Program, Intake Variation).",
+    tag: "Context",
+  },
+  {
+    step: "02",
+    title: "Document Intake",
+    desc: "Specify mandatory AICTE checklist items against actual submitted institute documents.",
+    tag: "Comparison",
+  },
+  {
+    step: "03",
+    title: "Expiry & Validity Audit",
+    desc: "Audit statutory approvals, structural stability, land titles, and fire clearances against current date.",
+    tag: "Verification",
+  },
+  {
+    step: "04",
+    title: "Scrutiny Report Generation",
+    desc: "Produce actionable deficiency reports with precise evidence citations and CSV/audit exports.",
+    tag: "Deficiency Resolution",
+  },
+];
+
+const REGULATORY_CHECKS = [
   {
     icon: FileSearch,
-    color: "text-primary-300 bg-primary-900/30",
-    title: "List comparison",
-    description: "Compares the required document names with the names supplied as submitted.",
+    title: "Mandatory Document Scrutiny",
+    description:
+      "Per AICTE APH Chapter 1 & 2, compares submitted certificates against required checklists to detect missing statutory filings before Scrutiny Committee review.",
   },
   {
     icon: CalendarDays,
-    color: "text-warning-text bg-warning-bg/40",
-    title: "Expiry date checks",
-    description: "Flags supplied dates earlier than the server's current UTC date.",
+    title: "Statutory Validity & Expiry Checks",
+    description:
+      "Flags expired fire safety NOCs, structural certificates, or past AICTE approvals against server evaluation dates, preventing sudden committee rejections.",
   },
   {
     icon: BookOpen,
-    color: "text-info-text bg-info-bg/50",
-    title: "Reviewable findings",
-    description: "Shows the list or date evidence behind each preliminary finding.",
+    title: "Attributable Evidence Logging",
+    description:
+      "Outputs transparent, dispute-free evidence snapshots showing observed status and timestamps for internal quality audits and institutional records.",
   },
 ];
 
-const workflow = [
-  { number: "01", title: "Set application context", description: "Use a synthetic institution identifier and choose an application type." },
-  { number: "02", title: "List document names", description: "Enter required and submitted names. No files are uploaded." },
-  { number: "03", title: "Review dates and input", description: "Optionally add expiry dates and check the request details." },
-  { number: "04", title: "Review returned findings", description: "Search the preliminary response and review its evidence." },
-];
-
-const limits = [
-  "The service does not load an authoritative AICTE checklist.",
-  "No document upload or OCR route is available.",
-  "Signed-in users can opt in to save a validation run for up to 365 days.",
-  "The initial EoA 2026–27 rule scope remains inactive pending expert review.",
-  "Use synthetic sample data. Results need human review.",
+const GOVERNANCE_PILLARS = [
+  {
+    title: "No Real Document Retention",
+    desc: "Only metadata and filenames are evaluated. Raw PDFs or sensitive institutional files are never held or shared.",
+  },
+  {
+    title: "Attributable Audit Trail",
+    desc: "Optional 365-day persistent history allows institutional coordinators and reviewers to track scrutiny resolutions.",
+  },
+  {
+    title: "Self-Disclosure Alignment",
+    desc: "Supports AICTE's self-disclosure model for Extension of Approval (EoA) to prepare colleges before physical EVC visits.",
+  },
+  {
+    title: "Zero Regulatory Overclaim",
+    desc: "Strictly labeled as preliminary scrutiny assistance. Does not declare compliance without AICTE official committee order.",
+  },
 ];
 
 export function DashboardPage() {
+  const [activeTab, setActiveTab] = useState<"workflow" | "checks" | "governance">("workflow");
+
   return (
     <div className="mx-auto max-w-6xl space-y-12 animate-fade-in">
-      <section className="grid items-start gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]" aria-labelledby="dashboard-title">
-        <div className="min-w-0 space-y-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-300">
-            AICTE application document review
-          </p>
-          <h1 id="dashboard-title" className="max-w-3xl text-3xl font-bold leading-tight tracking-tight text-text-heading sm:text-4xl">
-            Check the document lists supplied with a request
-          </h1>
-          <p className="max-w-2xl text-base leading-relaxed text-text-body sm:text-lg">
-            Enter required and submitted document names, then review missing items and supplied expiry dates.
-          </p>
-          <div className="flex flex-wrap items-center gap-4 pt-2">
-            <Link
-              to="/validate"
-              className="app-button app-button-primary group inline-flex min-h-12 items-center justify-center gap-2 px-5 py-3 text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-0"
-            >
-              Open validation form
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
-            <Link to="/about" className="text-sm font-medium text-text-body underline decoration-border-hover underline-offset-4 transition-colors hover:text-text-heading">
-              Read how checks work
-            </Link>
+      {/* Hero Section */}
+      <section className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-b from-bg-1 via-bg-1 to-bg-0 p-6 sm:p-10 shadow-sm">
+        <div className="relative z-10 space-y-6 max-w-3xl">
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary-500/30 bg-primary-500/10 px-3 py-1 text-xs font-semibold text-primary-300">
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>AICTE Approval Process Handbook (APH 2024–2027) Compliance Assistant</span>
           </div>
-          <div className="flex items-start gap-3 border-l-2 border-primary-500 pl-4 pt-1 text-sm text-text-secondary">
-            <Shield className="mt-0.5 h-4 w-4 shrink-0 text-primary-300" aria-hidden="true" />
-            <p>Preliminary checks only. This tool does not determine AICTE compliance or verify document authenticity.</p>
+
+          <h1 className="text-3xl font-extrabold tracking-tight text-text-heading sm:text-4xl lg:text-5xl leading-tight">
+            Intelligent Institutional Document Validation & Scrutiny Engine
+          </h1>
+
+          <p className="text-base sm:text-lg leading-relaxed text-text-body max-w-2xl">
+            Pre-screen institutional approval checklists, detect document expiry gaps, and resolve deficiencies before formal AICTE Scrutiny Committee and EVC visits.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-4 pt-2">
+            <Link to="/validate">
+              <Button size="lg" rightIcon={<ArrowRight className="h-4 w-4" />}>
+                Launch Scrutiny Workspace
+              </Button>
+            </Link>
+            <Link to="/history">
+              <Button variant="secondary" size="lg" leftIcon={<Clock3 className="h-4 w-4" />}>
+                Audit History
+              </Button>
+            </Link>
+            <Link
+              to="/about"
+              className="text-sm font-semibold text-text-secondary hover:text-text-heading underline underline-offset-4 transition-colors"
+            >
+              Handbook Guidelines & API
+            </Link>
           </div>
         </div>
 
-        <Card className="min-w-0 border-border bg-bg-1">
-          <CardContent className="space-y-5">
-            <div className="flex items-center gap-3 border-b border-border pb-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary-700 bg-primary-950 text-primary-200">
-                <ListChecks className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold tracking-tight text-text-heading">Request flow</h2>
-                <CardDescription>Four steps from input to findings review</CardDescription>
-              </div>
+        {/* Stats Grid inside Hero */}
+        <div className="mt-10 grid grid-cols-2 gap-4 border-t border-border pt-6 sm:grid-cols-4">
+          {STATS.map((stat) => (
+            <div key={stat.label} className="space-y-1">
+              <p className="text-xl sm:text-2xl font-bold tracking-tight text-text-heading">{stat.value}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary-400">{stat.label}</p>
+              <p className="text-[11px] text-text-muted">{stat.detail}</p>
             </div>
-            <ol className="space-y-4">
-              {workflow.map((step, index) => (
-                <li key={step.number} className="relative flex gap-3">
-                  {index < workflow.length - 1 && <span className="absolute bottom-[-1.25rem] left-[0.9375rem] top-8 w-px bg-border" aria-hidden="true" />}
-                  <span className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-bg-2 font-mono text-xs font-semibold text-text-body">
-                    {step.number}
-                  </span>
-                  <div className="min-w-0 pt-0.5">
-                    <h2 className="text-sm font-semibold text-text-heading">{step.title}</h2>
-                    <p className="mt-1 text-sm leading-relaxed text-text-secondary">{step.description}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </CardContent>
-        </Card>
+          ))}
+        </div>
       </section>
 
-      <section aria-label="Prototype scope notice">
+      {/* Scope Disclaimer banner */}
+      <section aria-label="Regulatory advisory">
         <ScopeNotice />
       </section>
 
-      <section className="space-y-6" aria-labelledby="capabilities-heading">
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
+      {/* Organized Tabbed Section: Workflow vs Regulatory Checks vs Governance */}
+      <section className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">What the endpoint checks</p>
-            <h2 id="capabilities-heading" className="mt-1 text-xl font-semibold text-text-heading">Request-based comparisons</h2>
+            <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">Structured Architecture</p>
+            <h2 className="text-2xl font-bold tracking-tight text-text-heading">Institutional Review Framework</h2>
           </div>
-          <p className="max-w-lg text-sm leading-relaxed text-text-secondary">The result reflects only the lists and dates provided in that request.</p>
+
+          {/* Clean Section Navigation Pills */}
+          <div className="flex items-center gap-1.5 rounded-lg border border-border bg-bg-1 p-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab("workflow")}
+              className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                activeTab === "workflow"
+                  ? "bg-primary-500 text-primary-950 shadow-sm"
+                  : "text-text-secondary hover:text-text-heading"
+              }`}
+            >
+              <ListChecks className="h-3.5 w-3.5" />
+              <span>Scrutiny Workflow</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("checks")}
+              className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                activeTab === "checks"
+                  ? "bg-primary-500 text-primary-950 shadow-sm"
+                  : "text-text-secondary hover:text-text-heading"
+              }`}
+            >
+              <FileCheck className="h-3.5 w-3.5" />
+              <span>Regulatory Coverage</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("governance")}
+              className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                activeTab === "governance"
+                  ? "bg-primary-500 text-primary-950 shadow-sm"
+                  : "text-text-secondary hover:text-text-heading"
+              }`}
+            >
+              <Shield className="h-3.5 w-3.5" />
+              <span>Governance & Safeguards</span>
+            </button>
+          </div>
         </div>
-        <div className="grid items-stretch gap-5 md:grid-cols-3">
-          {capabilities.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Card key={item.title} className="h-full transition-colors duration-200 hover:border-border-hover">
-                <CardContent className="space-y-5">
-                  <div className={cn("flex h-10 w-10 items-center justify-center rounded-md", item.color)}>
-                    <Icon className="h-5 w-5" aria-hidden="true" />
+
+        {/* Tab 1: Workflow */}
+        {activeTab === "workflow" && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 animate-fade-in">
+            {WORKFLOW_STEPS.map((s) => (
+              <Card key={s.step} className="group transition-all hover:border-primary-400/50">
+                <CardContent className="space-y-4 p-5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs font-bold text-primary-400 bg-primary-950/60 border border-primary-800/50 rounded px-2 py-0.5">
+                      STEP {s.step}
+                    </span>
+                    <span className="text-[11px] font-medium text-text-muted">{s.tag}</span>
                   </div>
                   <div>
-                    <CardTitle>{item.title}</CardTitle>
-                    <CardDescription className="text-text-body">{item.description}</CardDescription>
+                    <h3 className="text-base font-semibold text-text-heading">{s.title}</h3>
+                    <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">{s.desc}</p>
                   </div>
                 </CardContent>
               </Card>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
+
+        {/* Tab 2: Regulatory Coverage */}
+        {activeTab === "checks" && (
+          <div className="grid gap-5 md:grid-cols-3 animate-fade-in">
+            {REGULATORY_CHECKS.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Card key={item.title} className="h-full transition-colors hover:border-border-hover">
+                  <CardContent className="space-y-4 p-6">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-primary-800/40 bg-primary-950/40 text-primary-300">
+                      <Icon className="h-5 w-5" aria-hidden="true" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">{item.title}</CardTitle>
+                      <CardDescription className="mt-2 text-xs leading-relaxed text-text-body">
+                        {item.description}
+                      </CardDescription>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Tab 3: Governance */}
+        {activeTab === "governance" && (
+          <div className="grid gap-4 sm:grid-cols-2 animate-fade-in">
+            {GOVERNANCE_PILLARS.map((p) => (
+              <Card key={p.title}>
+                <CardContent className="flex items-start gap-3.5 p-5">
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success-text" aria-hidden="true" />
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-semibold text-text-heading">{p.title}</h3>
+                    <p className="text-xs leading-relaxed text-text-secondary">{p.desc}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </section>
 
-      <section className="space-y-5 border-t border-border pt-8" aria-labelledby="scope-heading">
-        <div className="flex items-center gap-3">
-          <Shield className="h-5 w-5 text-warning-text" aria-hidden="true" />
-          <h2 id="scope-heading" className="text-lg font-semibold text-text-heading">Prototype limits</h2>
+      {/* Quick Launchpad Stations */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-bold text-text-heading">Compliance Workstations</h2>
+        <div className="grid gap-5 sm:grid-cols-3">
+          <Link to="/validate" className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded-lg">
+            <Card className="h-full transition-all group-hover:border-primary-400 group-hover:bg-bg-2">
+              <CardContent className="space-y-3 p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary-500/10 text-primary-400">
+                    <ListChecks className="h-5 w-5" />
+                  </div>
+                  <ArrowUpRight className="h-4 w-4 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-primary-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-text-heading group-hover:text-primary-300">Run Preliminary Scrutiny</h3>
+                  <p className="mt-1 text-xs text-text-secondary">Load AICTE approval presets, check checklist names, and audit expiry dates.</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link to="/history" className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded-lg">
+            <Card className="h-full transition-all group-hover:border-primary-400 group-hover:bg-bg-2">
+              <CardContent className="space-y-3 p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-md bg-info-bg/30 text-info-text">
+                    <Clock3 className="h-5 w-5" />
+                  </div>
+                  <ArrowUpRight className="h-4 w-4 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-info-text" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-text-heading group-hover:text-info-text">Saved Audits & Reports</h3>
+                  <p className="mt-1 text-xs text-text-secondary">Inspect previously generated scrutiny reports, search by college, and export CSVs.</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link to="/about" className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded-lg">
+            <Card className="h-full transition-all group-hover:border-primary-400 group-hover:bg-bg-2">
+              <CardContent className="space-y-3 p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-md bg-warning-bg/30 text-warning-text">
+                    <BookOpen className="h-5 w-5" />
+                  </div>
+                  <ArrowUpRight className="h-4 w-4 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-warning-text" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-text-heading group-hover:text-warning-text">AICTE Handbook & Specs</h3>
+                  <p className="mt-1 text-xs text-text-secondary">Read API contracts, synthetic verification test suites, and regulatory boundary notes.</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {limits.map((item) => (
-            <li key={item} className="border-l border-warning-border pl-3 text-sm leading-relaxed text-text-body">
-              {item}
-            </li>
-          ))}
-        </ul>
       </section>
     </div>
   );

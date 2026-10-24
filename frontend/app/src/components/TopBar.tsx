@@ -42,7 +42,8 @@ export function TopBar({ onMenuToggle, mobileMenuOpen }: { onMenuToggle: () => v
   const location = useLocation();
   const page = pageTitles[location.pathname] || pageTitles["/"];
   const { theme, setTheme } = useTheme();
-  const { session, signOut } = useAuth();
+  const { session, demoUser, signOut } = useAuth();
+  const activeUser = demoUser || (session?.user ? { name: session.user.email?.split("@")[0] || "User", role: "reviewer" } : null);
 
   return (
     <header className="app-topbar sticky top-0 z-30 h-16 border-b border-border bg-bg-0/95">
@@ -72,13 +73,29 @@ export function TopBar({ onMenuToggle, mobileMenuOpen }: { onMenuToggle: () => v
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 sm:gap-4">
-          {session ? (
-            <button type="button" className="min-h-10 border border-border px-3 text-sm font-medium text-text-body hover:bg-bg-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" onClick={() => { void signOut(); }}>
-              <span className="hidden md:inline">Sign out</span><span className="md:hidden">Exit</span>
-            </button>
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          {activeUser ? (
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex flex-col items-end text-xs">
+                <span className="font-semibold text-text-heading leading-tight truncate max-w-[140px]">{activeUser.name}</span>
+                <span className="text-[11px] text-primary-400 uppercase tracking-wider">{activeUser.role.replace(/_/g, " ")}</span>
+              </div>
+              <button
+                type="button"
+                className="inline-flex min-h-9 items-center rounded-md border border-border px-3 text-xs font-semibold text-text-body hover:bg-bg-2 hover:text-text-heading focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+                onClick={() => { void signOut(); }}
+                title="Sign out of current account"
+              >
+                Sign out
+              </button>
+            </div>
           ) : (
-            <Link to="/signin" className="inline-flex min-h-10 items-center border border-border px-3 text-sm font-medium text-text-body hover:bg-bg-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400">Sign in</Link>
+            <Link
+              to="/signin"
+              className="inline-flex min-h-9 items-center rounded-md border border-primary-500/30 bg-primary-500/10 px-3 text-xs font-semibold text-primary-300 hover:bg-primary-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+            >
+              Sign in
+            </Link>
           )}
           <label className="sr-only" htmlFor="theme-select">Appearance theme</label>
           <select
