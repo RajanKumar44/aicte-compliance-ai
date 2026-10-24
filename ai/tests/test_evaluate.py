@@ -200,8 +200,10 @@ def test_multiple_corpora_are_scored_as_separate_slices():
         str(CORPUS_PATH.resolve().relative_to(REPO_ROOT)),
         str(CORRUPTION_CORPUS_PATH.resolve().relative_to(REPO_ROOT)),
     ]
-    assert [report["cases"] for report in reports] == [54, 15]
-    assert [report["exact_match_count"] for report in reports] == [54, 15]
+    # 56 scored: BND-002 and HI-005 migrated out of known-gap status once the
+    # backend fix landed (merge of origin/main, commit eec3a81).
+    assert [report["cases"] for report in reports] == [56, 15]
+    assert [report["exact_match_count"] for report in reports] == [56, 15]
     assert reports[0]["negative_false_positive_count"] == 0
     assert reports[1]["negative_false_positive_count"] == 0
     assert len(reports[1]["known_gaps"]) == 15
@@ -295,7 +297,7 @@ def test_cli_reports_repeated_corpora_without_merging_them(tmp_path: Path):
     assert completed.returncode == 0, completed.stderr
     report = json.loads(output.read_text(encoding="utf-8"))
     assert len(report["corpora"]) == 2
-    assert [slice_report["cases"] for slice_report in report["corpora"]] == [54, 15]
+    assert [slice_report["cases"] for slice_report in report["corpora"]] == [56, 15]
     assert completed.stdout.count("synthetic corpus") == 2
 
 

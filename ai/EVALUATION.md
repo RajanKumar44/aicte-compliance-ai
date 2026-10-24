@@ -37,7 +37,9 @@ identical inputs and corpus produce byte-identical reports.
 
 ## What is measured
 
-Label corpus: `ai/corpus/extraction_cases.jsonl` — 56 cases, 54 scored, 2 documented known gaps.
+Label corpus: `ai/corpus/extraction_cases.jsonl` — 56 cases, all 56 scored. The 2 former
+documented known gaps (`BND-002`, `HI-005`) were resolved by the backend fix merged from
+`feature/backend-ocr-gap-fixes` (commit `eec3a81`) and migrated into the scored denominator.
 Corruption slice: `ai/corpus/ocr_corruption_cases.jsonl` — 30 cases, 15 scored, 15 documented
 known gaps. When more than one `--corpus` is supplied, the scorer reports each slice
 independently and never combines their denominators.
@@ -45,17 +47,16 @@ independently and never combines their denominators.
 | Category | Count | What it exercises |
 |---|---|---|
 | clean-label-en | 16 | every English label variant, `:` and `-` separators, spacing |
-| clean-label-hi | 5 | Hindi labels for institution, certificate, dates, session |
+| clean-label-hi | 6 | Hindi labels for institution, certificate, dates, session |
 | multi-field | 3 | realistic certificates with 3–5 fields |
 | noise | 6 | surrounding prose, label without separator, empty value, unrelated text |
 | ocr-corruption | 4 | doubled spaces, all-caps, mixed case, trailing punctuation |
 | ambiguous-date | 6 | `DD/MM/YYYY`, long-form months, reversed/equal/multi-year sessions |
 | invalid-date | 2 | impossible day (`2026-02-30`), impossible month (`2026-13`) |
 | duplicate-labels | 3 | first label wins, deterministically |
-| boundary | 6 | 3- and 160-character names, 2-character certificate, leap day |
+| boundary | 7 | 3- and 160-character names, 2-character certificate, leap day |
 | personal-data | 2 | applicant name and DOB must **not** be extracted |
 | table-like | 1 | spaced columns |
-| known-gap | 2 | behaviour the extractor is known to get wrong (see below) |
 
 The corruption slice categories are:
 
@@ -77,13 +78,13 @@ of negative cases and how many produced a spurious extraction, and every wrong v
 
 ## Current result
 
-Run on 2026-10-23:
+Run on 2026-10-24 on the post-merge state (backend fix `eec3a81` present):
 
 ```
-micro (all fields)  tp=45  fp=0  fn=0   precision 1.000  recall 1.000  f1 1.000
-case exact-match:   54/54
-negative cases:     19, with a spurious extraction: 0
-known gaps:         2 (both still failing)
+micro (all fields)  tp=46  fp=0  fn=0   precision 1.000  recall 1.000  f1 1.000
+case exact-match:   56/56
+negative cases:     20, with a spurious extraction: 0
+known gaps:         0
 ```
 
 The separate corruption slice currently reports:
@@ -106,18 +107,21 @@ skewed, low-resolution AICTE certificate.
 
 ## Known gaps (documented, not hidden)
 
-Both are reported in a separate section of the output and are excluded from the scored set,
-so they cannot inflate the numbers. If either starts passing, the report says
+Known gaps are reported in a separate section of the output and excluded from the scored set,
+so they cannot inflate the numbers. If a gap starts passing, the report says
 **"FIXED — remove the known_gap flag"**.
 
-| Case | Defect | Owner |
+The two former label-corpus known gaps are resolved as of 2026-10-24:
+
+| Case | Former defect | Resolution |
 |---|---|---|
-| `BND-002` | The documented minimum of 3 characters for `institution_name` is not enforced: `Institution Name: AB` extracts `AB`, because the `\s*` before the capture group backtracks and lets `. {3,160}` consume the leading space. | backend workstream (OCR file) |
-| `HI-005` | The common Hindi spelling `शैक्षणिक सत्र` is not matched; only `शैक्षिक सत्र` is in the pattern. | backend workstream (OCR file) |
+| `BND-002` | The documented minimum of 3 characters for `institution_name` was not enforced: `Institution Name: AB` extracted `AB`, because the `\s*` before the capture group backtracked and let `. {3,160}` consume the leading space. | Fixed by backend commit `eec3a81` (trimmed-length validation in `[3, 160]` + non-space first capture char); the `known_gap` flag was removed in commit `7c15e01`. |
+| `HI-005` | The common Hindi spelling `शैक्षणिक सत्र` was not matched; only `शैक्षिक सत्र` was in the pattern. | Fixed by backend commit `eec3a81` (pattern now lists both spellings); the `known_gap` flag was removed in commit `7c15e01`. |
 
 Neither was fixed here: `ai/**` must not edit `backend/**` (see
-[`../WORKSTREAMS.md`](../WORKSTREAMS.md)), and both changes deserve their own reviewed PR
-with OCR regression tests.
+[`../WORKSTREAMS.md`](../WORKSTREAMS.md)). The fixes landed in the backend's own reviewed
+PR (`feature/backend-ocr-gap-fixes`, PR #7) with OCR regression tests, and the corpus
+metadata migrated the two cases into the scored denominator in a separate AI commit.
 
 ## Report fields and baseline comparison
 

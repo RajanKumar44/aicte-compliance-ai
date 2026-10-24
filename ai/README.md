@@ -36,13 +36,13 @@ engine contract tests. The working OCR implementation is still in `backend/`
 | [`ocr_benchmark.py`](ocr_benchmark.py) | OCR engine adapter contract (`OCREngine` ABC), transcription metrics (CER, WER), structured-field scoring, synthetic case generation, corpus I/O, and held-out partitioning. |
 | [`raster_benchmark.py`](raster_benchmark.py) | Genuine raster-image OCR evaluation: synthetic document image rendering (Pillow), pixel-level corruptions (blur, skew, low-res, JPEG compression, contrast, noise, rotation), paired clean/corrupted benchmark, and engine evaluation. |
 | [`normalize.py`](normalize.py) | Conservative text normalization with provenance (zero-width removal, NFKC, line-break unification). |
-| [`corpus/extraction_cases.jsonl`](corpus/extraction_cases.jsonl) | 56 labelled extraction cases (54 scored, 2 documented known gaps). |
+| [`corpus/extraction_cases.jsonl`](corpus/extraction_cases.jsonl) | 56 labelled extraction cases, all 56 scored (the 2 former known gaps were resolved by backend commit `eec3a81`). |
 | [`corpus/ocr_corruption_cases.jsonl`](corpus/ocr_corruption_cases.jsonl) | 30 OCR corruption cases (15 scored, 15 documented known gaps). |
 | [`tests/test_evaluate.py`](tests/test_evaluate.py) | Tests for the extraction evaluator, corpus validation, and scoring semantics. |
 | [`tests/test_ocr_benchmark.py`](tests/test_ocr_benchmark.py) | Tests for the OCR benchmark module: metrics, generation, scoring, contracts, corpus loading, partitioning. |
 | [`tests/test_raster_benchmark.py`](tests/test_raster_benchmark.py) | Tests for the raster benchmark module: pixel transforms, document rendering, paired scoring, engine availability, CLI. |
 | [`EVALUATION.md`](EVALUATION.md) | What the evaluation measures, its limitations, and how to run it. |
-| [`BACKEND_HANDOFF.md`](BACKEND_HANDOFF.md) | 17 documented extraction defects owned by the backend workstream. |
+| [`BACKEND_HANDOFF.md`](BACKEND_HANDOFF.md) | Documented extraction defects owned by the backend workstream (2 of the original 17 resolved; 15 remain). |
 
 ## OCR benchmark: metric definitions
 

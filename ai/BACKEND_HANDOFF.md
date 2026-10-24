@@ -6,6 +6,27 @@ evaluator keeps them visible instead of scoring them as passes or failures.
 Every row below was reproduced live against the current extractor on this
 branch; nothing here is inferred from tests alone.
 
+## Status update (2026-10-24, post-merge of `feature/backend-ocr-gap-fixes`)
+
+Backend commit `eec3a81` (merged to `main` in PR #7 and now merged into the
+AI/OCR branch) resolved **2 of the 17** defects:
+
+- ✅ `BND-002` (institution_name 3-character minimum enforced; captured value
+  must be non-space-first and trimmed ≥3/≤160).
+- ✅ `HI-005` (`शैक्षणिक सत्र` spelling added to the academic_year pattern).
+
+The corpus metadata followed in `ai` commit `7c15e01` style (mirrored by the
+merge): both `known_gap` flags were removed and both cases now score in the
+label corpus's scored denominator (extraction slice: 56/56 exact, 0 known
+gaps, verified live on the merged branch).
+
+**The remaining 15 corruption-slice cases were all re-verified as still
+failing** against the fixed extractor (evaluator `--check` exit 0, 15 known
+gaps reported, 15/15 scored cases exact). Everything below therefore describes
+today's state except for the two resolved rows, marked ✅ above and in the
+table comments; the PR acceptance criteria now apply to cases
+`CNL-001…CMIS-009`, `CLH-005`, `CCO-002/003/005` only.
+
 ## How to reproduce
 
 ```bash
@@ -91,6 +112,31 @@ them; the evaluator's two earlier diagnostic defects (gap-exception visibility
 in human output, `--check --help` wording) were fixed separately in commit
 `0d92cc0` and are not backend-owned. The corpora are synthetic, hand-written
 cases: they prove per-case behavior, not real-world OCR accuracy.
+
+## New backend-owned finding (2026-10-24): LocalStorageBackend accepts Windows-drive path keys on POSIX
+
+`backend/tests/integration/test_security_and_failure_paths.py::
+test_storage_directory_traversal_prevention` fails on 1 of its 6 traversal keys:
+`C:\Windows\system32\cmd.exe`.
+
+- Reproduce: `.venv/bin/python -m pytest -q
+  backend/tests/integration/test_security_and_failure_paths.py::test_storage_directory_traversal_prevention`
+  (fails on every POSIX host — Linux CI included).
+- Root cause (read-only inspection of `backend/app/core/storage.py`):
+  `LocalStorageBackend._resolve_key` rejects absolute POSIX paths, leading slashes,
+  and `..`/`.` components, but a Windows drive path (`C:\…`) has none of those. On
+  POSIX `os.path.isabs` is False for it and its `\`-split parts contain no `..`, so
+  it resolves to `base_dir/C:/Windows/system32/cmd.exe` and `put()` succeeds —
+  `pytest.raises(PathTraversalError)` then fails with DID NOT RAISE.
+  Verified key-by-key: the other 5 keys all raise.
+- Severity: medium-hardening (no user-facing write path today feeds raw keys to
+  `LocalStorageBackend`; the injectable backend accepts arbitrary keys, so every
+  future caller needs this guard).
+- Expected: reject keys containing a Windows drive-letter component (or any
+  backslash-separated segment resolving outside base_dir) with `PathTraversalError`,
+  consistently on every OS.
+- Attribution: backend-owned file (`backend/app/core/storage.py`, milestone B6) —
+  not modified by the AI/OCR workstream.
 
 ## New backend-owned finding (2026-10-24): test font path is not portable
 

@@ -1,7 +1,8 @@
 # AI/OCR acceptance audit — canonical requirement → evidence
 
-Status as of 2026-10-24, branch `feature/ai-ocr-corruption-slice`, HEAD `441aeb0`
-(the shaping-validity milestone — update this line with each milestone).
+Status as of 2026-10-24, branch `feature/ai-ocr-corruption-slice` at the merge of `origin/main`
+(merge commit `14d27fc`, which brings backend milestone commits through `4a79d73` and the
+corpus-gap alignment `7c15e01` into the AI branch — update this line with each milestone).
 Sources of truth: [`docs/canonical/prd.md`](../docs/canonical/prd.md),
 [`docs/canonical/phases.md`](../docs/canonical/phases.md),
 [`WORKSTREAMS.md`](../WORKSTREAMS.md), [`ai/EVALUATION.md`](EVALUATION.md),
@@ -19,8 +20,8 @@ Labels: `PASS` (reproducible evidence), `PARTIAL`, `BLOCKED_EXTERNAL`,
 | Normalization contract tests | `ai/tests/test_normalize.py` | test suite | PASS |
 | Confidence handling (never invented) | evaluator passes through engine-supplied confidences only; scorer never fabricates values | `ai/tests/test_evaluate.py` confidence passthrough tests | PASS |
 | Evidence/provenance distinction | engine/version/report fields (`engine`, `engine_version`, `dataset_fingerprint`, `rendering`) in every raster report | report schema tests | PASS |
-| Evaluation corpus and accuracy measurement | text corpora (56 extraction + 30 corruption cases) + evaluator; raster image benchmark with CER/WER/F1 | `ai/evaluate_extraction.py --check` exit 0; 244 AI tests | PASS |
-| AI tests | `ai/tests/` | `pytest -q ai/tests` → 244 passed (2026-10-24) | PASS |
+| Evaluation corpus and accuracy measurement | text corpora (56 extraction cases — all 56 scored after backend fix merged — + 30 corruption cases) + evaluator; raster image benchmark with CER/WER/F1 | `ai/evaluate_extraction.py --check` exit 0; 245 AI tests; extraction slice 56/56 exact | PASS |
+| AI tests | `ai/tests/` | `pytest -q ai/tests` → 245 passed (2026-10-24, post-merge) | PASS |
 
 ## Canonical gates (PRD / phases.md)
 
@@ -38,7 +39,7 @@ Labels: `PASS` (reproducible evidence), `PARTIAL`, `BLOCKED_EXTERNAL`,
 |---|---|---|
 | Faithful Devanagari shaping on this host | BLOCKED_EXTERNAL | Pinned Pillow 11.3.0 official macOS wheels do not bundle libraqm; no system libraqm. Fixing needs an authorized environment change (install libraqm + rebuild Pillow, or run corpora generation on a Linux manylinux-wheel environment). Reports now carry `rendering`/`accuracy_invalid_languages`/`accuracy_valid` so unavailable-shaping measurements are machine-detectable and flagged, never silently quoted. |
 | Real-document accuracy | NOT_AVAILABLE | No human-labelled held-out set of representative scanned AICTE certificates exists. EVALUATION.md specifies what such a protocol requires; nothing synthetic is quoted as real-world accuracy. |
-| Backend extraction/corruption gaps (17) | BLOCKED_EXTERNAL | Backend-owned (`backend/app/ocr_pipeline.py`); reproduced and documented with acceptance criteria in `ai/BACKEND_HANDOFF.md`. Unknown-gap count not fabricated beyond the reproduced 17. |
+| Backend extraction/corruption gaps (15 remaining of original 17) | BLOCKED_EXTERNAL | Backend commit `eec3a81` (merged via PR #7, now merged into the AI branch) resolved `BND-002` and `HI-005`; corpus metadata migrated them into the scored denominator (56/56 exact, verified live 2026-10-24). The remaining 15 corruption-slice gaps were re-verified still failing against the fixed extractor on the merged branch; details in `ai/BACKEND_HANDOFF.md`. |
 | Backend test font-path portability (`backend/tests/test_ocr_engine_integration.py`) | BLOCKED_EXTERNAL | Backend-owned; hard-coded Linux font path fails on macOS with Tesseract installed (`OSError: cannot open resource`). Documented 2026-10-24 in BACKEND_HANDOFF.md; repo suite is `1 failed, 224 passed` on this host. |
 | Regulatory rule activation / Phase 0 research | BLOCKED_EXTERNAL | Not AI-owned; phases.md Phase 0 gate remains open; no rule activated. |
 
