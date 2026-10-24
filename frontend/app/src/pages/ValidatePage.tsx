@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   ClipboardCheck, Send, ArrowLeft, RefreshCw, ListChecks, CalendarClock, ShieldCheck
 } from "lucide-react";
@@ -34,8 +34,16 @@ export function ValidatePage() {
   const [serverError, setServerError] = useState("");
   const [result, setResult] = useState<ValidationResponse | null>(null);
   const [lastRequest, setLastRequest] = useState<ValidationRequest | null>(null);
+  const errorSummaryRef = useRef<HTMLDivElement>(null);
 
   const allDocs = [...new Set([...requiredDocs, ...submittedDocs])];
+  const visibleErrors = Object.entries(fieldErrors).filter(([field]) => field !== "_unknown");
+
+  useEffect(() => {
+    if (visibleErrors.length > 0 && pageState === "form") {
+      errorSummaryRef.current?.focus();
+    }
+  }, [fieldErrors, pageState, visibleErrors.length]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -179,7 +187,24 @@ export function ValidatePage() {
           <div className="sr-only" role="status" aria-live="polite">
             {isLoading ? "Checking the supplied document lists." : ""}
           </div>
-          {/* General error */}
+          {visibleErrors.length > 0 && (
+            <div
+              ref={errorSummaryRef}
+              id="validation-error-summary"
+              tabIndex={-1}
+              className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-900 outline-none focus-visible:ring-2 focus-visible:ring-rose-600"
+              role="alert"
+              aria-labelledby="validation-error-title"
+            >
+              <p id="validation-error-title" className="text-sm font-semibold">Review the highlighted fields</p>
+              <ul className="mt-2 space-y-1 text-sm">
+                {visibleErrors.map(([field, message]) => (
+                  <li key={field}><a className="underline underline-offset-2" href={`#${field}`}>{message}</a></li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {fieldErrors._unknown && (
             <Alert variant="error">{fieldErrors._unknown}</Alert>
           )}

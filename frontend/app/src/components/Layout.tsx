@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -60,8 +61,10 @@ export function Layout() {
       <Sidebar
         open={sidebarOpen}
         mobile={isMobile}
+        collapsed={sidebarCollapsed}
         closeButtonRef={closeButtonRef}
         onClose={() => setSidebarOpen(false)}
+        onToggleCollapsed={() => setSidebarCollapsed((current) => !current)}
       />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

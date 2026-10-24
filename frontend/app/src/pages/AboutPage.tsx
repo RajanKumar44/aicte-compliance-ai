@@ -1,104 +1,112 @@
-import { Shield, FileText, Server } from "lucide-react";
+import { AlertTriangle, FileCheck2, LockKeyhole, Server, ShieldCheck } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/Card";
 import { Alert } from "@/components/Alert";
 import { Badge } from "@/components/Badge";
 import { PageHeader } from "@/components/PageHeader";
 
+const BOUNDARIES = [
+  "No official AICTE regulatory ruleset is loaded.",
+  "Document authenticity and content are not verified.",
+  "No authentication, tenant isolation, or audit trail exists.",
+  "No persistence, upload, OCR, or saved-report workflow exists.",
+];
+
 export function AboutPage() {
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
+    <div className="mx-auto max-w-[1440px] space-y-8">
       <PageHeader
         eyebrow="Scope and operating limits"
-        title="About this tool"
-        description="A transparent view of the checks, contract, and safeguards behind this preliminary document-review prototype."
+        title="Transparent by design"
+        description="Understand exactly what this preliminary review surface evaluates, what the API returns, and which safeguards are still required before production use."
+        actions={<Badge variant="warning">Prototype · not production-ready</Badge>}
       />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(19rem,0.55fr)] lg:items-start">
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+        <Card className="border-navy-800 bg-navy-900 p-6 text-white shadow-sm sm:p-8">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/10 text-teal-200">
+              <ShieldCheck className="h-6 w-6" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-300">Evidence-first contract</p>
+              <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">A review record, not an approval certificate.</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">The service compares caller-supplied document names and dates, then returns evidence-linked observations for a human reviewer to verify.</p>
+            </div>
+          </div>
+          <div className="mt-8 grid gap-3 sm:grid-cols-3">
+            <MiniFact label="Input" value="Caller-supplied lists" />
+            <MiniFact label="Output" value="Findings + evidence" />
+            <MiniFact label="Decision" value="Human review" />
+          </div>
+        </Card>
+        <Alert variant="warning" title="Use synthetic data only" className="h-full">
+          Do not submit real institutional documents, personal data, or confidential records. This prototype does not upload, store, authenticate, or persist documents.
+        </Alert>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)] lg:items-start">
         <div className="space-y-6">
           <Card className="shadow-sm">
             <CardHeader>
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-teal-700" />
-                <CardTitle>What this tool evaluates</CardTitle>
-              </div>
+              <div className="flex items-center gap-2"><FileCheck2 className="h-4 w-4 text-teal-700" aria-hidden="true" /><CardTitle>What is evaluated</CardTitle></div>
+              <CardDescription>Only values supplied in the current validation request.</CardDescription>
             </CardHeader>
-            <div className="space-y-4 text-sm leading-6 text-slate-700">
-              <p>
-                This tool accepts a caller-supplied checklist of required documents and compares it against a submitted list. It identifies:
-              </p>
-              <ul className="list-disc space-y-2 pl-5">
-                <li><strong>Missing documents</strong> — required names not present in the submitted list.</li>
-                <li><strong>Expired documents</strong> — supplied dates that fall before the server&apos;s current UTC date.</li>
-              </ul>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <InfoTile title="Missing documents" text="Required names that are not present in the submitted list." tone="red" />
+              <InfoTile title="Expired observations" text="Supplied dates that fall before the service evaluation date." tone="amber" />
+              <InfoTile title="Evidence fields" text="Finding messages, source values, and timestamps returned by the API." tone="teal" />
+              <InfoTile title="Neutral status" text="A passing result only means the supplied lists agree for this request." tone="slate" />
             </div>
           </Card>
 
           <Card className="shadow-sm">
             <CardHeader>
-              <div className="flex items-center gap-2">
-                <Server className="h-4 w-4 text-teal-700" />
-                <CardTitle>API contract</CardTitle>
-              </div>
-              <CardDescription>Contract version 0.1.0-draft</CardDescription>
+              <div className="flex items-center gap-2"><Server className="h-4 w-4 text-teal-700" aria-hidden="true" /><CardTitle>API contract</CardTitle></div>
+              <CardDescription>Version 0.1.0-draft · two available HTTP endpoints</CardDescription>
             </CardHeader>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <caption className="sr-only">Available API endpoints</caption>
-                <thead>
-                  <tr className="border-b border-slate-200">
-                    <th scope="col" className="py-2 pr-4 text-left font-medium text-slate-600">Endpoint</th>
-                    <th scope="col" className="py-2 pr-4 text-left font-medium text-slate-600">Method</th>
-                    <th scope="col" className="py-2 text-left font-medium text-slate-600">Purpose</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  <tr>
-                    <td className="py-3 pr-4 font-mono text-xs">/health</td>
-                    <td className="py-3 pr-4"><Badge variant="info">GET</Badge></td>
-                    <td className="py-3 text-slate-700">Service health check</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-4 font-mono text-xs">/api/v1/validate</td>
-                    <td className="py-3 pr-4"><Badge variant="info">POST</Badge></td>
-                    <td className="py-3 text-slate-700">Caller-supplied checklist validation</td>
-                  </tr>
-                </tbody>
-              </table>
+            <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
+              <EndpointRow method="GET" path="/health" purpose="Service health check" />
+              <EndpointRow method="POST" path="/api/v1/validate" purpose="Caller-supplied checklist validation" />
             </div>
-
-            <div className="mt-5 rounded-lg bg-slate-100 px-4 py-3 text-xs text-slate-700">
-              <p><strong>Status values:</strong> <code>preliminary_checks_passed</code> · <code>attention_required</code></p>
-              <p className="mt-2"><strong>Finding codes:</strong> <code>MISSING_DOCUMENT</code> · <code>DOCUMENT_EXPIRED</code></p>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <CodeFact label="Status values" value="preliminary_checks_passed · attention_required" />
+              <CodeFact label="Finding codes" value="MISSING_DOCUMENT · DOCUMENT_EXPIRED" />
             </div>
           </Card>
         </div>
 
         <aside className="space-y-6">
-          <Alert variant="warning" title="What this tool does not do">
-            <ul className="mt-1 space-y-2">
-              <li>It does not load an official AICTE regulatory checklist.</li>
-              <li>It does not verify document authenticity or content.</li>
-              <li>It does not establish regulatory compliance or eligibility.</li>
-              <li>It does not provide a legally binding approval decision.</li>
-              <li>A completed check means only that the supplied lists agree.</li>
-            </ul>
-          </Alert>
-
-          <Card className="border-slate-200 bg-slate-100/70 p-6 shadow-none">
+          <Card className="shadow-sm">
             <CardHeader>
-              <div className="flex items-center gap-2">
-                <Shield className="h-4 w-4 text-slate-700" />
-                <CardTitle className="text-sm">Security and production status</CardTitle>
-              </div>
+              <div className="flex items-center gap-2"><LockKeyhole className="h-4 w-4 text-slate-700" aria-hidden="true" /><CardTitle>Production safeguards still needed</CardTitle></div>
+              <CardDescription>These controls are outside the current prototype.</CardDescription>
             </CardHeader>
-            <div className="space-y-3 text-sm leading-6 text-slate-700">
-              <p>This tool has no authentication, authorization, tenant isolation, persistent storage, or audit trail. It is not production-ready.</p>
-              <p>Use synthetic identifiers only. Do not submit real institutional documents or personal data.</p>
-            </div>
+            <ul className="space-y-3 text-sm leading-6 text-slate-700">
+              {BOUNDARIES.map((item) => <li key={item} className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden="true" /><span>{item}</span></li>)}
+            </ul>
+          </Card>
+          <Card className="border-slate-200 bg-slate-100/80 p-6 shadow-none">
+            <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" aria-hidden="true" /><div><h2 className="text-sm font-semibold text-navy-900">Why human review remains required</h2><p className="mt-2 text-sm leading-6 text-slate-700">The service has no authoritative ruleset, document content inspection, authenticity verification, or legal decision authority. Treat every result as a structured observation to investigate.</p></div></div>
           </Card>
         </aside>
       </div>
     </div>
   );
+}
+
+function MiniFact({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl border border-white/10 bg-white/[0.06] p-3"><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</p><p className="mt-1 text-sm font-medium text-white">{value}</p></div>;
+}
+
+function InfoTile({ title, text, tone }: { title: string; text: string; tone: "red" | "amber" | "teal" | "slate" }) {
+  const styles = { red: "bg-rose-50 text-rose-700", amber: "bg-amber-50 text-amber-700", teal: "bg-teal-50 text-teal-700", slate: "bg-slate-100 text-slate-700" };
+  return <div className="rounded-xl border border-slate-200 p-4"><div className={`mb-3 flex h-8 w-8 items-center justify-center rounded-lg ${styles[tone]}`}><span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" /></div><h3 className="text-sm font-semibold text-navy-900">{title}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{text}</p></div>;
+}
+
+function EndpointRow({ method, path, purpose }: { method: string; path: string; purpose: string }) {
+  return <div className="grid gap-2 px-4 py-3 sm:grid-cols-[5rem_13rem_minmax(0,1fr)] sm:items-center"><Badge variant="info" className="w-fit">{method}</Badge><code className="text-xs text-navy-900">{path}</code><span className="text-sm text-slate-600">{purpose}</span></div>;
+}
+
+function CodeFact({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl bg-slate-100 px-4 py-3"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p><code className="mt-1 block break-words text-xs leading-5 text-slate-700">{value}</code></div>;
 }

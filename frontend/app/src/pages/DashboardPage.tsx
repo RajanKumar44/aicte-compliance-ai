@@ -9,6 +9,8 @@ import {
   ListChecks,
   Shield,
   Sparkles,
+  Gauge,
+  History,
 } from "lucide-react";
 import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
@@ -105,6 +107,21 @@ export function DashboardPage() {
         </div>
       </section>
 
+      <section aria-labelledby="snapshot-title">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Workspace snapshot</p>
+            <h2 id="snapshot-title" className="mt-1 text-xl font-semibold tracking-tight text-navy-900">Designed for a truthful first run</h2>
+          </div>
+          <p className="max-w-md text-sm text-slate-500">Live review values appear after a compatible validation response is returned.</p>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-3">
+          <SnapshotCard icon={Gauge} label="Review coverage" value="—" detail="Available after a check; not an AI health score" accent="bg-teal-50 text-teal-700" />
+          <SnapshotCard icon={History} label="Recent activity" value="Not stored" detail="No persistence or history endpoint" accent="bg-slate-100 text-slate-700" />
+          <SnapshotCard icon={FileUp} label="Document intake" value="Lists only" detail="No upload or OCR workflow is exposed" accent="bg-amber-50 text-amber-700" />
+        </div>
+      </section>
+
       <section className="grid gap-4 sm:grid-cols-3" aria-label="Workspace capabilities">
         <MetricCard icon={ListChecks} label="Review stages" value="3" detail="Context, comparison, evidence" accent="bg-blue-50 text-blue-700" />
         <MetricCard icon={FileUp} label="File intake" value="0" detail="No upload endpoint is exposed" accent="bg-amber-50 text-amber-700" />
@@ -169,6 +186,21 @@ export function DashboardPage() {
         </Card>
       </section>
     </div>
+  );
+}
+
+function SnapshotCard({ icon: Icon, label, value, detail, accent }: { icon: typeof Gauge; label: string; value: string; detail: string; accent: string }) {
+  return (
+    <Card className="flex items-center gap-4 p-5 shadow-sm">
+      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${accent}`}>
+        <Icon className="h-5 w-5" aria-hidden="true" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+        <p className="mt-1 text-lg font-semibold tracking-tight text-navy-900">{value}</p>
+        <p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p>
+      </div>
+    </Card>
   );
 }
 

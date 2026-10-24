@@ -6,6 +6,7 @@ import { Badge } from "./Badge";
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard",
+  "/dashboard": "Dashboard",
   "/validate": "Validate documents",
   "/about": "About this tool",
 };
