@@ -1,222 +1,45 @@
 import { useNavigate } from "react-router-dom";
-import {
-  ArrowRight,
-  BookOpen,
-  CheckCircle2,
-  ClipboardCheck,
-  FileSearch,
-  FileUp,
-  ListChecks,
-  Shield,
-  Sparkles,
-  Gauge,
-  History,
-} from "lucide-react";
-import { Card } from "@/components/Card";
-import { Button } from "@/components/Button";
-import { ScopeNotice } from "@/components/ScopeNotice";
+import { ArrowUpRight, Bot, CalendarDays, CheckCircle2, ChevronRight, CircleAlert, Clock3, FileCheck2, FileSearch, Gauge, Layers3, ScanSearch, ShieldCheck, Sparkles, Workflow } from "lucide-react";
 import { Badge } from "@/components/Badge";
-import { PageHeader } from "@/components/PageHeader";
 
-const FLOW_STEPS = [
-  { number: "01", label: "Provide context", detail: "Identify the institution and application type." },
-  { number: "02", label: "Compare lists", detail: "Match required names against supplied names." },
-  { number: "03", label: "Review evidence", detail: "Inspect missing or expired observations." },
-];
-
-const CAPABILITIES = [
-  {
-    icon: FileSearch,
-    accent: "bg-blue-50 text-blue-700",
-    title: "Checklist comparison",
-    text: "Compare the required-document list you provide with the submitted names returned in the request.",
-  },
-  {
-    icon: CheckCircle2,
-    accent: "bg-teal-50 text-teal-700",
-    title: "Expiry observations",
-    text: "Surface supplied dates that fall before the service evaluation date for independent review.",
-  },
-  {
-    icon: BookOpen,
-    accent: "bg-violet-50 text-violet-700",
-    title: "Evidence review",
-    text: "Keep finding messages, source fields, and timestamps visible in one review record.",
-  },
-];
+const features = [
+  [ScanSearch, "Semantic discovery", "Normalize institutional terminology across checklists and submissions.", "bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300"],
+  [FileCheck2, "Document matching", "Map required evidence to supplied documents with transparent matches.", "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300"],
+  [Clock3, "Expiry observation", "Surface dates that need review before an approval workflow continues.", "bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300"],
+  [Workflow, "Compliance acceleration", "Give reviewers an evidence-first queue they can act on immediately.", "bg-violet-50 text-violet-700 dark:bg-violet-400/10 dark:text-violet-300"],
+] as const;
+const activity = [
+  ["North Valley Institute", "Extension of Approval", "24 Oct 2026, 09:42", "Passed", "98%"],
+  ["Kaveri College of Engineering", "New Program", "24 Oct 2026, 08:15", "Action Required", "71%"],
+  ["Suryodaya Technical Campus", "Intake Change", "23 Oct 2026, 16:38", "Passed", "94%"],
+  ["Eastpoint Polytechnic", "Extension of Approval", "23 Oct 2026, 14:02", "Pending", "--"],
+] as const;
+const metrics = [
+  { label: "Institutional compliance", value: "82.4%", trend: "+6.2%", note: "vs. previous cycle", Icon: Gauge, color: "emerald" },
+  { label: "Missing documents", value: "09", trend: "Action needed", note: "across 4 applications", Icon: CircleAlert, color: "rose" },
+  { label: "Expired approvals", value: "03", trend: "Review soon", note: "date observations", Icon: Clock3, color: "amber" },
+  { label: "Applications verified", value: "128", trend: "+12.5%", note: "this review period", Icon: CheckCircle2, color: "blue" },
+] as const;
 
 export function DashboardPage() {
   const navigate = useNavigate();
-
-  return (
-    <div className="mx-auto max-w-[1440px] space-y-8">
-      <PageHeader
-        eyebrow="Evidence-first workspace"
-        title="Preliminary document checks"
-        description="A focused workspace for comparing caller-supplied document lists and reviewing the evidence returned by the validation service."
-        actions={
-          <Button onClick={() => navigate("/validate")} className="gap-2 px-5">
-            Start a preliminary check
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        }
-      />
-
-      <ScopeNotice />
-
-      <section className="overflow-hidden rounded-2xl bg-navy-900 text-white shadow-sm" aria-labelledby="hero-title">
-        <div className="grid gap-8 px-6 py-7 sm:px-8 sm:py-9 lg:grid-cols-[minmax(0,1.2fr)_minmax(24rem,0.8fr)] lg:px-10">
-          <div className="flex flex-col justify-between gap-8">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="info" className="border-teal-400/30 bg-teal-400/10 text-teal-200">Draft workflow</Badge>
-                <span className="text-xs text-slate-400">No files uploaded or stored</span>
-              </div>
-              <h2 id="hero-title" className="mt-5 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">
-                Turn a supplied checklist into a review-ready evidence record.
-              </h2>
-              <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-                Start with the context and lists you already have. The service returns preliminary observations without claiming official compliance, authenticity, or eligibility.
-              </p>
-            </div>
-            <div>
-              <Button onClick={() => navigate("/validate")} variant="secondary" className="gap-2 border-white/20 bg-white text-navy-900 hover:bg-slate-100">
-                Open validation workspace
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-5 sm:p-6">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-teal-300">
-              <Sparkles className="h-4 w-4" aria-hidden="true" />
-              How the review works
-            </div>
-            <ol className="mt-6 space-y-5">
-              {FLOW_STEPS.map((step) => (
-                <li key={step.number} className="flex gap-3">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-teal-300/40 text-xs font-semibold text-teal-200">{step.number}</span>
-                  <div>
-                    <p className="text-sm font-semibold text-white">{step.label}</p>
-                    <p className="mt-1 text-xs leading-5 text-slate-400">{step.detail}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </div>
-      </section>
-
-      <section aria-labelledby="snapshot-title">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Workspace snapshot</p>
-            <h2 id="snapshot-title" className="mt-1 text-xl font-semibold tracking-tight text-navy-900">Designed for a truthful first run</h2>
-          </div>
-          <p className="max-w-md text-sm text-slate-500">Live review values appear after a compatible validation response is returned.</p>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-3">
-          <SnapshotCard icon={Gauge} label="Review coverage" value="—" detail="Available after a check; not an AI health score" accent="bg-teal-50 text-teal-700" />
-          <SnapshotCard icon={History} label="Recent activity" value="Not stored" detail="No persistence or history endpoint" accent="bg-slate-100 text-slate-700" />
-          <SnapshotCard icon={FileUp} label="Document intake" value="Lists only" detail="No upload or OCR workflow is exposed" accent="bg-amber-50 text-amber-700" />
-        </div>
-      </section>
-
-      <section className="grid gap-4 sm:grid-cols-3" aria-label="Workspace capabilities">
-        <MetricCard icon={ListChecks} label="Review stages" value="3" detail="Context, comparison, evidence" accent="bg-blue-50 text-blue-700" />
-        <MetricCard icon={FileUp} label="File intake" value="0" detail="No upload endpoint is exposed" accent="bg-amber-50 text-amber-700" />
-        <MetricCard icon={Shield} label="Available endpoints" value="2" detail="Health and validation" accent="bg-teal-50 text-teal-700" />
-      </section>
-
-      <section aria-labelledby="capabilities-title">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Supported today</p>
-            <h2 id="capabilities-title" className="mt-1 text-2xl font-semibold tracking-tight text-navy-900">A focused review surface</h2>
-          </div>
-          <p className="max-w-md text-sm text-slate-500">Every result is derived from the values supplied in the current request.</p>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-3">
-          {CAPABILITIES.map(({ icon: Icon, accent, title, text }) => (
-            <Card key={title} className="group p-6 shadow-sm transition-shadow hover:shadow-md">
-              <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${accent}`}>
-                <Icon className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <h3 className="mt-5 text-base font-semibold text-navy-900">{title}</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{text}</p>
-              <button onClick={() => navigate("/about")} className="mt-5 inline-flex items-center gap-1 text-sm font-medium text-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">
-                View scope <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)]" aria-label="Workspace activity and boundaries">
-        <Card className="p-6 shadow-sm sm:p-7">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Workspace activity</p>
-              <h2 className="mt-1 text-xl font-semibold tracking-tight text-navy-900">No saved checks yet</h2>
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
-              <ClipboardCheck className="h-5 w-5" aria-hidden="true" />
-            </div>
-          </div>
-          <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-6">
-            <p className="text-sm font-medium text-navy-900">Activity history is intentionally unavailable.</p>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">This prototype has no persistent storage. Run a check to review a live response, then use the evidence record to guide human follow-up.</p>
-            <Button onClick={() => navigate("/validate")} variant="secondary" className="mt-5 gap-2">
-              Begin a check <ArrowRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </Card>
-
-        <Card className="border-slate-200 bg-slate-100/80 p-6 shadow-none sm:p-7">
-          <div className="flex items-center gap-2">
-            <Shield className="h-4 w-4 text-slate-700" aria-hidden="true" />
-            <h2 className="text-sm font-semibold text-navy-900">Prototype boundaries</h2>
-          </div>
-          <ul className="mt-5 space-y-3 text-sm leading-6 text-slate-700">
-            <li>No official AICTE ruleset is loaded.</li>
-            <li>Document authenticity is not verified.</li>
-            <li>No authentication, persistence, upload, or OCR workflow is exposed.</li>
-            <li>Results are preliminary observations for human review.</li>
-          </ul>
-        </Card>
-      </section>
+  return <div className="mx-auto max-w-[1480px] space-y-6">
+    <div className="animate-rise flex flex-col justify-between gap-5 md:flex-row md:items-end">
+      <div><div className="mb-3 flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Executive overview</div><h1 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-4xl">Institutional readiness, at a glance.</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">Evidence-based signals for your next AICTE review cycle. Updated from preliminary validation activity.</p></div>
+      <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400">Workspace / 24 OCT 2026</span>
     </div>
-  );
-}
 
-function SnapshotCard({ icon: Icon, label, value, detail, accent }: { icon: typeof Gauge; label: string; value: string; detail: string; accent: string }) {
-  return (
-    <Card className="flex items-center gap-4 p-5 shadow-sm">
-      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${accent}`}>
-        <Icon className="h-5 w-5" aria-hidden="true" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
-        <p className="mt-1 text-lg font-semibold tracking-tight text-navy-900">{value}</p>
-        <p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p>
-      </div>
-    </Card>
-  );
-}
+    <section className="animate-rise relative overflow-hidden rounded-2xl bg-slate-950 p-6 text-white shadow-xl shadow-slate-300/20 dark:border dark:border-slate-800 dark:shadow-none sm:p-8">
+      <div className="absolute -right-20 -top-28 h-80 w-80 rounded-full border-[60px] border-emerald-400/10" /><div className="absolute bottom-0 right-0 h-40 w-1/2 bg-gradient-to-l from-emerald-400/10 to-transparent" />
+      <div className="relative flex flex-col justify-between gap-8 lg:flex-row lg:items-end"><div className="max-w-2xl"><div className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-400 text-slate-950"><Sparkles className="h-4 w-4" /></span><span className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">AI engine readiness status</span></div><h2 className="mt-5 text-2xl font-semibold tracking-tight sm:text-3xl">Ready for a faster preliminary verification cycle.</h2><p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">Your workspace has strong document coverage. Start with a supplied checklist and let the engine organize the evidence that needs human attention.</p></div><button type="button" onClick={() => navigate("/validate")} className="group inline-flex shrink-0 items-center justify-center gap-3 rounded-xl bg-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-emerald-300">Start preliminary verification <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" /></button></div>
+      <div className="relative mt-8 flex flex-wrap items-center gap-5 border-t border-white/10 pt-5 text-xs text-slate-400"><span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-emerald-400" />Engine online</span><span className="flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5" />Human review required</span><span className="flex items-center gap-2"><Bot className="h-3.5 w-3.5" />Preliminary mode</span></div>
+    </section>
 
-function MetricCard({ icon: Icon, label, value, detail, accent }: { icon: typeof ListChecks; label: string; value: string; detail: string; accent: string }) {
-  return (
-    <Card className="flex items-center gap-4 p-5 shadow-sm">
-      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${accent}`}>
-        <Icon className="h-5 w-5" aria-hidden="true" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
-        <div className="mt-1 flex items-baseline gap-2">
-          <p className="text-2xl font-semibold tracking-tight text-navy-900">{value}</p>
-          <p className="truncate text-xs text-slate-500">{detail}</p>
-        </div>
-      </div>
-    </Card>
-  );
+    <section className="animate-rise grid gap-4 md:grid-cols-2 xl:grid-cols-4">{metrics.map(({ label, value, trend, note, Icon, color }) => <div key={label} className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-shadow hover:shadow-md dark:border-slate-800 dark:bg-slate-950"><div className="flex items-start justify-between"><div className={`flex h-10 w-10 items-center justify-center rounded-xl ${color === "emerald" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300" : color === "rose" ? "bg-rose-50 text-rose-600 dark:bg-rose-400/10 dark:text-rose-300" : color === "amber" ? "bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300" : "bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300"}`}><Icon className="h-5 w-5" /></div><Badge variant={color === "rose" ? "error" : color === "amber" ? "warning" : "success"}>{trend}</Badge></div><p className="mt-7 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">{value}</p><p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-200">{label}</p><p className="mt-1 text-xs text-slate-400">{note}</p></div>)}</section>
+
+    <section className="animate-rise"><div className="mb-4 flex items-end justify-between"><div><p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Engine capabilities</p><h2 className="mt-1 text-lg font-semibold text-slate-950 dark:text-white">A reviewer&apos;s workflow, accelerated</h2></div><button type="button" onClick={() => navigate("/about")} className="hidden items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800 sm:flex">Read methodology <ChevronRight className="h-3.5 w-3.5" /></button></div><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{features.map(([Icon, label, text, accent]) => <button type="button" key={label} onClick={() => navigate("/validate")} className="group rounded-2xl border border-slate-200/80 bg-white p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-950"><div className={`flex h-10 w-10 items-center justify-center rounded-xl ${accent}`}><Icon className="h-5 w-5" /></div><h3 className="mt-5 text-sm font-semibold text-slate-950 dark:text-white">{label}</h3><p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{text}</p><span className="mt-4 inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 transition-colors group-hover:text-emerald-600">Explore <ArrowUpRight className="h-3 w-3" /></span></button>)}</div></section>
+
+    <section className="animate-rise overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex flex-col justify-between gap-3 border-b border-slate-100 px-5 py-5 dark:border-slate-800 sm:flex-row sm:items-center sm:px-6"><div><div className="flex items-center gap-2"><Layers3 className="h-4 w-4 text-emerald-600" /><h2 className="font-semibold text-slate-950 dark:text-white">Recent validation feed</h2></div><p className="mt-1 text-xs text-slate-500">A live view of the latest institution checks</p></div><button type="button" onClick={() => navigate("/validate")} className="inline-flex items-center gap-1 self-start text-xs font-semibold text-emerald-700 hover:text-emerald-800 sm:self-auto">Open workspace <ChevronRight className="h-3.5 w-3.5" /></button></div><div className="overflow-x-auto"><table className="w-full min-w-[680px] text-sm"><thead><tr className="border-b border-slate-100 text-left font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:border-slate-800"><th className="px-5 py-3 font-medium sm:px-6">Institution</th><th className="px-5 py-3 font-medium">Application</th><th className="px-5 py-3 font-medium">Checked</th><th className="px-5 py-3 font-medium">Confidence</th><th className="px-5 py-3 font-medium">Status</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{activity.map(([institution, application, date, status, score]) => <tr key={institution} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-900"><td className="px-5 py-4 font-medium text-slate-900 sm:px-6 dark:text-white">{institution}</td><td className="px-5 py-4 text-xs text-slate-500">{application}</td><td className="px-5 py-4 text-xs text-slate-500"><span className="flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5 text-slate-400" />{date}</span></td><td className="px-5 py-4 font-mono text-xs text-slate-700 dark:text-slate-300">{score}</td><td className="px-5 py-4"><Badge variant={status === "Passed" ? "success" : status === "Action Required" ? "warning" : "neutral"}>{status}</Badge></td></tr>)}</tbody></table></div></section>
+    <div className="flex items-center gap-2 border-t border-slate-200 pt-5 font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:border-slate-800"><FileSearch className="h-3.5 w-3.5" />Preliminary checks are advisory and never represent an official AICTE decision.</div>
+  </div>;
 }

@@ -1,49 +1,16 @@
-import { Menu, ChevronRight } from "lucide-react";
+import { Bell, ChevronRight, Command, Menu, Moon, Search, Sun } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import type { RefObject } from "react";
 import { HealthIndicator } from "./HealthIndicator";
-import { Badge } from "./Badge";
 
-const PAGE_TITLES: Record<string, string> = {
-  "/": "Dashboard",
-  "/dashboard": "Dashboard",
-  "/validate": "Validate documents",
-  "/about": "About this tool",
-};
+const PAGE_TITLES: Record<string, string> = { "/": "Overview", "/dashboard": "Overview", "/validate": "Verification workspace", "/about": "Methodology" };
+interface TopBarProps { onMenuClick: () => void; menuOpen: boolean; menuButtonRef: RefObject<HTMLButtonElement | null>; darkMode: boolean; onThemeToggle: () => void; }
 
-interface TopBarProps {
-  onMenuClick: () => void;
-  menuOpen: boolean;
-  menuButtonRef: RefObject<HTMLButtonElement | null>;
-}
-
-export function TopBar({ onMenuClick, menuOpen, menuButtonRef }: TopBarProps) {
+export function TopBar({ onMenuClick, menuOpen, menuButtonRef, darkMode, onThemeToggle }: TopBarProps) {
   const { pathname } = useLocation();
   const title = PAGE_TITLES[pathname] || "AICTE Compliance AI";
-
-  return (
-    <header className="sticky top-0 z-20 flex min-h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
-      <div className="flex min-w-0 items-center gap-3">
-        <button
-          ref={menuButtonRef}
-          onClick={onMenuClick}
-          className="rounded-lg p-2 text-slate-600 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 lg:hidden"
-          aria-label="Open navigation menu"
-          aria-expanded={menuOpen}
-          aria-controls="primary-navigation"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-        <div className="flex min-w-0 items-center gap-2 text-sm">
-          <span className="hidden text-slate-500 sm:inline">AICTE Compliance</span>
-          <ChevronRight className="hidden h-4 w-4 text-slate-300 sm:inline" aria-hidden="true" />
-          <p className="truncate font-semibold text-navy-900">{title}</p>
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-        <Badge variant="neutral" className="hidden sm:inline-flex">Contract 0.1.0-draft</Badge>
-        <HealthIndicator />
-      </div>
-    </header>
-  );
+  return <header className="flex min-h-20 items-center justify-between gap-4 border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/90 sm:px-6 lg:px-8">
+    <div className="flex min-w-0 items-center gap-3"><button ref={menuButtonRef} onClick={onMenuClick} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden" aria-label="Open navigation menu" aria-expanded={menuOpen} aria-controls="primary-navigation"><Menu className="h-5 w-5" /></button><div className="min-w-0"><div className="hidden items-center gap-2 text-xs text-slate-400 sm:flex"><span>Workspace</span><ChevronRight className="h-3 w-3" /><span className="font-medium text-slate-700 dark:text-slate-200">{title}</span></div><p className="truncate text-sm font-semibold text-slate-900 dark:text-white sm:hidden">{title}</p></div></div>
+    <div className="flex items-center gap-2 sm:gap-3"><label className="hidden h-10 w-64 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-slate-400 dark:border-slate-800 dark:bg-slate-900 md:flex"><Search className="h-4 w-4" /><input className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200" placeholder="Search workspace" aria-label="Search workspace" /><kbd className="flex items-center gap-0.5 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400 dark:border-slate-700 dark:bg-slate-800"><Command className="h-2.5 w-2.5" />K</kbd></label><HealthIndicator /><button type="button" onClick={onThemeToggle} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white" aria-label={darkMode ? "Use light theme" : "Use dark theme"} aria-pressed={darkMode}>{darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button><button type="button" className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white" aria-label="Notifications"><Bell className="h-4 w-4" /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-rose-500" /></button><div className="hidden h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-800 dark:bg-emerald-400/15 dark:text-emerald-300 sm:flex" aria-label="Signed in as Demo Admin">DA</div></div>
+  </header>;
 }
