@@ -1,0 +1,4 @@
+# Optional OCR runtime only. Install Tesseract separately using the OS package manager.
+# These are deliberately excluded from backend/requirements.txt.
+Pillow==11.3.0
+pytesseract==0.3.13
