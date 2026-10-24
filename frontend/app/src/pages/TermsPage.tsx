@@ -12,7 +12,11 @@ const sections = [
   },
   {
     title: "Prototype use",
-    body: "Use synthetic sample data only. The current application has no accounts, saved application history, file upload, or OCR endpoint. Do not treat the prototype as a production service.",
+    body: "History is available only to invited accounts with institution membership and is saved only when the user opts in. Records are scheduled for deletion after 365 days. File upload and OCR are not available. Do not treat a preliminary result as a production compliance decision.",
+  },
+  {
+    title: "Active rule status",
+    body: "No AICTE rule is active. The initial candidate scope is EoA for academic year 2026–27. Rules remain inactive until official source amendments and applicability are reconciled and a qualified reviewer approves the rule set.",
   },
   {
     title: "Terms required before launch",

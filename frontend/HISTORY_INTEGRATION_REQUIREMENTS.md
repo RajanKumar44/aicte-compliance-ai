@@ -1,53 +1,57 @@
-# Validation history: backend integration requirements
+# Validation history: implementation and operational requirements
 
-**Status:** deferred. This note records frontend integration requirements; it does not
-approve history storage or change the API contract.
+**Status:** implementation added for Supabase Auth + PostgreSQL, explicit opt-in, and
+365-day database retention. A Supabase project still needs to be provisioned and
+configured before history becomes available.
 
 ## Verified current behavior
 
-The current API contract is `0.1.0-draft`. The implemented HTTP endpoints are:
+The API implements:
 
 - `GET /health`
 - `POST /api/v1/validate`
+- `GET /api/v1/institutions` (authenticated)
+- `POST /api/v1/validation-runs` (authenticated, opt-in save)
+- `GET /api/v1/validation-runs` (authenticated, bounded pagination)
+- `GET /api/v1/validation-runs/{run_id}` (authenticated)
+- `DELETE /api/v1/validation-runs/{run_id}` (authenticated)
 
 The validation endpoint compares the request's caller-supplied document lists and expiry
-dates. It returns a preliminary result with `validation_scope`, `checked_at`, findings,
-evidence and a notice. It does not persist the request or response. The backend has no
-database-backed application store, authentication, user accounts, role authorization,
-tenant isolation, audit trail, retention controls, or history endpoints. The frontend does
-not store validation history in browser storage. Theme and scope-notice preferences use
-session storage only; they are not history records.
+dates. The stateless endpoint remains available without authentication. The history route
+repeats the same evaluation, and persists request/result snapshots only when a signed-in
+user explicitly checks the save option. The backend verifies the user with Supabase Auth
+and forwards that user's access token to PostgREST; it never uses a service-role key.
+Postgres RLS is the access control boundary. The frontend stores no validation records in
+browser storage; auth session tokens use `sessionStorage`.
 
-The frontend must continue to state that history is unavailable until an approved and
-verified API contract supports it. Do not add local storage, IndexedDB, or a mock history
-list as a substitute.
+The frontend shows history only to an authenticated session and reports unavailable setup
+or missing institution membership explicitly. Do not add local storage, IndexedDB, or a
+mock history list as a substitute for server records.
 
 ## Backend decisions required before implementation
 
-1. **Identity and ownership:** select the authentication provider and establish stable user
-   and institution identities, membership, roles, and account recovery. A submitted
-   `institution_id` by itself must never grant access to a record.
-2. **Access policy:** define applicant, reviewer, and administrator permissions, including
-   which users can list, open, export, delete, or act on a review. Enforce these checks on
-   every server request and query, scoped to the authenticated institution.
-3. **Data purpose and minimization:** decide whether the service needs to save the request
-   and result at all. If approved, define which institution identifiers, document names,
-   expiry dates, findings, and evidence are necessary. Do not store document contents as
-   part of history unless a separately approved document workflow requires them.
-4. **Retention and deletion:** set the retention period, deletion behavior, backup expiry,
-   legal holds if applicable, and user-visible confirmation. Define whether deletion is
-   immediate or queued and how its completion is reported.
-5. **Review lifecycle:** decide whether records are immutable snapshots, editable drafts,
-   or reviewer workflows. Define reviewer comments/outcomes and attribution separately;
-   the current validation response contains no authenticated actor or review status.
-6. **Operations:** choose durable storage, migrations, encryption and key management,
-   backups, availability expectations, rate limits, request limits, and privacy-safe logs.
-   Audit claims must match the implemented controls; append-only storage alone is not a
-   tamper-proof audit guarantee.
+1. **Identity and ownership:** Supabase Auth identifies the user. Institution memberships
+   are provisioned by an operator; a submitted `institution_id` alone grants no access.
+2. **Access policy:** applicants create and read their own records; reviewers can read
+   records within their institution; institution administrators can read/delete records
+   in their institution. Users can delete their own records. Membership changes are
+   operator-provisioned through the trusted Supabase dashboard.
+3. **Data purpose and minimization:** the saved record contains the request/result
+   snapshots, institution/user IDs, and timestamps. Uploaded document bytes are not
+   accepted or stored.
+4. **Retention and deletion:** the database generates `expires_at` at 365 days and the
+   Supabase Cron migration purges expired rows daily. Users can delete sooner when their
+   role allows it. Provider backup and hosting-log retention remain separate operator
+   decisions and must be checked before public use.
+5. **Review lifecycle:** validation runs are immutable request/result snapshots; deletion
+   removes a run. This is not a reviewer-comment or approval workflow.
+6. **Operations:** durable storage and migrations are Supabase/Postgres. Confirm project
+   region, backup retention, email settings, deployment secrets, rate limits and
+   privacy-safe logs before launch. No tamper-proof audit-log claim is made.
 
 ## Candidate data model
 
-Subject to the decisions above, a minimal history record could contain:
+Implemented history record:
 
 - Opaque `review_id` generated by the server.
 - Authenticated `institution_id` and `created_by_user_id` foreign keys, derived from the
@@ -56,7 +60,7 @@ Subject to the decisions above, a minimal history record could contain:
 - Versioned request and response snapshots limited to the approved fields needed to
   reproduce and display the preliminary comparison.
 - Structured findings and their evidence, plus the API/contract version used.
-- A deletion/retention state only if the agreed lifecycle needs one.
+- Database-generated `expires_at` fixed to 365 days after `created_at`.
 
 Do not store passwords, access tokens, uploaded document bytes, or unnecessary personal
 data in a history record. Do not describe a record as an official AICTE decision or a
@@ -64,35 +68,43 @@ verified authenticity result.
 
 ## Candidate API surface
 
-These are proposals only. They must not be implemented by the frontend until the backend
-owners approve request/response schemas, authorization, and lifecycle behavior.
+Implemented API surface:
 
-| Operation | Candidate route | Required behavior |
+| Operation | Route | Behavior |
 |---|---|---|
-| Create and validate a saved review | `POST /api/v1/validation-runs` | Authenticate, authorize institution membership, validate the request, persist a scoped snapshot, and return the opaque review ID with the preliminary result. Define idempotency and failure atomicity. |
-| List current user's/institution's reviews | `GET /api/v1/validation-runs` | Enforce server-side scope; support bounded pagination and approved filters; return only fields allowed by the access policy. |
-| Open one review | `GET /api/v1/validation-runs/{review_id}` | Check both record-level access and institution membership; return the saved snapshot and findings. |
-| Delete a review | `DELETE /api/v1/validation-runs/{review_id}` | Authorize deletion, apply the approved retention/deletion policy, and return an unambiguous completion state. |
+| Create and validate a saved run | `POST /api/v1/validation-runs` | Verifies auth and institution membership, runs the existing preliminary comparison, stores a snapshot under RLS and returns its opaque ID. |
+| List accessible runs | `GET /api/v1/validation-runs` | Uses RLS and bounded `limit`/`offset` pagination. |
+| Open one run | `GET /api/v1/validation-runs/{run_id}` | RLS scopes visibility; inaccessible and missing records both return not found. |
+| Delete a run | `DELETE /api/v1/validation-runs/{run_id}` | RLS authorizes creator or institution admin; success is `204`. |
 
-The existing stateless `POST /api/v1/validate` can remain available for ephemeral checks.
-The backend owners must decide whether saved runs use a separate route or a versioned
-extension. The frontend must not infer persistence from a successful response.
+The stateless `POST /api/v1/validate` remains available for ephemeral checks. Saved runs
+use a separate route; the frontend reports success only after the saved route returns a
+record ID.
 
 ## Frontend integration acceptance criteria
 
-After the backend contract and security model are approved, the frontend may add history
-only when all of the following are true:
+Implemented frontend behavior:
 
 - The server returns a stable opaque record ID and authenticated access is established.
-- List, detail, export, and delete operations are scoped and authorized on the server.
+- List, detail, and delete operations are scoped and authorized on the server.
 - Empty, loading, pagination, not-found, permission-denied, network, and server-error
   states are represented without stale or fabricated records.
 - Deletion provides a clear confirmation and reflects the server's actual completion
   semantics.
 - No history data is copied into browser persistence or logged for convenience.
-- Tests prove cross-user and cross-institution access is denied, including guessed IDs,
-  list filters, pagination tokens, and delete attempts.
+- Database RLS policies constrain reads/inserts/deletes by authenticated user, membership,
+  role, creator, and expiry. Local tests mock the Auth/PostgREST boundary; live RLS
+  isolation still must be verified against the provisioned Supabase project.
 - The UI preserves the preliminary-check scope and human-review notice for every saved
   result.
 
-Until those gates pass, the current no-history behavior is the correct implementation.
+## Still required before storing real data
+
+- Provision a Supabase project, apply the migration, set auth redirect/email settings, and
+  configure backend/frontend environment values.
+- Create institution and membership rows from the trusted dashboard after inviting users.
+- Verify RLS allow/deny cases against the deployed Postgres instance, including guessed
+  IDs, cross-institution access, pagination, and delete attempts.
+- Confirm region, backups/PITR, hosting logs and legal/privacy notice with the operator.
+- No AICTE rule is active. The candidate rules scope is EoA, AY 2026–27, pending official
+  source reconciliation and qualified expert approval.

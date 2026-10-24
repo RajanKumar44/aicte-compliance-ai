@@ -1,7 +1,9 @@
 import { useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { HealthIndicator } from "./HealthIndicator";
 import { useTheme, type ThemeName } from "./ThemeContext";
-import { Shield, ChevronRight, LayoutDashboard, ClipboardCheck, Info, FileLock2, FileText, Menu, X } from "lucide-react";
+import { Shield, ChevronRight, LayoutDashboard, ClipboardCheck, Info, FileLock2, FileText, Menu, X, Clock3 } from "lucide-react";
+import { useAuth } from "./useAuth";
 
 const pageTitles: Record<string, { title: string; description: string; icon: React.ReactNode }> = {
   "/": {
@@ -19,6 +21,11 @@ const pageTitles: Record<string, { title: string; description: string; icon: Rea
     description: "Documentation and API reference",
     icon: <Info className="h-5 w-5" />,
   },
+  "/history": {
+    title: "History",
+    description: "Saved validation runs",
+    icon: <Clock3 className="h-5 w-5" />,
+  },
   "/privacy": {
     title: "Privacy notice",
     description: "Prototype policy draft",
@@ -35,6 +42,7 @@ export function TopBar({ onMenuToggle, mobileMenuOpen }: { onMenuToggle: () => v
   const location = useLocation();
   const page = pageTitles[location.pathname] || pageTitles["/"];
   const { theme, setTheme } = useTheme();
+  const { session, signOut } = useAuth();
 
   return (
     <header className="app-topbar sticky top-0 z-30 h-16 border-b border-border bg-bg-0/95">
@@ -65,6 +73,13 @@ export function TopBar({ onMenuToggle, mobileMenuOpen }: { onMenuToggle: () => v
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+          {session ? (
+            <button type="button" className="min-h-10 border border-border px-3 text-sm font-medium text-text-body hover:bg-bg-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" onClick={() => { void signOut(); }}>
+              <span className="hidden md:inline">Sign out</span><span className="md:hidden">Exit</span>
+            </button>
+          ) : (
+            <Link to="/signin" className="inline-flex min-h-10 items-center border border-border px-3 text-sm font-medium text-text-body hover:bg-bg-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400">Sign in</Link>
+          )}
           <label className="sr-only" htmlFor="theme-select">Appearance theme</label>
           <select
             id="theme-select"

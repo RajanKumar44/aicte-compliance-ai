@@ -42,7 +42,8 @@ const workflow = [
 const limits = [
   "The service does not load an authoritative AICTE checklist.",
   "No document upload or OCR route is available.",
-  "The app does not create accounts or save application history.",
+  "Signed-in users can opt in to save a validation run for up to 365 days.",
+  "The initial EoA 2026–27 rule scope remains inactive pending expert review.",
   "Use synthetic sample data. Results need human review.",
 ];
 

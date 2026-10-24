@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   ClipboardCheck,
+  Clock3,
   Info,
   ChevronLeft,
   ChevronRight,
@@ -10,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "./Button";
+import { useAuth } from "./useAuth";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -29,6 +31,10 @@ export function Sidebar({
   onClose: () => void;
 }) {
   const location = useLocation();
+  const { session } = useAuth();
+  const items = session
+    ? [...navItems, { path: "/history", label: "History", icon: Clock3 }]
+    : navItems;
 
   return (
     <aside
@@ -66,7 +72,7 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" aria-label="Navigation">
-        {navItems.map((item) => {
+        {items.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
 
@@ -96,10 +102,8 @@ export function Sidebar({
       <div className="p-4 border-t border-border">
         <div className={cn("space-y-3", collapsed && "lg:hidden")}>
           <div className="space-y-3">
-            <p className="text-xs font-medium text-text-secondary">Prototype workspace</p>
-            <p className="text-xs text-text-muted">
-              No saved validation history. Use synthetic input only.
-            </p>
+            <p className="text-xs font-medium text-text-secondary">Review scope</p>
+            <p className="text-xs text-text-muted">EoA 2026–27 rule review is pending. Current checks use only the lists supplied.</p>
           </div>
         </div>
       </div>

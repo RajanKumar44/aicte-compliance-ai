@@ -38,12 +38,13 @@ export function ScopeNotice({ dismissible = true }: { dismissible?: boolean }) {
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-sm text-text-body leading-relaxed">
-            This is a <strong>preliminary check prototype</strong>. Results are advisory and require human review before any
+            This is a <strong>preliminary check service</strong>. Results are advisory and require human review before any
             compliance decisions are made.
           </p>
           <p className="mt-2 text-sm text-text-muted leading-relaxed">
-            The API compares caller-supplied document lists and expiry dates. It does not load an authoritative AICTE
-            checklist or verify document authenticity, content accuracy, or regulatory completeness.
+            The API compares caller-supplied document lists and expiry dates. AICTE rules for the initial EoA 2026–27 scope
+            remain inactive pending source reconciliation and expert review. The service does not verify document authenticity,
+            content accuracy, or regulatory completeness.
           </p>
         </div>
       </div>

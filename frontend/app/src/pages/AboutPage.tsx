@@ -84,7 +84,7 @@ export function AboutPage() {
                 </div>
                 <div>
                   <CardTitle>API Contract</CardTitle>
-                  <CardDescription>Version 0.1.0-draft</CardDescription>
+                  <CardDescription>Validation and saved-history endpoints</CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -111,6 +111,10 @@ export function AboutPage() {
                         <td className="py-4 pr-4"><Badge variant="info" size="sm">POST</Badge></td>
                         <td className="py-4 text-text-secondary">Compare supplied document lists and expiry dates</td>
                       </tr>
+                      <tr><td className="py-4 pr-4 font-mono text-text-body"><code>/api/v1/institutions</code></td><td className="py-4 pr-4"><Badge variant="info" size="sm">GET</Badge></td><td className="py-4 text-text-secondary">List institutions available to the signed-in user</td></tr>
+                      <tr><td className="py-4 pr-4 font-mono text-text-body"><code>/api/v1/validation-runs</code></td><td className="py-4 pr-4"><Badge variant="info" size="sm">POST</Badge></td><td className="py-4 text-text-secondary">Validate and save an opted-in history record</td></tr>
+                      <tr><td className="py-4 pr-4 font-mono text-text-body"><code>/api/v1/validation-runs</code></td><td className="py-4 pr-4"><Badge variant="info" size="sm">GET</Badge></td><td className="py-4 text-text-secondary">List accessible history with bounded pagination</td></tr>
+                      <tr><td className="py-4 pr-4 font-mono text-text-body"><code>/api/v1/validation-runs/&#123;run_id&#125;</code></td><td className="py-4 pr-4"><Badge variant="info" size="sm">GET / DELETE</Badge></td><td className="py-4 text-text-secondary">Open or delete an authorized record</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -194,7 +198,7 @@ export function AboutPage() {
             <CardContent className="space-y-3 text-sm leading-relaxed text-text-secondary">
               <p>CSV includes request context, response status and scope, the API checked-at timestamp, a separate report-generation timestamp, findings, evidence, source, and the API limitation notice.</p>
               <p>CSV values are quoted and quotes are escaped. Values that begin with a spreadsheet formula character, including after whitespace, receive a leading apostrophe in the exported cell. The in-page result is unchanged.</p>
-              <p>Print Summary opens the browser print dialog. You can choose a PDF destination. The report remains a preliminary caller-supplied comparison and is not saved by this service.</p>
+              <p>Print Summary opens the browser print dialog. You can choose a PDF destination. Exporting does not extend the saved record's 365-day retention period.</p>
             </CardContent>
           </Card>
         </div>
@@ -209,8 +213,7 @@ export function AboutPage() {
             </CardHeader>
             <CardContent>
               <ul className="space-y-3 text-sm text-text-secondary">
-                <li className="flex gap-2 leading-relaxed"><XCircle className="h-4 w-4 text-error-text flex-shrink-0 mt-0.5" /> Authenticate users</li>
-                <li className="flex gap-2 leading-relaxed"><XCircle className="h-4 w-4 text-error-text flex-shrink-0 mt-0.5" /> Persist data</li>
+                <li className="flex gap-2 leading-relaxed"><XCircle className="h-4 w-4 text-error-text flex-shrink-0 mt-0.5" /> Load or evaluate active AICTE rules</li>
                 <li className="flex gap-2 leading-relaxed"><XCircle className="h-4 w-4 text-error-text flex-shrink-0 mt-0.5" /> Perform OCR or document upload</li>
                 <li className="flex gap-2 leading-relaxed"><XCircle className="h-4 w-4 text-error-text flex-shrink-0 mt-0.5" /> Verify document authenticity</li>
                 <li className="flex gap-2 leading-relaxed"><XCircle className="h-4 w-4 text-error-text flex-shrink-0 mt-0.5" /> Replace human compliance review</li>
@@ -227,10 +230,10 @@ export function AboutPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-text-secondary">
-              <p className="leading-relaxed">No authentication is configured. This is a stateless prototype.</p>
-              <p className="leading-relaxed">The service does not save application data or maintain history.</p>
-              <p className="leading-relaxed">Requests send the institution ID, document names and expiry dates; file uploads are not supported.</p>
-              <p className="leading-relaxed">Use synthetic institution identifiers in this prototype.</p>
+              <p className="leading-relaxed">Saved history requires Supabase Auth and a verified institution membership. Database row-level security limits access by user and institution role.</p>
+              <p className="leading-relaxed">A history record is created only when a signed-in user opts in. It stores the request and result snapshot and is scheduled for deletion after 365 days.</p>
+              <p className="leading-relaxed">Requests contain institution identifiers, document names, expiry dates, and the user account ID. File uploads and OCR are not supported.</p>
+              <p className="leading-relaxed">AICTE rules are inactive. The current check remains a caller-supplied list comparison.</p>
             </CardContent>
           </Card>
 

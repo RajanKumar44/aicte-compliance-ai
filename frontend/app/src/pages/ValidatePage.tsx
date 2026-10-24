@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useRef, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import {
   ClipboardCheck,
   Shield,
@@ -6,7 +7,7 @@ import {
   ArrowLeft,
   ArrowRight,
 } from "lucide-react";
-import { validateDocuments, type ValidationRequest, type ValidationResponse, type ApiResult } from "@/lib/api";
+import { createSavedValidationRun, validateDocuments, type ValidationRequest, type ValidationResponse, type ApiResult } from "@/lib/api";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/Card";
 import { Button } from "@/components/Button";
 import { FormField, Input, Select } from "@/components/FormField";
@@ -17,6 +18,7 @@ import { ValidationResults } from "@/components/ValidationResults";
 import { ScopeNotice } from "@/components/ScopeNotice";
 import { humanizeDocName } from "@/lib/utils";
 import { validateCompleteRequest, validateValidationStep } from "@/lib/form-validation";
+import { useAuth } from "@/components/useAuth";
 
 type FormState = "form" | "loading" | "success" | "error";
 
@@ -55,6 +57,7 @@ function ReviewList({ label, values }: { label: string; values: string[] }) {
 }
 
 export function ValidatePage() {
+  const { session } = useAuth();
   const [formState, setFormState] = useState<FormState>("form");
   const [form, setForm] = useState<ValidationRequest>(initialForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -62,6 +65,8 @@ export function ValidatePage() {
   const [result, setResult] = useState<ValidationResponse | null>(null);
   const [step, setStep] = useState(0);
   const [duplicateNotice, setDuplicateNotice] = useState("");
+  const [saveToHistory, setSaveToHistory] = useState(false);
+  const [savedRunId, setSavedRunId] = useState<string | null>(null);
   const submissionInProgress = useRef(false);
   const errorSummaryRef = useRef<HTMLDivElement>(null);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -107,8 +112,18 @@ export function ValidatePage() {
     submissionInProgress.current = true;
     setFormState("loading");
     setApiError(null);
+    setSavedRunId(null);
     try {
-      const apiResult: ApiResult<ValidationResponse> = await validateDocuments(form);
+      let apiResult: ApiResult<ValidationResponse>;
+      if (saveToHistory && session) {
+        const saved = await createSavedValidationRun(form, session.access_token);
+        apiResult = saved.ok
+          ? { ok: true, data: saved.data.result }
+          : saved;
+        if (saved.ok) setSavedRunId(saved.data.id);
+      } else {
+        apiResult = await validateDocuments(form);
+      }
       if (apiResult.ok) {
         setResult(apiResult.data);
         setFormState("success");
@@ -142,6 +157,8 @@ export function ValidatePage() {
     setApiError(null);
     setResult(null);
     setDuplicateNotice("");
+    setSaveToHistory(false);
+    setSavedRunId(null);
     setStep(0);
     setFormState("form");
   };
@@ -176,6 +193,12 @@ export function ValidatePage() {
     return (
       <div className="mx-auto max-w-4xl space-y-6 animate-fade-in">
         <ScopeNotice />
+        {savedRunId && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border border-success-border bg-success-bg/30 p-4 text-sm text-text-body" role="status">
+            <p>Saved to institution history. This record is retained for up to 365 days.</p>
+            <Link to={`/history/${encodeURIComponent(savedRunId)}`} className="font-semibold text-primary-300 underline underline-offset-4">Open saved record</Link>
+          </div>
+        )}
         <ValidationResults data={result} request={form} onReset={handleReset} />
       </div>
     );
@@ -318,6 +341,16 @@ export function ValidatePage() {
                         </ul>
                       ) : <p className="mt-2 text-sm text-text-muted">No expiry dates entered</p>}
                     </div>
+                    {session ? (
+                      <label className="flex items-start gap-3 border-t border-border pt-5 text-sm leading-relaxed text-text-body">
+                        <input className="mt-1 h-4 w-4 accent-primary-500" type="checkbox" checked={saveToHistory} onChange={(event) => setSaveToHistory(event.target.checked)} disabled={formState === "loading"} />
+                        <span>Save this request and result to institution history. The record is available to you and authorized institution reviewers and is deleted after 365 days.</span>
+                      </label>
+                    ) : (
+                      <p className="border-t border-border pt-5 text-sm leading-relaxed text-text-secondary">
+                        To save this run to institution history, <Link to="/signin" className="font-semibold text-primary-300 underline underline-offset-4">sign in with an institution account</Link>. Runs are not saved unless you select the option after signing in.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -356,7 +389,7 @@ export function ValidatePage() {
             <CardHeader><CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5 text-warning-text" aria-hidden="true" />Prototype limits</CardTitle></CardHeader>
             <CardContent className="space-y-3 text-sm leading-relaxed text-text-secondary">
               <p>The service compares only the lists and dates in this request.</p>
-              <p>It does not load an authoritative AICTE checklist, verify authenticity, or save a history record.</p>
+              <p>It does not load an authoritative AICTE checklist or verify authenticity. A history record is stored only when you sign in and choose to save it.</p>
               <p>Use synthetic data in this prototype.</p>
             </CardContent>
           </Card>

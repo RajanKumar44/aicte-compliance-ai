@@ -8,15 +8,19 @@ const sections = [
   },
   {
     title: "How the prototype handles requests",
-    body: "The current API contract states that the service does not save applications or maintain user accounts. The application has no saved validation history. The service returns the comparison result to the requesting page.",
+    body: "A signed-in user may explicitly opt in to save a validation run. The application stores the supplied request and returned result snapshot, the authenticated user, institution, and timestamps in Supabase Postgres. Records are scheduled for hard deletion after 365 days. Users can delete a record sooner when their role allows it.",
   },
   {
     title: "Files and document contents",
-    body: "This interface has no file upload or OCR endpoint. It accepts document names and optional dates as text. Do not enter real institutional or personal information in this prototype.",
+    body: "This interface has no file upload or OCR endpoint. A saved run can contain institution identifiers, document names, and expiry dates as text. Do not save real records until the operator has completed legal, hosting, and privacy review.",
+  },
+  {
+    title: "Access and retention",
+    body: "Authentication uses Supabase Auth. Database policies scope access to institution membership: users can access their own records, while institution reviewers and administrators can access records in their institution. The application does not use a Supabase service-role key. The 365-day deletion job does not by itself describe the retention of provider backups or hosting logs.",
   },
   {
     title: "Before public use",
-    body: "The operator must confirm hosting logs, network processors, retention, deletion procedures, a privacy contact, and any applicable legal requirements. Those infrastructure details are not established by this prototype's API contract.",
+    body: "The operator must confirm the Supabase project region, backup retention, hosting logs, network processors, deletion procedures, a privacy contact, and applicable legal requirements before public use. These policies remain a draft until those details and legal review are complete.",
   },
 ];
 
@@ -27,13 +31,13 @@ export function PrivacyPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-300">Privacy policy draft</p>
         <h1 className="text-3xl font-bold tracking-tight text-text-heading sm:text-4xl">Privacy policy</h1>
         <p className="max-w-3xl text-base leading-relaxed text-text-body">
-          This draft describes the current prototype. It is incomplete and must be reviewed against the hosting setup before public use.
+          This draft describes the current history implementation. It is incomplete and must be reviewed against the hosting setup before public use.
         </p>
       </header>
 
       <div className="flex items-start gap-3 border border-warning-border bg-warning-bg/30 p-4 text-sm leading-relaxed text-text-body" role="note">
         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning-text" aria-hidden="true" />
-        <p><strong className="text-text-heading">Not ready for launch.</strong> Operator identity, contact details, infrastructure retention, and legal review still need confirmation.</p>
+        <p><strong className="text-text-heading">Not ready for launch.</strong> Operator identity, contact details, Supabase region and backup retention, hosting-log retention, and legal review still need confirmation.</p>
       </div>
 
       <Card>
