@@ -75,8 +75,8 @@ export function SignInPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-8 py-8 animate-fade-in">
       <header className="space-y-3 text-center sm:text-left">
-        <div className="inline-flex items-center gap-2 rounded-full border border-primary-500/30 bg-primary-500/10 px-3 py-1 text-xs font-semibold text-primary-300">
-          <Shield className="h-3.5 w-3.5" aria-hidden="true" />
+        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-bg-2 px-3 py-1 text-xs font-bold text-text-heading">
+          <Shield className="h-3.5 w-3.5 text-accent-strong" aria-hidden="true" />
           <span>Institutional Access Portal</span>
         </div>
         <h1 className="text-3xl font-extrabold tracking-tight text-text-heading sm:text-4xl">
@@ -92,9 +92,9 @@ export function SignInPage() {
         <button
           type="button"
           onClick={() => setActiveTab("demo")}
-          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold transition-colors ${
+          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-bold transition-colors ${
             activeTab === "demo"
-              ? "border-primary-400 text-primary-300"
+              ? "border-primary-500 text-text-heading"
               : "border-transparent text-text-secondary hover:text-text-heading"
           }`}
         >
@@ -104,9 +104,9 @@ export function SignInPage() {
         <button
           type="button"
           onClick={() => setActiveTab("magic")}
-          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold transition-colors ${
+          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-bold transition-colors ${
             activeTab === "magic"
-              ? "border-primary-400 text-primary-300"
+              ? "border-primary-500 text-text-heading"
               : "border-transparent text-text-secondary hover:text-text-heading"
           }`}
         >
@@ -117,8 +117,8 @@ export function SignInPage() {
 
       {activeTab === "demo" && (
         <section className="space-y-5" aria-labelledby="demo-roles-heading">
-          <div className="flex items-start gap-3 rounded-lg border border-primary-800/40 bg-primary-950/20 p-4 text-sm text-text-body">
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-primary-400" aria-hidden="true" />
+          <div className="flex items-start gap-3 rounded-lg border border-border bg-bg-2 p-4 text-sm text-text-body">
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success-text" aria-hidden="true" />
             <p>
               <strong>Fast Evaluation Mode:</strong> Select any institutional role below to instantly log in with full scrutiny and history features enabled. No email or external credentials required.
             </p>
@@ -131,37 +131,36 @@ export function SignInPage() {
               const Icon = isAdmin ? Building2 : isAuditor ? Shield : GraduationCap;
 
               return (
-                <Card
-                  key={account.id}
-                  className="group cursor-pointer transition-all duration-200 hover:border-primary-500/50 hover:bg-bg-2"
-                  onClick={() => signInAsDemo(account)}
-                >
-                  <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-start gap-3.5">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-bg-2 text-primary-300 group-hover:border-primary-400/50">
-                        <Icon className="h-5 w-5" aria-hidden="true" />
-                      </div>
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold text-text-heading">{account.name}</h3>
-                          <span className="rounded bg-bg-3 px-2 py-0.5 text-[11px] font-medium text-text-muted uppercase tracking-wider">
-                            {account.role.replace(/_/g, " ")}
-                          </span>
+                  <Card
+                    key={account.id}
+                    className="cursor-pointer transition-all duration-200 hover:border-primary-400 hover:shadow-md"
+                    onClick={() => signInAsDemo(account)}
+                  >
+                    <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-start gap-3.5">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-bg-2 text-text-heading">
+                          <Icon className="h-5 w-5" aria-hidden="true" />
                         </div>
-                        <p className="text-xs text-text-secondary">{account.email}</p>
-                        <p className="text-xs text-text-muted">{account.institution_name} ({account.institution_id})</p>
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-semibold text-text-heading">{account.name}</h3>
+                            <span className="rounded bg-bg-3 px-2 py-0.5 text-[11px] font-medium text-text-muted uppercase tracking-wider">
+                              {account.role.replace(/_/g, " ")}
+                            </span>
+                          </div>
+                          <p className="text-xs text-text-secondary">{account.email}</p>
+                          <p className="text-xs text-text-muted">{account.institution_name} ({account.institution_id})</p>
+                        </div>
                       </div>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="group-hover:bg-primary-500 group-hover:text-primary-950"
-                      rightIcon={<ArrowRight className="h-3.5 w-3.5" />}
-                    >
-                      Sign In
-                    </Button>
-                  </CardContent>
-                </Card>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        rightIcon={<ArrowRight className="h-3.5 w-3.5" />}
+                      >
+                        Sign In
+                      </Button>
+                    </CardContent>
+                  </Card>
               );
             })}
           </div>

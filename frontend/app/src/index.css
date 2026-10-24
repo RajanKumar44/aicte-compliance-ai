@@ -7,7 +7,7 @@
   --surface-card: #fcfaf5;
   --surface-raised: #e7e0d3;
   --surface-inset: #f2eee5;
-  --surface-hover: #454034;
+  --surface-hover: #e4ddd0;
   --ink: #29271f;
   --ink-muted: #514d44;
   --ink-link: #68501f;
@@ -38,14 +38,14 @@
   --palette-primary-50: #fbf8f0;
   --palette-primary-100: #f2ecdf;
   --palette-primary-200: #d4c6a7;
-  --palette-primary-300: #68501f;
-  --palette-primary-400: #68501f;
+  --palette-primary-300: #a6894c;
+  --palette-primary-400: #8b713a;
   --palette-primary-500: #68501f;
-  --palette-primary-600: #68501f;
-  --palette-primary-700: #56421f;
-  --palette-primary-800: #454034;
-  --palette-primary-900: #e7e0d3;
-  --palette-primary-950: #454034;
+  --palette-primary-600: #56421f;
+  --palette-primary-700: #453518;
+  --palette-primary-800: #342812;
+  --palette-primary-900: #241c0d;
+  --palette-primary-950: #140f07;
   --palette-accent-50: #f3f0e7;
   --palette-accent-100: #e7e0d3;
   --palette-accent-200: #d4ccbd;
@@ -192,16 +192,16 @@
   --color-info-surface: #d4bdff;
   --color-info-ink: #000000;
   --color-info-rule: #000000;
-  --palette-primary-50: #fff9ad;
-  --palette-primary-100: #fff38a;
-  --palette-primary-200: #ffed00;
-  --palette-primary-300: #000000;
-  --palette-primary-400: #000000;
-  --palette-primary-500: #000000;
-  --palette-primary-600: #000000;
-  --palette-primary-700: #000000;
-  --palette-primary-800: #000000;
-  --palette-primary-900: #ffed00;
+  --palette-primary-50: #fffde6;
+  --palette-primary-100: #fffbbf;
+  --palette-primary-200: #fff780;
+  --palette-primary-300: #ffed00;
+  --palette-primary-400: #ffd600;
+  --palette-primary-500: #ffed00;
+  --palette-primary-600: #e6b800;
+  --palette-primary-700: #b38600;
+  --palette-primary-800: #332b00;
+  --palette-primary-900: #1a1600;
   --palette-primary-950: #000000;
   --palette-accent-50: #f8f3ff;
   --palette-accent-100: #d4bdff;
@@ -756,13 +756,80 @@ textarea:focus-visible,
     background: var(--color-success-surface);
   }
 
+  .app-tab-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.85rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    border-radius: var(--radius-control);
+    transition: all 120ms ease;
+    border: var(--border-control-width) solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .app-tab-pill-active {
+    background: var(--button-primary-bg);
+    color: var(--button-primary-ink);
+    border-color: var(--button-primary-border);
+  }
+
+  .app-tab-pill-inactive {
+    background: transparent;
+    color: var(--ink-muted);
+  }
+
+  .app-tab-pill-inactive:hover {
+    background: var(--surface-raised);
+    color: var(--ink);
+    border-color: var(--rule);
+  }
+
+  html[data-theme="neo-brutalism"] .app-tab-pill {
+    border: 2px solid transparent;
+  }
+
+  html[data-theme="neo-brutalism"] .app-tab-pill-active {
+    background: #ffed00 !important;
+    color: #000000 !important;
+    border: 2px solid #000000 !important;
+    box-shadow: 2px 2px 0 #000000;
+    font-weight: 800;
+  }
+
+  html[data-theme="neo-brutalism"] .app-tab-pill-inactive:hover {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 2px solid #000000 !important;
+  }
+
   html[data-theme="neo-brutalism"] .app-button-primary {
+    background-color: #ffed00 !important;
+    color: #000000 !important;
+    border: 2px solid #000000 !important;
     box-shadow: 4px 4px 0 #000000;
+    font-weight: 700;
   }
 
   html[data-theme="neo-brutalism"] .app-button-primary:hover:not(:disabled) {
-    color: #000000;
+    background-color: #ffd600 !important;
+    color: #000000 !important;
     box-shadow: 2px 2px 0 #000000;
   }
 
+  html[data-theme="neo-brutalism"] .app-button-secondary {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border: 2px solid #000000 !important;
+    box-shadow: 3px 3px 0 #000000;
+    font-weight: 700;
+  }
+
+  html[data-theme="neo-brutalism"] .app-button-secondary:hover:not(:disabled) {
+    background-color: #ffed00 !important;
+    color: #000000 !important;
+    box-shadow: 1px 1px 0 #000000;
+  }
 }

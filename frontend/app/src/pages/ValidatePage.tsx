@@ -240,7 +240,7 @@ export function ValidatePage() {
         {savedRunId && (
           <div className="flex flex-wrap items-center justify-between gap-3 border border-success-border bg-success-bg/30 p-4 text-sm text-text-body" role="status">
             <p>Saved to institution history. This record is retained for up to 365 days.</p>
-            <Link to={`/history/${encodeURIComponent(savedRunId)}`} className="font-semibold text-primary-300 underline underline-offset-4">Open saved record</Link>
+            <Link to={`/history/${encodeURIComponent(savedRunId)}`} className="font-bold text-text-heading underline underline-offset-4 hover:text-accent-strong">Open saved record</Link>
           </div>
         )}
         <ValidationResults data={result} request={form} onReset={handleReset} />
@@ -253,7 +253,7 @@ export function ValidatePage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8 animate-slide-up">
       <section className="space-y-3" aria-labelledby="validation-title">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-300">Validation workspace</p>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-text-muted">Validation workspace</p>
         <h1 id="validation-title" className="text-3xl font-bold tracking-tight text-text-heading">Start a new validation</h1>
         <p className="max-w-2xl text-sm leading-relaxed text-text-secondary">
           Compare the required and submitted lists provided with this request and review supplied expiry dates.
@@ -332,9 +332,9 @@ export function ValidatePage() {
 
                 {step === 0 && (
                   <div className="mt-5 space-y-6">
-                    <div className="rounded-lg border border-primary-800/40 bg-primary-950/20 p-4">
-                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary-300">
-                        <Sparkles className="h-3.5 w-3.5" />
+                    <div className="rounded-lg border border-border bg-bg-2 p-4">
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text-heading">
+                        <Sparkles className="h-3.5 w-3.5 text-accent-strong" />
                         <span>Quick Load AICTE Scrutiny Scenarios</span>
                       </div>
                       <p className="mt-1 text-xs text-text-secondary">
@@ -420,7 +420,7 @@ export function ValidatePage() {
                     ) : (
                       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5 text-sm text-text-secondary">
                         <span>Save to history requires an institutional session.</span>
-                        <Link to="/signin" className="font-semibold text-primary-300 underline underline-offset-4">
+                        <Link to="/signin" className="font-bold text-text-heading underline underline-offset-4 hover:text-accent-strong">
                           1-Click Demo Sign-in →
                         </Link>
                       </div>

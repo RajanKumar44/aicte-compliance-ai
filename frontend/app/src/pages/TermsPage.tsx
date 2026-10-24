@@ -28,7 +28,7 @@ export function TermsPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-8 animate-fade-in">
       <header className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-300">Launch document draft</p>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-text-muted">Launch document draft</p>
         <h1 className="text-3xl font-bold tracking-tight text-text-heading sm:text-4xl">Terms and conditions</h1>
         <p className="max-w-3xl text-base leading-relaxed text-text-body">
           This page records the prototype's current limits. It is not a complete set of terms for public or production use.
@@ -43,7 +43,7 @@ export function TermsPage() {
       <Card>
         <CardContent className="space-y-6">
           <div className="flex items-center gap-3 border-b border-border pb-4">
-            <FileText className="h-5 w-5 text-primary-300" aria-hidden="true" />
+            <FileText className="h-5 w-5 text-accent-strong" aria-hidden="true" />
             <div>
               <h2 className="text-lg font-semibold tracking-tight text-text-heading">Prototype terms draft</h2>
               <CardDescription>Current function and limits, stated without a compliance guarantee</CardDescription>

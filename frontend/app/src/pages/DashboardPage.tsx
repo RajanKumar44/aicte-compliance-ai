@@ -99,8 +99,8 @@ export function DashboardPage() {
       {/* Hero Section */}
       <section className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-b from-bg-1 via-bg-1 to-bg-0 p-6 sm:p-10 shadow-sm">
         <div className="relative z-10 space-y-6 max-w-3xl">
-          <div className="inline-flex items-center gap-2 rounded-full border border-primary-500/30 bg-primary-500/10 px-3 py-1 text-xs font-semibold text-primary-300">
-            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-bg-2 px-3.5 py-1 text-xs font-bold text-text-heading">
+            <Sparkles className="h-3.5 w-3.5 text-accent-strong" aria-hidden="true" />
             <span>AICTE Approval Process Handbook (APH 2024–2027) Compliance Assistant</span>
           </div>
 
@@ -137,7 +137,7 @@ export function DashboardPage() {
           {STATS.map((stat) => (
             <div key={stat.label} className="space-y-1">
               <p className="text-xl sm:text-2xl font-bold tracking-tight text-text-heading">{stat.value}</p>
-              <p className="text-xs font-semibold uppercase tracking-wider text-primary-400">{stat.label}</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-text-muted">{stat.label}</p>
               <p className="text-[11px] text-text-muted">{stat.detail}</p>
             </div>
           ))}
@@ -158,41 +158,35 @@ export function DashboardPage() {
           </div>
 
           {/* Clean Section Navigation Pills */}
-          <div className="flex items-center gap-1.5 rounded-lg border border-border bg-bg-1 p-1">
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-bg-1 p-1.5">
             <button
               type="button"
               onClick={() => setActiveTab("workflow")}
-              className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
-                activeTab === "workflow"
-                  ? "bg-primary-500 text-primary-950 shadow-sm"
-                  : "text-text-secondary hover:text-text-heading"
+              className={`app-tab-pill ${
+                activeTab === "workflow" ? "app-tab-pill-active" : "app-tab-pill-inactive"
               }`}
             >
-              <ListChecks className="h-3.5 w-3.5" />
+              <ListChecks className="h-4 w-4" />
               <span>Scrutiny Workflow</span>
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("checks")}
-              className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
-                activeTab === "checks"
-                  ? "bg-primary-500 text-primary-950 shadow-sm"
-                  : "text-text-secondary hover:text-text-heading"
+              className={`app-tab-pill ${
+                activeTab === "checks" ? "app-tab-pill-active" : "app-tab-pill-inactive"
               }`}
             >
-              <FileCheck className="h-3.5 w-3.5" />
+              <FileCheck className="h-4 w-4" />
               <span>Regulatory Coverage</span>
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("governance")}
-              className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
-                activeTab === "governance"
-                  ? "bg-primary-500 text-primary-950 shadow-sm"
-                  : "text-text-secondary hover:text-text-heading"
+              className={`app-tab-pill ${
+                activeTab === "governance" ? "app-tab-pill-active" : "app-tab-pill-inactive"
               }`}
             >
-              <Shield className="h-3.5 w-3.5" />
+              <Shield className="h-4 w-4" />
               <span>Governance & Safeguards</span>
             </button>
           </div>
@@ -202,13 +196,13 @@ export function DashboardPage() {
         {activeTab === "workflow" && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 animate-fade-in">
             {WORKFLOW_STEPS.map((s) => (
-              <Card key={s.step} className="group transition-all hover:border-primary-400/50">
+              <Card key={s.step} className="group transition-all hover:border-border-hover">
                 <CardContent className="space-y-4 p-5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs font-bold text-primary-400 bg-primary-950/60 border border-primary-800/50 rounded px-2 py-0.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-xs font-bold text-text-heading bg-bg-2 border border-border rounded px-2.5 py-0.5 whitespace-nowrap shrink-0">
                       STEP {s.step}
                     </span>
-                    <span className="text-[11px] font-medium text-text-muted">{s.tag}</span>
+                    <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider truncate">{s.tag}</span>
                   </div>
                   <div>
                     <h3 className="text-base font-semibold text-text-heading">{s.title}</h3>
@@ -228,7 +222,7 @@ export function DashboardPage() {
               return (
                 <Card key={item.title} className="h-full transition-colors hover:border-border-hover">
                   <CardContent className="space-y-4 p-6">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-primary-800/40 bg-primary-950/40 text-primary-300">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-bg-2 text-text-heading">
                       <Icon className="h-5 w-5" aria-hidden="true" />
                     </div>
                     <div>
@@ -276,7 +270,7 @@ export function DashboardPage() {
                   <ArrowUpRight className="h-4 w-4 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-primary-400" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-text-heading group-hover:text-primary-300">Run Preliminary Scrutiny</h3>
+                  <h3 className="font-semibold text-text-heading group-hover:text-accent-strong transition-colors">Run Preliminary Scrutiny</h3>
                   <p className="mt-1 text-xs text-text-secondary">Load AICTE approval presets, check checklist names, and audit expiry dates.</p>
                 </div>
               </CardContent>

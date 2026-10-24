@@ -216,7 +216,7 @@ export function HistoryPage() {
     <div className="mx-auto max-w-5xl space-y-7 animate-fade-in">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1.5">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-300">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-text-muted">
             Institutional Audit Records
           </p>
           <h1 className="text-3xl font-extrabold tracking-tight text-text-heading">

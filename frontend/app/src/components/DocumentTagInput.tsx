@@ -109,7 +109,7 @@ export function DocumentTagInput({
             key={tag}
             data-tag={tag}
             className={cn(
-              "inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md border border-primary-700 bg-primary-900/30 px-2.5 py-0.5 text-xs font-medium text-primary-300",
+              "inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md border border-border bg-bg-2 px-2.5 py-1 text-xs font-bold text-text-heading",
               "animate-scale-in",
               flashingTag === tag && "animate-tag-pulse",
               "transition-colors"
@@ -122,7 +122,7 @@ export function DocumentTagInput({
                 onClick={() => {
                   removeTag(tag);
                 }}
-                className="flex h-11 w-11 items-center justify-center rounded-md transition-colors hover:bg-primary-700/50"
+                className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-bg-3 text-text-muted hover:text-text-heading"
                 aria-label={`Remove ${tag}`}
               >
                 <X className="h-3 w-3" aria-hidden="true" />

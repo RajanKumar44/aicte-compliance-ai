@@ -11,12 +11,12 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "./Button";
-import { useAuth } from "./useAuth";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/validate", label: "Validate", icon: ClipboardCheck },
-  { path: "/about", label: "About", icon: Info },
+  { path: "/history", label: "Audit History", icon: Clock3 },
+  { path: "/about", label: "Compliance Guide", icon: Info },
 ] as const;
 
 export function Sidebar({
@@ -31,10 +31,7 @@ export function Sidebar({
   onClose: () => void;
 }) {
   const location = useLocation();
-  const { session } = useAuth();
-  const items = session
-    ? [...navItems, { path: "/history", label: "History", icon: Clock3 }]
-    : navItems;
+  const items = navItems;
 
   return (
     <aside

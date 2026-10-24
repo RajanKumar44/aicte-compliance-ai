@@ -8,7 +8,7 @@ import { useAuth } from "./useAuth";
 const pageTitles: Record<string, { title: string; description: string; icon: React.ReactNode }> = {
   "/": {
     title: "Dashboard",
-    description: "Request overview",
+    description: "Compliance overview",
     icon: <LayoutDashboard className="h-5 w-5" />,
   },
   "/validate": {
@@ -16,15 +16,20 @@ const pageTitles: Record<string, { title: string; description: string; icon: Rea
     description: "Document validation workspace",
     icon: <ClipboardCheck className="h-5 w-5" />,
   },
+  "/history": {
+    title: "Audit History",
+    description: "Saved institutional runs",
+    icon: <Clock3 className="h-5 w-5" />,
+  },
   "/about": {
-    title: "About",
-    description: "Documentation and API reference",
+    title: "Compliance Guide",
+    description: "AICTE APH 2024–2027 Handbook",
     icon: <Info className="h-5 w-5" />,
   },
-  "/history": {
-    title: "History",
-    description: "Saved validation runs",
-    icon: <Clock3 className="h-5 w-5" />,
+  "/signin": {
+    title: "Institutional Sign In",
+    description: "Portal access & scrutiny roles",
+    icon: <Shield className="h-5 w-5" />,
   },
   "/privacy": {
     title: "Privacy notice",
@@ -78,11 +83,11 @@ export function TopBar({ onMenuToggle, mobileMenuOpen }: { onMenuToggle: () => v
             <div className="flex items-center gap-2">
               <div className="hidden sm:flex flex-col items-end text-xs">
                 <span className="font-semibold text-text-heading leading-tight truncate max-w-[140px]">{activeUser.name}</span>
-                <span className="text-[11px] text-primary-400 uppercase tracking-wider">{activeUser.role.replace(/_/g, " ")}</span>
+                <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">{activeUser.role.replace(/_/g, " ")}</span>
               </div>
               <button
                 type="button"
-                className="inline-flex min-h-9 items-center rounded-md border border-border px-3 text-xs font-semibold text-text-body hover:bg-bg-2 hover:text-text-heading focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+                className="app-button app-button-secondary inline-flex min-h-9 items-center rounded-md px-3 py-1.5 text-xs font-bold"
                 onClick={() => { void signOut(); }}
                 title="Sign out of current account"
               >
@@ -92,9 +97,9 @@ export function TopBar({ onMenuToggle, mobileMenuOpen }: { onMenuToggle: () => v
           ) : (
             <Link
               to="/signin"
-              className="inline-flex min-h-9 items-center rounded-md border border-primary-500/30 bg-primary-500/10 px-3 text-xs font-semibold text-primary-300 hover:bg-primary-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+              className="app-button app-button-secondary inline-flex min-h-9 items-center rounded-md px-3.5 py-1.5 text-xs font-bold"
             >
-              Sign in
+              Sign In
             </Link>
           )}
           <label className="sr-only" htmlFor="theme-select">Appearance theme</label>

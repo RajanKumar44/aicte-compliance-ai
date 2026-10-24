@@ -28,7 +28,7 @@ export function PrivacyPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-8 animate-fade-in">
       <header className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-300">Privacy policy draft</p>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-text-muted">Privacy policy draft</p>
         <h1 className="text-3xl font-bold tracking-tight text-text-heading sm:text-4xl">Privacy policy</h1>
         <p className="max-w-3xl text-base leading-relaxed text-text-body">
           This draft describes the current history implementation. It is incomplete and must be reviewed against the hosting setup before public use.
@@ -43,7 +43,7 @@ export function PrivacyPage() {
       <Card>
         <CardContent className="space-y-6">
           <div className="flex items-center gap-3 border-b border-border pb-4">
-            <FileLock2 className="h-5 w-5 text-primary-300" aria-hidden="true" />
+            <FileLock2 className="h-5 w-5 text-accent-strong" aria-hidden="true" />
             <div>
               <h2 className="text-lg font-semibold tracking-tight text-text-heading">Current prototype</h2>
               <CardDescription>What is sent and what the application does with it</CardDescription>
