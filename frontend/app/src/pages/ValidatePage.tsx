@@ -33,6 +33,7 @@ export function ValidatePage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState("");
   const [result, setResult] = useState<ValidationResponse | null>(null);
+  const [lastRequest, setLastRequest] = useState<ValidationRequest | null>(null);
 
   const allDocs = [...new Set([...requiredDocs, ...submittedDocs])];
 
@@ -63,6 +64,7 @@ export function ValidatePage() {
       ),
     };
 
+    setLastRequest(request);
     const apiResult = await validateDocuments(request);
 
     if (apiResult.ok) {
@@ -89,6 +91,7 @@ export function ValidatePage() {
     setFieldErrors({});
     setServerError("");
     setResult(null);
+    setLastRequest(null);
     setPageState("form");
   }
 
@@ -99,7 +102,7 @@ export function ValidatePage() {
 
   // ── Results view ─────────────────────────────────────────────
   if (pageState === "success" && result) {
-    return <ValidationResults data={result} onReset={handleReset} />;
+    return <ValidationResults data={result} request={lastRequest} onReset={handleReset} />;
   }
 
   // ── Error view (network/server) ──────────────────────────────
@@ -139,6 +142,22 @@ export function ValidatePage() {
         description="Compare the required and submitted lists you provide. The service does not verify authenticity or make an official AICTE decision."
       />
       <ScopeNotice />
+
+      <ol className="grid gap-3 sm:grid-cols-3" aria-label="Validation workflow steps">
+        {[
+          ["01", "Context", "Institution and application type"],
+          ["02", "Compare", "Required and submitted lists"],
+          ["03", "Review", "Missing and expiry observations"],
+        ].map(([number, label, detail]) => (
+          <li key={number} className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-50 text-xs font-semibold text-teal-700">{number}</span>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-navy-900">{label}</span>
+              <span className="mt-0.5 block text-xs leading-5 text-slate-500">{detail}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(18rem,0.65fr)] lg:items-start">
       <Card className="p-5 shadow-sm sm:p-7">

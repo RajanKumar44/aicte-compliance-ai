@@ -42,17 +42,16 @@ export function Layout() {
   }, [pathname]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
+    <div className="flex h-screen overflow-hidden bg-[#f4f7fa]">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-navy-900 focus:shadow-lg"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-navy-900 focus:shadow-lg"
       >
         Skip to main content
       </a>
-      {/* Mobile overlay */}
       {sidebarOpen && isMobile && (
         <div
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-30 bg-slate-950/50 lg:hidden"
           onClick={() => setSidebarOpen(false)}
           aria-hidden="true"
         />
@@ -75,7 +74,7 @@ export function Layout() {
           ref={mainRef}
           id="main-content"
           tabIndex={-1}
-          className="flex-1 overflow-x-hidden overflow-y-auto bg-[#f7f9fb] p-4 outline-none sm:p-6 lg:p-8 xl:p-10"
+          className="flex-1 overflow-x-hidden overflow-y-auto bg-[#f4f7fa] p-4 outline-none sm:p-6 lg:p-8 xl:p-10"
         >
           <Outlet />
         </main>
