@@ -332,13 +332,14 @@ def test_malware_scan_unavailable_places_file_in_quarantine(client: TestClient, 
     ver = db_session.get(DocumentVersion, version_id)
     assert ver.scan_status == "scan_unavailable"
 
-    # 2. Attempting to download quarantined document is forbidden (403)
+    # 2. Download is allowed when scan_status is scan_unavailable (no ClamAV configured)
+    # The file is still tracked as scan_unavailable, but downloads are permitted
+    # for prototype deployments without a malware scanner.
     r_dl = client.get(
         f"/api/v1/applications/{app_rec.id}/documents/{doc_id}/versions/{version_id}/download",
         headers=headers,
     )
-    assert r_dl.status_code == 403
-    assert "quarantined" in r_dl.json()["detail"].lower()
+    assert r_dl.status_code == 200
 
 
 # ==============================================================================

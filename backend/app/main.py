@@ -25,19 +25,23 @@ app = FastAPI(
 # CORS — Allow frontend origins to call this API
 # ---------------------------------------------------------------------------
 _allowed_origins = [
+    "https://aicte-compliance-ai.vercel.app",
     "https://aicte-compliance-frontend.vercel.app",
     "http://localhost:5173",
     "http://localhost:3000",
 ]
 
-# Also allow any origin configured via environment variable
-_extra_origin = os.getenv("CORS_ALLOWED_ORIGIN", "").strip()
-if _extra_origin:
-    _allowed_origins.append(_extra_origin)
+# Support comma-separated CORS_ALLOWED_ORIGIN or CORS_ALLOW_ORIGINS
+_extra_origins_raw = os.getenv("CORS_ALLOWED_ORIGIN", "") or os.getenv("CORS_ALLOW_ORIGINS", "")
+for origin in _extra_origins_raw.split(","):
+    clean_origin = origin.strip().rstrip("/")
+    if clean_origin and clean_origin not in _allowed_origins:
+        _allowed_origins.append(clean_origin)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -232,7 +236,7 @@ def root_info() -> dict:
         "status": "prototype",
         "docs": "/docs",
         "health": "/health",
-        "frontend": "https://aicte-compliance-frontend.vercel.app",
+        "frontend": "https://aicte-compliance-ai.vercel.app",
         "notice": "Advisory prototype only — not an official AICTE system.",
     }
 
@@ -244,7 +248,6 @@ def root_info() -> dict:
 def readiness_check(db: Session = Depends(get_db)) -> dict:
     """Report whether the API can actually serve authenticated requests."""
     from backend.app.db.session import get_database_url
-    from backend.app.db.base import Base
     from sqlalchemy import text
 
     reasons: list[str] = []
@@ -262,7 +265,7 @@ def readiness_check(db: Session = Depends(get_db)) -> dict:
     # Check if users table exists
     users_present = False
     try:
-        result = db.execute(text("SELECT count(*) FROM users"))
+        db.execute(text("SELECT count(*) FROM users"))
         users_present = True
     except Exception:
         reasons.append("users table not found — migrations may not have run")
@@ -301,8 +304,12 @@ def seed_demo_data(db: Session = Depends(get_db)) -> dict:
     - username: admin / password: admin123456
     - username: reviewer / password: reviewer123456
     """
+    from backend.app.db.base import Base
     from backend.app.db.models import User, Institution, InstitutionMembership
     from backend.app.core.security import get_password_hash
+
+    # Ensure tables exist (especially in local SQLite or fresh DB)
+    Base.metadata.create_all(bind=db.get_bind())
 
     created: list[str] = []
 
@@ -348,7 +355,7 @@ def seed_demo_data(db: Session = Depends(get_db)) -> dict:
             is_active=True,
         )
         db.add(admin_mem)
-        created.append("membership: admin → institution_admin")
+        created.append("membership: admin -> institution_admin")
 
     # --- Reviewer User ---
     reviewer_user = db.query(User).filter(User.username == "reviewer").first()
@@ -380,7 +387,7 @@ def seed_demo_data(db: Session = Depends(get_db)) -> dict:
             is_active=True,
         )
         db.add(reviewer_mem)
-        created.append("membership: reviewer → scrutiny_officer")
+        created.append("membership: reviewer -> scrutiny_officer")
 
     db.commit()
 
