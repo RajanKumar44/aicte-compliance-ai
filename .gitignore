@@ -25,3 +25,5 @@ dist/
 .vscode/
 .opencode/
 .logs-*.out
+.pw-venv/
+node_modules/
