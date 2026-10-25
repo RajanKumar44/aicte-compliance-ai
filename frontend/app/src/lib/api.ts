@@ -147,7 +147,10 @@ export function mapValidationErrors(
 // server proxies `/health` and `/api` to the FastAPI backend; in a split
 // deployment set VITE_API_BASE_URL in frontend/app/.env.local (no trailing
 // slash, e.g. "https://aicte-backend.example.com").
-const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "").trim().replace(/\/+$/, "");
+const API_BASE = (
+  import.meta.env.VITE_API_BASE_URL ??
+  (import.meta.env.PROD ? "https://aicte-compliance-backend-live.vercel.app" : "")
+).trim().replace(/\/+$/, "");
 
 export function apiUrl(path: string): string {
   return `${API_BASE}${path}`;
@@ -451,7 +454,7 @@ export async function analyzeDocument(file: File): Promise<ApiResult<DocumentAna
       errors: { file: detail },
       raw: body,
     };
-  } catch (_error) {
+  } catch {
     return {
       ok: false,
       kind: "network",

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm --prefix frontend/app run build",
+  "installCommand": "npm --prefix frontend/app install",
+  "outputDirectory": "frontend/app/dist",
+  "rewrites": [
+    {
+      "source": "/health",
+      "destination": "https://aicte-compliance-backend-live.vercel.app/health"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://aicte-compliance-backend-live.vercel.app/api/:path*"
+    },
+    {
+      "source": "/docs",
+      "destination": "https://aicte-compliance-backend-live.vercel.app/docs"
+    },
+    {
+      "source": "/openapi.json",
+      "destination": "https://aicte-compliance-backend-live.vercel.app/openapi.json"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
