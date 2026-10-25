@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Sparkles,
   BookOpen,
+  Info,
 } from "lucide-react";
 
 interface DepartmentPreset {
@@ -557,6 +558,19 @@ export function CadreCalculatorPage() {
                 <strong>Multiple College Affiliation (Ghost Faculty):</strong> Faculty biometric Aadhaar IDs are verified against AICTE National Portal. Duplication triggers immediate withdrawal of approval for both colleges.
               </li>
             </ul>
+          </div>
+
+          {/* Illustrative-values notice — not an official determination */}
+          <div className="rounded-lg border border-border bg-bg-2 p-4 flex items-start gap-2.5 text-xs text-text-secondary leading-relaxed">
+            <Info className="h-4 w-4 shrink-0 text-accent-strong" />
+            <span>
+              The 1:15 / 1:20 faculty–student ratios, the 1:2:6 cadre quota and the
+              Ph.D. requirements used here are <strong>illustrative, configurable</strong>
+              assumptions entered in this form, not values loaded from a verified AICTE
+              source. No AICTE rule is active in this prototype. This screen is{' '}
+              <strong>not an official AICTE determination — verify the current applicable
+              regulation</strong> before relying on any figure shown.
+            </span>
           </div>
         </div>
     </div>

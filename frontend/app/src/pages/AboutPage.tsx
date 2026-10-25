@@ -100,7 +100,12 @@ export function AboutPage() {
           Approval Process & Scrutiny Handbook Guide
         </h1>
         <p className="max-w-3xl text-base leading-relaxed text-text-body">
-          Authoritative institutional guidance based on the AICTE Approval Process Handbook (APH 2024–2027). Learn mandatory document checklists, scrutiny committee parameters, and how to achieve a Nil-Deficiency approval.
+          <strong>General guidance content</strong> drawn from material referenced in this
+          prototype's source notes (AICTE Approval Process Handbook 2024–2027). It is{' '}
+          <strong>not verified current official policy</strong>: no AICTE rule is active in
+          this prototype and no content shown here has been certified against the current
+          official document version. Always confirm against the official AICTE source
+          before acting on it.
         </p>
       </section>
 
