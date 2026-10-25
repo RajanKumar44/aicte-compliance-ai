@@ -300,8 +300,12 @@ def seed_demo_data(db: Session = Depends(get_db)) -> dict:
     - username: admin / password: admin123456
     - username: reviewer / password: reviewer123456
     """
+    from backend.app.db.base import Base
     from backend.app.db.models import User, Institution, InstitutionMembership
     from backend.app.core.security import get_password_hash
+
+    # Ensure tables exist (especially in local SQLite or fresh DB)
+    Base.metadata.create_all(bind=db.get_bind())
 
     created: list[str] = []
 
@@ -347,7 +351,7 @@ def seed_demo_data(db: Session = Depends(get_db)) -> dict:
             is_active=True,
         )
         db.add(admin_mem)
-        created.append("membership: admin → institution_admin")
+        created.append("membership: admin -> institution_admin")
 
     # --- Reviewer User ---
     reviewer_user = db.query(User).filter(User.username == "reviewer").first()
@@ -379,7 +383,7 @@ def seed_demo_data(db: Session = Depends(get_db)) -> dict:
             is_active=True,
         )
         db.add(reviewer_mem)
-        created.append("membership: reviewer → scrutiny_officer")
+        created.append("membership: reviewer -> scrutiny_officer")
 
     db.commit()
 
