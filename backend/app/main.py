@@ -8,6 +8,7 @@ from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Upload
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
+from .antivirus_scanner import is_download_permitted
 from .document_analyzer import DocumentAnalysisError, analyze_pdf_document
 from .history_store import (
     SupabaseSettings,
@@ -286,13 +287,27 @@ class AnalyzedField(BaseModel):
     evidence_text: str | None = None
 
 
+class CandidateFields(BaseModel):
+    expiry_date: str | None = None
+    issue_date: str | None = None
+    certificate_number: str | None = None
+    issuing_authority: str | None = None
+
+
 class DocumentAnalysisResponse(BaseModel):
     filename: str
-    page_count: int
+    filesize_bytes: int = 0
     sha256: str
-    extracted_text: str
-    fields: dict[str, AnalyzedField]
-    warnings: list[str]
+    page_count: int
+    is_scanned_only: bool = False
+    extracted_text: str = ""
+    extracted_text_preview: str = ""
+    fields: dict[str, AnalyzedField] = Field(default_factory=dict)
+    candidate_fields: CandidateFields = Field(default_factory=CandidateFields)
+    scan_status: Literal["clean", "infected", "scan_unavailable"] = "scan_unavailable"
+    scan_details: str = ""
+    ocr_status: Literal["completed", "not_needed", "unavailable"] = "not_needed"
+    warnings: list[str] = Field(default_factory=list)
     requires_human_review: bool = True
     notice: str
 
@@ -304,6 +319,16 @@ async def analyze_document(file: UploadFile = File(...)) -> DocumentAnalysisResp
     content = await file.read()
     try:
         result = analyze_pdf_document(file.filename, content)
+        fields = result.get("fields", {})
+        result["filesize_bytes"] = len(content)
+        result["extracted_text_preview"] = result.get("extracted_text", "")
+        result["is_scanned_only"] = len(result.get("extracted_text", "").strip()) < 30
+        result["candidate_fields"] = {
+            "expiry_date": fields.get("expiry_date", {}).get("value"),
+            "issue_date": fields.get("issue_date", {}).get("value"),
+            "certificate_number": fields.get("certificate_number", {}).get("value"),
+            "issuing_authority": fields.get("issuing_authority", {}).get("value"),
+        }
         return DocumentAnalysisResponse(**result)
     except DocumentAnalysisError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
@@ -466,3 +491,134 @@ async def delete_validation_run(
     rows = response_rows(response)
     if not rows:
         raise HTTPException(status_code=404, detail="Validation history record was not found.")
+
+
+class StoredDocument(BaseModel):
+    id: UUID
+    institution_id: UUID
+    uploaded_by: UUID
+    filename: str
+    filesize_bytes: int
+    sha256: str
+    storage_path: str
+    document_type: str
+    extracted_metadata: dict[str, Any] = Field(default_factory=dict)
+    scan_status: str
+    scan_details: str
+    created_at: str
+    expires_at: str
+
+
+@app.get("/api/v1/documents", response_model=list[StoredDocument])
+async def list_documents(
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> list[StoredDocument]:
+    settings, token, _user_id, client = context
+    response = await rest_request(
+        client,
+        settings,
+        token,
+        "GET",
+        "institution_documents",
+        params={
+            "select": "id,institution_id,uploaded_by,filename,filesize_bytes,sha256,storage_path,document_type,extracted_metadata,scan_status,scan_details,created_at,expires_at",
+            "order": "created_at.desc",
+            "limit": "50",
+        },
+    )
+    rows = response_rows(response)
+    return [StoredDocument(**row) for row in rows]
+
+
+@app.get("/api/v1/documents/{document_id}", response_model=StoredDocument)
+async def get_document(
+    document_id: UUID,
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> StoredDocument:
+    settings, token, _user_id, client = context
+    response = await rest_request(
+        client,
+        settings,
+        token,
+        "GET",
+        "institution_documents",
+        params={
+            "select": "id,institution_id,uploaded_by,filename,filesize_bytes,sha256,storage_path,document_type,extracted_metadata,scan_status,scan_details,created_at,expires_at",
+            "id": f"eq.{document_id}",
+            "limit": "1",
+        },
+    )
+    rows = response_rows(response)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Document was not found or access denied.")
+    return StoredDocument(**rows[0])
+
+
+@app.get("/api/v1/documents/{document_id}/download")
+async def download_document(
+    document_id: UUID,
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+):
+    from fastapi.responses import Response
+
+    settings, token, _user_id, client = context
+    response = await rest_request(
+        client,
+        settings,
+        token,
+        "GET",
+        "institution_documents",
+        params={
+            "select": "id,filename,storage_path,scan_status",
+            "id": f"eq.{document_id}",
+            "limit": "1",
+        },
+    )
+    rows = response_rows(response)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Document was not found or access denied.")
+    doc = rows[0]
+    scan_status = doc.get("scan_status", "scan_unavailable")
+    permitted, reason = is_download_permitted(scan_status)
+    if not permitted:
+        raise HTTPException(status_code=403, detail=reason)
+
+    storage_url = f"{settings.url}/storage/v1/object/authenticated/documents/{doc['storage_path']}"
+    storage_res = await client.get(
+        storage_url,
+        headers={"apikey": settings.anon_key, "Authorization": f"Bearer {token}"},
+    )
+    if storage_res.status_code != 200:
+        raise HTTPException(
+            status_code=storage_res.status_code,
+            detail="Document content is unavailable in storage.",
+        )
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="{doc.get("filename", "document.pdf")}"',
+        "Content-Type": "application/pdf",
+    }
+    if scan_status == "scan_unavailable":
+        headers["X-Compliance-Security-Warning"] = "unscanned-prototype-download"
+    return Response(content=storage_res.content, media_type="application/pdf", headers=headers)
+
+
+@app.delete("/api/v1/documents/{document_id}", status_code=204)
+async def delete_document(
+    document_id: UUID,
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> None:
+    settings, token, _user_id, client = context
+    response = await rest_request(
+        client,
+        settings,
+        token,
+        "DELETE",
+        "institution_documents",
+        params={"id": f"eq.{document_id}", "select": "id"},
+        prefer="return=representation",
+    )
+    rows = response_rows(response)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Document was not found or access denied.")
+

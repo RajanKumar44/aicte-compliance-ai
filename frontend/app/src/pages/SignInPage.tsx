@@ -8,59 +8,26 @@ import {
   LogIn,
   KeyRound,
   Info,
-  Sparkles,
-  CheckCircle2,
-  Building2,
-  GraduationCap,
-  ArrowRight,
+  Key,
 } from "lucide-react";
 import { useAuth } from "@/components/useAuth";
-import type { DemoUser } from "@/components/auth-context";
 import { Button } from "@/components/Button";
 import { Card, CardContent } from "@/components/Card";
 import { Input } from "@/components/FormField";
-
-const DEMO_ACCOUNTS: DemoUser[] = [
-  {
-    id: "demo-principal-01",
-    email: "principal@engineering-inst.ac.in",
-    name: "Dr. R. Raman",
-    role: "applicant",
-    institution_id: "SYNTH-INST-001",
-    institution_name: "Apex Institute of Technology & Engineering",
-  },
-  {
-    id: "demo-auditor-02",
-    email: "reviewer.scrutiny@aicte-council.gov.in",
-    name: "Prof. S. Sen",
-    role: "reviewer",
-    institution_id: "REG-WEST-042",
-    institution_name: "AICTE Western Regional Scrutiny Panel",
-  },
-  {
-    id: "demo-admin-03",
-    email: "registrar@polytechnic-board.edu.in",
-    name: "S. Iyer",
-    role: "institution_admin",
-    institution_id: "POLY-CENT-108",
-    institution_name: "Central State Polytechnic Directorate",
-  },
-];
 
 export function SignInPage() {
   const {
     configured,
     loading,
     session,
-    demoUser,
-    signInAsDemo,
     signInWithPassword,
     signUpWithPassword,
     sendSignInLink,
+    resetPasswordForEmail,
   } = useAuth();
   const location = useLocation();
 
-  const [activeTab, setActiveTab] = useState<"demo" | "signin" | "signup" | "magic">("demo");
+  const [activeTab, setActiveTab] = useState<"signin" | "signup" | "reset" | "magic">("signin");
 
   // Form states
   const [email, setEmail] = useState("");
@@ -76,7 +43,7 @@ export function SignInPage() {
     return <p className="py-12 text-center text-sm text-text-secondary" role="status">Checking your session…</p>;
   }
 
-  if (session || demoUser) {
+  if (session) {
     return <Navigate to={location.state?.from || "/history"} replace />;
   }
 
@@ -125,6 +92,24 @@ export function SignInPage() {
     }
   }
 
+  async function handlePasswordReset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+    setError("");
+    if (!email.trim()) {
+      setError("Please enter your registered email address.");
+      return;
+    }
+    setSubmitting(true);
+    const err = await resetPasswordForEmail(email.trim());
+    setSubmitting(false);
+    if (err) {
+      setError(err);
+    } else {
+      setMessage("If this address is registered, a password recovery link has been dispatched.");
+    }
+  }
+
   async function handleMagicLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
@@ -144,7 +129,7 @@ export function SignInPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8 py-8 animate-fade-in">
+    <div className="mx-auto max-w-xl space-y-8 py-8 animate-fade-in">
       <header className="space-y-3 text-center sm:text-left">
         <div className="inline-flex items-center gap-2 rounded-full border border-border bg-bg-2 px-3 py-1 text-xs font-bold text-text-heading">
           <Shield className="h-3.5 w-3.5 text-accent-strong" aria-hidden="true" />
@@ -154,7 +139,7 @@ export function SignInPage() {
           Sign In to Compliance Workspace
         </h1>
         <p className="max-w-xl text-sm leading-relaxed text-text-secondary">
-          Access institutional document verification records, automated scrutiny findings, and regulatory audit history.
+          Access institutional document verification records, automated scrutiny findings, and regulatory audit history securely via Supabase Authentication.
         </p>
       </header>
 
@@ -162,33 +147,16 @@ export function SignInPage() {
         <div className="rounded-xl border border-warning-border bg-warning-bg/40 p-4 text-xs text-text-body space-y-1">
           <p className="font-bold flex items-center gap-1.5 text-warning-text">
             <AlertTriangle className="h-4 w-4" />
-            Supabase Configuration Notice
+            Supabase Configuration Required
           </p>
           <p className="leading-relaxed">
-            <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> are optional for local demo mode, but required for remote database sync.
+            <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> are required for live authentication and persistent audit history.
           </p>
         </div>
       )}
 
       {/* Navigation Tabs */}
       <div className="flex flex-wrap border-b border-border">
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab("demo");
-            setError("");
-            setMessage("");
-          }}
-          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-bold transition-colors ${
-            activeTab === "demo"
-              ? "border-primary-500 text-text-heading"
-              : "border-transparent text-text-secondary hover:text-text-heading"
-          }`}
-        >
-          <Sparkles className="h-4 w-4" />
-          <span>1-Click Institutional Demo</span>
-        </button>
-
         <button
           type="button"
           onClick={() => {
@@ -226,6 +194,23 @@ export function SignInPage() {
         <button
           type="button"
           onClick={() => {
+            setActiveTab("reset");
+            setError("");
+            setMessage("");
+          }}
+          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-bold transition-colors ${
+            activeTab === "reset"
+              ? "border-primary-500 text-text-heading"
+              : "border-transparent text-text-secondary hover:text-text-heading"
+          }`}
+        >
+          <Key className="h-4 w-4" />
+          <span>Reset Password</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
             setActiveTab("magic");
             setError("");
             setMessage("");
@@ -253,35 +238,22 @@ export function SignInPage() {
         <div className="rounded-lg border border-warning-border bg-warning-bg/40 p-4 text-xs text-text-body space-y-3">
           <div className="flex items-center gap-1.5 font-bold text-text-heading">
             <Info className="h-4 w-4 text-accent-strong shrink-0" />
-            <span>How to Resolve Email Rate Limits in Supabase</span>
+            <span>How to Resolve Supabase Email Rate Limits</span>
           </div>
           <div className="space-y-2 text-[11px] leading-relaxed text-text-secondary">
             <div>
-              <strong className="text-text-heading block">Option 1: Use 1-Click Institutional Demo (Instant Access)</strong>
-              <span>Switch to the <strong>1-Click Institutional Demo</strong> tab above to log in immediately with full scrutiny, history, and export features. No email send required.</span>
+              <strong className="text-text-heading block">Option 1: Sign In with Password Directly</strong>
+              <span>If your institutional account is already created, use the <strong>Email & Password</strong> tab. Password authentication does not send emails and will never trigger email rate limits.</span>
             </div>
             <div>
               <strong className="text-text-heading block">Option 2: Disable "Confirm Email" in Supabase</strong>
-              <span>In Supabase Dashboard (<a href="https://supabase.com/dashboard/project/qhclgxquuiqijlsbsouc/auth/providers" target="_blank" rel="noopener noreferrer" className="underline font-mono text-accent-strong">qhclgxquuiqijlsbsouc</a>) → <strong>Authentication</strong> → <strong>Providers</strong> → <strong>Email</strong> → toggle <strong>Confirm email</strong> OFF. Users can then register and log in instantly without sending emails.</span>
+              <span>In your Supabase Dashboard (<a href="https://supabase.com/dashboard/project/qhclgxquuiqijlsbsouc/auth/providers" target="_blank" rel="noopener noreferrer" className="underline font-mono text-accent-strong">qhclgxquuiqijlsbsouc</a>) → <strong>Authentication</strong> → <strong>Providers</strong> → <strong>Email</strong> → toggle <strong>Confirm email</strong> OFF. Users can then register and log in immediately without sending emails.</span>
             </div>
             <div>
-              <strong className="text-text-heading block">Option 3: Sign In with Password Directly</strong>
-              <span>If your account is already registered, use the <strong>Email & Password</strong> tab. Password authentication does not send emails and will not trigger rate limits.</span>
+              <strong className="text-text-heading block">Option 3: Connect Custom SMTP</strong>
+              <span>In Supabase Dashboard → <strong>Project Settings</strong> → <strong>Authentication</strong> → <strong>SMTP Settings</strong>, configure custom SMTP (Resend, Brevo, SendGrid) to lift default free-tier caps.</span>
             </div>
           </div>
-          {activeTab !== "demo" && (
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("demo");
-                setError("");
-              }}
-              className="inline-flex items-center gap-1.5 rounded bg-bg-1 border border-border px-3 py-1.5 font-bold text-xs text-text-heading hover:bg-bg-2"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>Switch to 1-Click Institutional Demo</span>
-            </button>
-          )}
         </div>
       )}
 
@@ -290,61 +262,6 @@ export function SignInPage() {
           <MailCheck className="h-4 w-4 shrink-0 mt-0.5" />
           <p className="font-semibold leading-relaxed">{message}</p>
         </div>
-      )}
-
-      {/* Tab 0: 1-Click Institutional Demo */}
-      {activeTab === "demo" && (
-        <section className="space-y-5" aria-labelledby="demo-roles-heading">
-          <div className="flex items-start gap-3 rounded-lg border border-border bg-bg-2 p-4 text-sm text-text-body">
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success-text" aria-hidden="true" />
-            <p>
-              <strong>Fast Evaluation Mode:</strong> Select any institutional role below to instantly log in with full scrutiny and history features enabled. No email or external credentials required.
-            </p>
-          </div>
-
-          <div className="grid gap-3.5 sm:grid-cols-1">
-            {DEMO_ACCOUNTS.map((account) => {
-              const isAdmin = account.role === "institution_admin";
-              const isAuditor = account.email.includes("aicte-council");
-              const Icon = isAdmin ? Building2 : isAuditor ? Shield : GraduationCap;
-
-              return (
-                <Card
-                  key={account.id}
-                  className="cursor-pointer transition-all duration-200 hover:border-primary-400 hover:shadow-md"
-                  onClick={() => signInAsDemo(account)}
-                >
-                  <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-start gap-3.5">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-bg-2 text-text-heading">
-                        <Icon className="h-5 w-5" aria-hidden="true" />
-                      </div>
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold text-text-heading">{account.name}</h3>
-                          <span className="rounded bg-bg-3 px-2 py-0.5 text-[11px] font-medium text-text-muted uppercase tracking-wider">
-                            {account.role.replace(/_/g, " ")}
-                          </span>
-                        </div>
-                        <p className="text-xs text-text-secondary">{account.email}</p>
-                        <p className="text-xs text-text-muted">
-                          {account.institution_name} ({account.institution_id})
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      rightIcon={<ArrowRight className="h-3.5 w-3.5" />}
-                    >
-                      Sign In
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </section>
       )}
 
       {/* Tab 1: Password Sign In */}
@@ -368,9 +285,18 @@ export function SignInPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-text-heading" htmlFor="signin-password">
-                  Password
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold uppercase tracking-wider text-text-heading" htmlFor="signin-password">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("reset")}
+                    className="text-xs text-accent-strong underline underline-offset-4"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
                 <Input
                   id="signin-password"
                   type="password"
@@ -491,14 +417,51 @@ export function SignInPage() {
                 <span>Email Delivery Disclosure</span>
               </div>
               <p>
-                Supabase email confirmation depends on project SMTP configuration. If external confirmation emails are delayed, use the <strong>1-Click Institutional Demo</strong> tab above to evaluate immediately.
+                Supabase email confirmation depends on project SMTP configuration. If external confirmation emails are delayed, contact your project operator or log in directly if confirmation is disabled on the project.
               </p>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Tab 3: Magic Link */}
+      {/* Tab 3: Password Reset */}
+      {activeTab === "reset" && (
+        <Card className="border-border">
+          <CardContent className="p-6 space-y-5">
+            <form onSubmit={handlePasswordReset} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-text-heading" htmlFor="reset-email">
+                  Institutional Email
+                </label>
+                <Input
+                  id="reset-email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@institution.edu"
+                />
+                <p className="text-[11px] text-text-muted">
+                  We'll send password recovery instructions to this registered address.
+                </p>
+              </div>
+
+              <Button
+                type="submit"
+                variant="primary"
+                fullWidth
+                disabled={submitting}
+                leftIcon={<Key className="h-4 w-4" />}
+              >
+                {submitting ? "Sending reset email…" : "Send Password Reset Link"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Tab 4: Magic Link */}
       {activeTab === "magic" && (
         <Card className="border-border">
           <CardContent className="p-6 space-y-5">

@@ -74,3 +74,37 @@ def test_analyze_valid_pdf():
     assert payload["requires_human_review"] is True
     assert "Advisory extraction only" in payload["notice"]
     assert isinstance(payload["warnings"], list)
+    assert payload["scan_status"] in ("clean", "scan_unavailable")
+    assert payload["ocr_status"] in ("completed", "not_needed", "unavailable")
+
+
+def test_analyze_document_rejects_eicar_test_virus():
+    from backend.app.antivirus_scanner import EICAR_SIGNATURE
+
+    infected_pdf = b"%PDF-1.4\n" + EICAR_SIGNATURE + b"\n%%EOF"
+    response = client.post(
+        "/api/v1/documents/analyze",
+        files={"file": ("infected.pdf", infected_pdf, "application/pdf")},
+    )
+    assert response.status_code == 400
+    assert "Security Alert" in response.json()["detail"]
+    assert "Eicar" in response.json()["detail"]
+
+
+def test_download_security_policy():
+    from backend.app.antivirus_scanner import is_download_permitted
+
+    # Infected is always blocked
+    permitted, reason = is_download_permitted("infected")
+    assert permitted is False
+    assert "blocked" in reason.lower()
+
+    # Clean is permitted
+    permitted, reason = is_download_permitted("clean")
+    assert permitted is True
+
+    # Default scan_unavailable is blocked in production mode
+    permitted, reason = is_download_permitted("scan_unavailable")
+    assert permitted is False
+    assert "blocked" in reason.lower()
+

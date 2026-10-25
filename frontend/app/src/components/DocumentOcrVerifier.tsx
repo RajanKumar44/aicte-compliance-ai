@@ -314,7 +314,8 @@ export function DocumentOcrVerifier({
                         {analysisResult.filename}
                       </p>
                       <p className="text-[10px] text-text-muted">
-                        {(analysisResult.filesize_bytes / 1024).toFixed(1)} KB • {analysisResult.page_count} {analysisResult.page_count === 1 ? "Page" : "Pages"}
+                        {analysisResult.filesize_bytes ? `${(analysisResult.filesize_bytes / 1024).toFixed(1)} KB • ` : ""}
+                        {analysisResult.page_count} {analysisResult.page_count === 1 ? "Page" : "Pages"}
                       </p>
                     </div>
                   </div>
@@ -327,6 +328,49 @@ export function DocumentOcrVerifier({
                     >
                       Analyze Another PDF
                     </Button>
+                  </div>
+                </div>
+
+                {/* Antivirus & OCR Status Indicators */}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className={`rounded-lg border p-3 text-xs flex items-start gap-2.5 ${
+                    analysisResult.scan_status === "clean"
+                      ? "border-success-border bg-success-bg/40 text-success-text"
+                      : analysisResult.scan_status === "infected"
+                      ? "border-error-border bg-error-bg/40 text-error-text"
+                      : "border-warning-border bg-warning-bg/40 text-text-body"
+                  }`}>
+                    <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5 text-accent-strong" />
+                    <div>
+                      <p className="font-bold">
+                        Antivirus Status: {
+                          analysisResult.scan_status === "clean" ? "Clean (Verified)"
+                          : analysisResult.scan_status === "infected" ? "Infected (Blocked)"
+                          : "Scanner Unavailable"
+                        }
+                      </p>
+                      <p className="text-[11px] text-text-secondary mt-0.5">
+                        {analysisResult.scan_details || "File inspected for structural conformance and text extraction."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-border bg-bg-1 p-3 text-xs flex items-start gap-2.5 text-text-body">
+                    <ScanText className="h-4 w-4 shrink-0 mt-0.5 text-accent-strong" />
+                    <div>
+                      <p className="font-bold">
+                        OCR Pipeline: {
+                          analysisResult.ocr_status === "completed" ? "OCR Engine Applied"
+                          : analysisResult.ocr_status === "unavailable" ? "OCR Engine Unavailable"
+                          : "Native Selectable PDF Stream"
+                        }
+                      </p>
+                      <p className="text-[11px] text-text-secondary mt-0.5">
+                        {analysisResult.ocr_status === "unavailable"
+                          ? "Host environment lacks tesseract-ocr; text extraction used selectable font streams."
+                          : "Text streams extracted and parsed for statutory clearance candidate dates."}
+                      </p>
+                    </div>
                   </div>
                 </div>
 

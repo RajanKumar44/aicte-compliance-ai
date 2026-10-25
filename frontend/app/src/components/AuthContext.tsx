@@ -1,21 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase, supabaseConfigured } from "@/lib/supabase";
-import { AuthContext, type AuthContextValue, type DemoUser } from "./auth-context";
-
-const DEMO_USER_KEY = "aicte_demo_user_session";
+import { AuthContext, type AuthContextValue } from "./auth-context";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [demoUser, setDemoUser] = useState<DemoUser | null>(() => {
-    try {
-      const stored = localStorage.getItem(DEMO_USER_KEY);
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
-  });
   const [loading, setLoading] = useState(supabaseConfigured);
 
   useEffect(() => {
@@ -50,16 +40,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       session,
       user,
-      demoUser,
-
-      signInAsDemo(dUser: DemoUser) {
-        setDemoUser(dUser);
-        try {
-          localStorage.setItem(DEMO_USER_KEY, JSON.stringify(dUser));
-        } catch {
-          // ignore storage errors
-        }
-      },
 
       async signInWithPassword(email, password) {
         if (!supabase) return "Authentication service is not configured for this deployment.";
@@ -111,13 +91,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return error?.message ?? null;
       },
 
+      async resetPasswordForEmail(email) {
+        if (!supabase) return "Authentication service is not configured for this deployment.";
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: `${window.location.origin}/signin`,
+        });
+        return error?.message ?? null;
+      },
+
       async signOut() {
-        setDemoUser(null);
-        try {
-          localStorage.removeItem(DEMO_USER_KEY);
-        } catch {
-          // ignore
-        }
         if (!supabase) return null;
         const { error } = await supabase.auth.signOut();
         setSession(null);
@@ -125,9 +107,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return error?.message ?? null;
       },
     }),
-    [loading, session, user, demoUser]
+    [loading, session, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-

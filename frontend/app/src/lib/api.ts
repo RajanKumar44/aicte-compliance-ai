@@ -68,14 +68,26 @@ export interface DocumentCandidateFields {
   issuing_authority?: string | null;
 }
 
+export interface AnalyzedFieldValue {
+  value: string | null;
+  confidence?: number | null;
+  page_number?: number | null;
+  evidence_text?: string | null;
+}
+
 export interface DocumentAnalysisResponse {
   filename: string;
-  filesize_bytes: number;
+  filesize_bytes?: number;
   sha256: string;
   page_count: number;
-  is_scanned_only: boolean;
-  extracted_text_preview: string;
-  candidate_fields: DocumentCandidateFields;
+  is_scanned_only?: boolean;
+  extracted_text?: string;
+  extracted_text_preview?: string;
+  fields?: Record<string, AnalyzedFieldValue>;
+  candidate_fields?: DocumentCandidateFields;
+  scan_status?: "clean" | "infected" | "scan_unavailable";
+  scan_details?: string;
+  ocr_status?: "completed" | "not_needed" | "unavailable";
   warnings: string[];
   notice: string;
 }

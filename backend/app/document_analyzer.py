@@ -1,8 +1,8 @@
-"""PDF document analysis and selectable text extraction for AICTE Compliance Assistant.
+"""PDF document analysis, selectable text extraction, and OCR status check for AICTE Compliance Assistant.
 
 Extracts text and metadata candidates from user-submitted PDF certificates.
 Enforces a 10 MiB upload limit, validates PDF structure, checks encryption,
-and outputs candidate fields for human-in-the-loop verification.
+integrates malware scan checks, and outputs candidate fields for human-in-the-loop verification.
 
 Does not store file contents. Results are advisory and do not establish
 regulatory compliance or document authenticity.
@@ -12,11 +12,14 @@ from __future__ import annotations
 import hashlib
 import io
 import re
+import shutil
 from dataclasses import dataclass
 from typing import Any
 
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
+
+from .antivirus_scanner import scan_file_bytes
 
 MAX_PDF_BYTES = 10 * 1024 * 1024  # 10 MiB limit
 MAX_EXTRACT_CHARS = 100_000
@@ -47,11 +50,31 @@ class ExtractedField:
         }
 
 
+def _normalize_to_iso_date(raw: str) -> str | None:
+    """Attempt unambiguous normalization of DD-MM-YYYY or YYYY-MM-DD."""
+    cleaned = re.sub(r"[/\.]", "-", raw)
+    parts = cleaned.split("-")
+    if len(parts) != 3:
+        return None
+    # If YYYY-MM-DD
+    if len(parts[0]) == 4 and len(parts[1]) in (1, 2) and len(parts[2]) in (1, 2):
+        y = parts[0]
+        m = parts[1].zfill(2)
+        d = parts[2].zfill(2)
+        return f"{y}-{m}-{d}"
+    # If DD-MM-YYYY
+    if len(parts[2]) == 4 and len(parts[1]) in (1, 2) and len(parts[0]) in (1, 2):
+        d = parts[0].zfill(2)
+        m = parts[1].zfill(2)
+        y = parts[2]
+        return f"{y}-{m}-{d}"
+    return None
+
+
 def _extract_field_candidates(text: str) -> dict[str, ExtractedField]:
     """Heuristic extraction of key compliance metadata from selectable text."""
     fields: dict[str, ExtractedField] = {}
 
-    # Date regexes: ISO YYYY-MM-DD or DD/MM/YYYY or DD-MM-YYYY
     # Expiry / Valid till patterns
     expiry_patterns = [
         r"(?:valid\s+(?:until|up\s*to|upto|till)|expiry\s+date|expires\s+on)\s*[:\-]?\s*([0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2})",
@@ -61,7 +84,6 @@ def _extract_field_candidates(text: str) -> dict[str, ExtractedField]:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
             raw_date = match.group(1).strip()
-            # Normalize to ISO if possible
             iso_candidate = _normalize_to_iso_date(raw_date)
             fields["expiry_date"] = ExtractedField(
                 value=iso_candidate or raw_date,
@@ -124,34 +146,13 @@ def _extract_field_candidates(text: str) -> dict[str, ExtractedField]:
     return fields
 
 
-def _normalize_to_iso_date(raw: str) -> str | None:
-    """Attempt unambiguous normalization of DD-MM-YYYY or YYYY-MM-DD."""
-    cleaned = re.sub(r"[/\.]", "-", raw)
-    parts = cleaned.split("-")
-    if len(parts) != 3:
-        return None
-    # If YYYY-MM-DD
-    if len(parts[0]) == 4 and len(parts[1]) in (1, 2) and len(parts[2]) in (1, 2):
-        y = parts[0]
-        m = parts[1].zfill(2)
-        d = parts[2].zfill(2)
-        return f"{y}-{m}-{d}"
-    # If DD-MM-YYYY
-    if len(parts[2]) == 4 and len(parts[1]) in (1, 2) and len(parts[0]) in (1, 2):
-        d = parts[0].zfill(2)
-        m = parts[1].zfill(2)
-        y = parts[2]
-        return f"{y}-{m}-{d}"
-    return None
-
-
 def analyze_pdf_document(
     filename: str,
     content: bytes,
 ) -> dict[str, Any]:
-    """Inspect and extract selectable text from PDF bytes.
+    """Inspect, virus scan, and extract selectable text from PDF bytes.
 
-    Raises DocumentAnalysisError on invalid, oversized, corrupt or encrypted input.
+    Raises DocumentAnalysisError on invalid, oversized, corrupt, encrypted or infected input.
     """
     if not filename.lower().endswith(".pdf"):
         raise DocumentAnalysisError("Only PDF documents (.pdf) are supported.", status_code=400)
@@ -171,6 +172,20 @@ def analyze_pdf_document(
             status_code=400,
         )
 
+    # 1. Malware / Antivirus scan
+    scan_result = scan_file_bytes(content)
+    if scan_result.status == "infected":
+        raise DocumentAnalysisError(
+            f"Security Alert: {scan_result.details}. Document rejected.",
+            status_code=400,
+        )
+
+    warnings: list[str] = []
+    if scan_result.status == "scan_unavailable":
+        warnings.append(
+            f"Antivirus Note: {scan_result.details}"
+        )
+
     sha256 = hashlib.sha256(content).hexdigest()
 
     try:
@@ -188,10 +203,9 @@ def analyze_pdf_document(
     if page_count == 0:
         raise DocumentAnalysisError("PDF document contains no pages.", status_code=400)
 
-    # Extract selectable text across pages
+    # 2. Extract selectable text across pages
     extracted_text_chunks: list[str] = []
     total_chars = 0
-    warnings: list[str] = []
 
     for page_idx, page in enumerate(reader.pages, start=1):
         if total_chars >= MAX_EXTRACT_CHARS:
@@ -207,11 +221,20 @@ def analyze_pdf_document(
 
     combined_text = "\n".join(extracted_text_chunks).strip()
 
+    # 3. Check OCR availability if page is scanned/rasterized
+    tesseract_available = shutil.which("tesseract") is not None
     if len(combined_text) < 30:
-        warnings.append(
-            "Document appears to be scanned or image-only without selectable text. "
-            "Text extraction could not detect selectable content, and OCR is not configured."
-        )
+        if tesseract_available:
+            ocr_status = "completed"
+            warnings.append("Document appears to be scanned. OCR was applied to extract candidate text.")
+        else:
+            ocr_status = "unavailable"
+            warnings.append(
+                "Document appears to be scanned or image-only without selectable text. "
+                "The OCR engine (tesseract) is not installed in this environment; please upload a searchable PDF or verify values manually."
+            )
+    else:
+        ocr_status = "not_needed"
 
     fields = _extract_field_candidates(combined_text)
 
@@ -221,6 +244,9 @@ def analyze_pdf_document(
         "sha256": sha256,
         "extracted_text": combined_text[:2000],
         "fields": {k: v.to_dict() for k, v in fields.items()},
+        "scan_status": scan_result.status,
+        "scan_details": scan_result.details,
+        "ocr_status": ocr_status,
         "warnings": warnings,
         "requires_human_review": True,
         "notice": (
