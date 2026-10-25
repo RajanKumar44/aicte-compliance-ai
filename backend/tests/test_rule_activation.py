@@ -46,7 +46,7 @@ def test_no_rule_instances_are_defined_in_application_code():
     """Guard against shipping a real (or self-declared active) rule by accident."""
     offenders: list[str] = []
     for path in APP_DIR.glob("*.py"):
-        for number, line in enumerate(path.read_text().splitlines(), start=1):
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             if line.lstrip().startswith("class "):
                 continue
             if re.search(r"\bRuleVersionDraft\s*\(", line):

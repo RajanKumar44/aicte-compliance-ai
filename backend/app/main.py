@@ -244,7 +244,6 @@ def root_info() -> dict:
 def readiness_check(db: Session = Depends(get_db)) -> dict:
     """Report whether the API can actually serve authenticated requests."""
     from backend.app.db.session import get_database_url
-    from backend.app.db.base import Base
     from sqlalchemy import text
 
     reasons: list[str] = []
@@ -262,7 +261,7 @@ def readiness_check(db: Session = Depends(get_db)) -> dict:
     # Check if users table exists
     users_present = False
     try:
-        result = db.execute(text("SELECT count(*) FROM users"))
+        db.execute(text("SELECT count(*) FROM users"))
         users_present = True
     except Exception:
         reasons.append("users table not found — migrations may not have run")
