@@ -4,7 +4,11 @@ import hashlib
 
 import pytest
 
-from backend.app.ocr_adapter import OCRDocumentResult, OCRField, parse_iso_date_candidate
+from backend.app.ocr_adapter import (
+    OCRDocumentResult,
+    OCRField,
+    parse_iso_date_candidate,
+)
 
 
 def test_field_accepts_valid_confidence_and_page_provenance():

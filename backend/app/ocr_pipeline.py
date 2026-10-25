@@ -22,7 +22,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from backend.app.ocr_adapter import OCRDocumentResult, OCRField, parse_iso_date_candidate
+from backend.app.ocr_adapter import (
+    OCRDocumentResult,
+    OCRField,
+    parse_iso_date_candidate,
+)
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_IMAGE_PIXELS = 30_000_000
@@ -143,8 +147,10 @@ def _date_consistency_warnings(fields: dict[str, OCRField]) -> list[str]:
     valid_date = parse_iso_date_candidate(valid_field.value)
     if issue_date and valid_date and valid_date < issue_date:
         return [
-            "Issue date is later than the valid-until date; treat both values as "
-            "unresolved and check the source document."
+            (
+                "Issue date is later than the valid-until date; treat both values as "
+                "unresolved and check the source document."
+            )
         ]
     return []
 
@@ -182,12 +188,12 @@ def extract_institution_fields(
     lines = [line for line in lines if line]
 
     patterns: tuple[tuple[str, re.Pattern[str]], ...] = (
-        ("institution_name", re.compile(r"^(?:name of institution|institution name|name of college|college name|संस्थान का नाम|संस्था का नाम|महाविद्यालय का नाम|कॉलेज का नाम)\s*[:\-]\s*(.{3,160})$", re.I)),
-        ("certificate_number", re.compile(r"^(?:certificate no\.?|certificate number|reference no\.?|reference number|document no\.?|प्रमाणपत्र संख्या|प्रमाणपत्र क्रमांक|संदर्भ संख्या|दस्तावेज़ संख्या)\s*[:\-]\s*([A-Z0-9][A-Z0-9/._\-]{1,79})$", re.I)),
-        ("application_reference", re.compile(r"^(?:application ref(?:erence)?|application id|application no\.?|आवेदन संदर्भ|आवेदन संख्या|आवेदन क्रमांक)\s*[:\-]\s*([A-Z0-9][A-Z0-9/._\-]{1,79})$", re.I)),
-        ("issue_date", re.compile(r"^(?:date of issue|issued on|issue date|जारी करने की तिथि|जारी दिनांक|निर्गमन तिथि)\s*[:\-]\s*(.+)$", re.I)),
-        ("valid_until", re.compile(r"^(?:valid until|valid up to|valid upto|valid till|expiry date|expires on|वैधता तक|समाप्ति तिथि|अंतिम वैधता तिथि)\s*[:\-]\s*(.+)$", re.I)),
-        ("academic_year", re.compile(r"^(?:academic year|academic session|शैक्षणिक वर्ष|शैक्षिक सत्र)\s*[:\-]\s*((?:20\d{2})\s*[-/]\s*(?:20\d{2}))$", re.I)),
+        ("institution_name", re.compile(r"^(?:name of institution|institution name|name of college|college name|संस्थान का नाम|संस्था का नाम|महाविद्यालय का नाम|कॉलेज का नाम)\s*[:\-]\s*(.{3,160})$", re.IGNORECASE)),
+        ("certificate_number", re.compile(r"^(?:certificate no\.?|certificate number|reference no\.?|reference number|document no\.?|प्रमाणपत्र संख्या|प्रमाणपत्र क्रमांक|संदर्भ संख्या|दस्तावेज़ संख्या)\s*[:\-]\s*([A-Z0-9][A-Z0-9/._\-]{1,79})$", re.IGNORECASE)),
+        ("application_reference", re.compile(r"^(?:application ref(?:erence)?|application id|application no\.?|आवेदन संदर्भ|आवेदन संख्या|आवेदन क्रमांक)\s*[:\-]\s*([A-Z0-9][A-Z0-9/._\-]{1,79})$", re.IGNORECASE)),
+        ("issue_date", re.compile(r"^(?:date of issue|issued on|issue date|जारी करने की तिथि|जारी दिनांक|निर्गमन तिथि)\s*[:\-]\s*(.+)$", re.IGNORECASE)),
+        ("valid_until", re.compile(r"^(?:valid until|valid up to|valid upto|valid till|expiry date|expires on|वैधता तक|समाप्ति तिथि|अंतिम वैधता तिथि)\s*[:\-]\s*(.+)$", re.IGNORECASE)),
+        ("academic_year", re.compile(r"^(?:academic year|academic session|शैक्षणिक वर्ष|शैक्षिक सत्र)\s*[:\-]\s*((?:20\d{2})\s*[-/]\s*(?:20\d{2}))$", re.IGNORECASE)),
     )
 
     for line in lines:
@@ -396,7 +402,7 @@ class TesseractOCRAdapter:
             )
         try:
             version = str(pytesseract.get_tesseract_version()).splitlines()[0]
-        except Exception:
+        except (RuntimeError, ValueError, OSError, AttributeError):
             version = None
         return OCRRawResult(tuple(words), "tesseract", version, tuple(warnings))
 

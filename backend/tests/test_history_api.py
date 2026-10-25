@@ -4,8 +4,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.app.main import app, _supabase_client
-
+from backend.app.main import _supabase_client, app
 
 USER_ID = "11111111-1111-4111-8111-111111111111"
 INSTITUTION_ID = "22222222-2222-4222-8222-222222222222"

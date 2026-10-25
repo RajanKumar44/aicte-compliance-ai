@@ -34,7 +34,7 @@ function formatDate(value: string) {
 
 export function HistoryPage() {
   const auth = useAuth();
-  const { session, demoUser } = auth;
+  const { session } = auth;
   const { runId } = useParams();
   const navigate = useNavigate();
 
@@ -52,8 +52,12 @@ export function HistoryPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    if (!session) {
+      setLoading(false);
+      return;
+    }
     if (runId) {
-      const result = await fetchRunByIdUnified(runId, { session, demoUser });
+      const result = await fetchRunByIdUnified(runId, { session });
       setError("");
       if (result.ok) {
         setRecord(result.data);
@@ -62,7 +66,7 @@ export function HistoryPage() {
         setError(Object.values(result.errors)[0] || "Unable to load this history record.");
       }
     } else {
-      const result = await fetchRunsUnified({ session, demoUser }, PAGE_SIZE, offset);
+      const result = await fetchRunsUnified({ session }, PAGE_SIZE, offset);
       setError("");
       if (result.ok) {
         setItems(result.data.items);
@@ -73,7 +77,7 @@ export function HistoryPage() {
       }
     }
     setLoading(false);
-  }, [offset, runId, session, demoUser]);
+  }, [offset, runId, session]);
 
   useEffect(() => {
     void load();
@@ -84,7 +88,7 @@ export function HistoryPage() {
     setDeleting(true);
     setLoading(true);
     setError("");
-    const result = await deleteRunUnified(record.id, { session, demoUser });
+    const result = await deleteRunUnified(record.id, { session });
     setDeleting(false);
     if (!result.ok) {
       setError(Object.values(result.errors)[0] || "The record could not be deleted.");
@@ -291,7 +295,22 @@ export function HistoryPage() {
 
       {error && <p className="text-sm text-error-text" role="alert">{error}</p>}
 
-      {loading ? (
+      {!session ? (
+        <Card>
+          <CardContent className="space-y-4 p-8 text-center">
+            <Building2 className="mx-auto h-10 w-10 text-text-muted" aria-hidden="true" />
+            <div className="space-y-1">
+              <h2 className="font-semibold text-text-heading">Sign in to view institutional audit history</h2>
+              <p className="mx-auto max-w-md text-sm text-text-secondary">
+                Saved validation records and deficiency reports are securely scoped to authenticated institutions via Supabase RLS.
+              </p>
+            </div>
+            <Link to="/signin" className="inline-block pt-2">
+              <Button>Sign In to Workspace</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      ) : loading ? (
         <p className="py-12 text-center text-sm text-text-secondary" role="status">
           Loading validation records…
         </p>
