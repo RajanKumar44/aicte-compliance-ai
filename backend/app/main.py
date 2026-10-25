@@ -1,9 +1,11 @@
+import os
 from datetime import date, datetime, timezone
 from typing import Any, Literal
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 from .history_store import (
@@ -22,6 +24,32 @@ app = FastAPI(
         "Results are advisory and use synthetic demonstration data."
     ),
     version="0.3.1",
+)
+
+
+def _cors_origins() -> list[str]:
+    """Origins the API allows cross-origin requests from.
+
+    Local Vite dev origins are always permitted. Set ``CORS_ALLOW_ORIGINS``
+    (comma-separated) in the deployment environment to add the deployed
+    frontend origin(s); nothing else is allowed.
+    """
+
+    origins = {"http://localhost:5173", "http://127.0.0.1:5173"}
+    configured = os.environ.get("CORS_ALLOW_ORIGINS", "")
+    for origin in configured.split(","):
+        origin = origin.strip().rstrip("/")
+        if origin:
+            origins.add(origin)
+    return sorted(origins)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins(),
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 

@@ -123,6 +123,16 @@ export function mapValidationErrors(
 }
 
 // ── API client ─────────────────────────────────────────────────
+//
+// Base URL for the backend. Empty by default: in development the Vite dev
+// server proxies `/health` and `/api` to the FastAPI backend; in a split
+// deployment set VITE_API_BASE_URL in frontend/app/.env.local (no trailing
+// slash, e.g. "https://aicte-backend.example.com").
+const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "").trim().replace(/\/+$/, "");
+
+export function apiUrl(path: string): string {
+  return `${API_BASE}${path}`;
+}
 
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -184,7 +194,7 @@ async function fetchJson(
 
 export async function checkHealth(): Promise<ApiResult<HealthResponse>> {
   try {
-    const { response: res, body, parseError } = await fetchJson("/health");
+    const { response: res, body, parseError } = await fetchJson(apiUrl("/health"));
     if (res.ok && !parseError && isRecord(body) && typeof body.status === "string" && typeof body.service === "string") {
       return { ok: true, data: body as unknown as HealthResponse };
     }
@@ -221,7 +231,7 @@ export async function validateDocuments(
   request: ValidationRequest
 ): Promise<ApiResult<ValidationResponse>> {
   try {
-    const { response: res, body, parseError } = await fetchJson("/api/v1/validate", {
+    const { response: res, body, parseError } = await fetchJson(apiUrl("/api/v1/validate"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
@@ -289,7 +299,7 @@ async function authenticatedJson<T>(
     const headers = new Headers(init.headers);
     headers.set("Authorization", `Bearer ${token}`);
     if (init.body) headers.set("Content-Type", "application/json");
-    const { response, body, parseError } = await fetchJson(path, { ...init, headers });
+    const { response, body, parseError } = await fetchJson(apiUrl(path), { ...init, headers });
     if (response.status === 204) return { ok: true, data: undefined as T };
     if (response.ok && !parseError && valid(body)) return { ok: true, data: body };
     if (response.ok) {
