@@ -190,6 +190,42 @@ export function SignInPage() {
         </div>
       )}
 
+      {error && (error.toLowerCase().includes("rate limit") || error.toLowerCase().includes("over_email_send_rate_limit")) && (
+        <div className="rounded-lg border border-warning-border bg-warning-bg/40 p-4 text-xs text-text-body space-y-3">
+          <div className="flex items-center gap-1.5 font-bold text-text-heading">
+            <Info className="h-4 w-4 text-accent-strong shrink-0" />
+            <span>How to Resolve Email Rate Limits in Supabase</span>
+          </div>
+          <div className="space-y-2 text-[11px] leading-relaxed text-text-secondary">
+            <div>
+              <strong className="text-text-heading block">Option 1: Disable "Confirm Email" in Supabase (Recommended for Testing & Demos)</strong>
+              <span>In your Supabase Dashboard (<a href="https://supabase.com/dashboard/project/qhclgxquuiqijlsbsouc/auth/providers" target="_blank" rel="noopener noreferrer" className="underline font-mono text-accent-strong">qhclgxquuiqijlsbsouc</a>) → <strong>Authentication</strong> → <strong>Providers</strong> → <strong>Email</strong> → toggle <strong>Confirm email</strong> OFF. Users can then register and log in instantly without sending emails.</span>
+            </div>
+            <div>
+              <strong className="text-text-heading block">Option 2: Sign In with Password Directly</strong>
+              <span>If your account is already registered, use the <strong>Email & Password</strong> tab. Password authentication does not send emails and will not trigger rate limits.</span>
+            </div>
+            <div>
+              <strong className="text-text-heading block">Option 3: Connect Custom SMTP (For Production)</strong>
+              <span>In Supabase Dashboard → <strong>Project Settings</strong> → <strong>Authentication</strong> → <strong>SMTP Settings</strong>, configure custom SMTP (Resend, Brevo, SendGrid) to remove default free-tier volume caps.</span>
+            </div>
+          </div>
+          {activeTab !== "signin" && (
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("signin");
+                setError("");
+              }}
+              className="inline-flex items-center gap-1.5 rounded bg-bg-1 border border-border px-3 py-1.5 font-bold text-xs text-text-heading hover:bg-bg-2"
+            >
+              <LogIn className="h-3.5 w-3.5" />
+              <span>Switch to Email & Password Sign In</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {message && (
         <div className="rounded-lg border border-success-border bg-success-bg/30 p-4 text-xs text-success-text flex items-start gap-2">
           <MailCheck className="h-4 w-4 shrink-0 mt-0.5" />
