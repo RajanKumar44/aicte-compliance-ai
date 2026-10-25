@@ -25,19 +25,23 @@ app = FastAPI(
 # CORS — Allow frontend origins to call this API
 # ---------------------------------------------------------------------------
 _allowed_origins = [
+    "https://aicte-compliance-ai.vercel.app",
     "https://aicte-compliance-frontend.vercel.app",
     "http://localhost:5173",
     "http://localhost:3000",
 ]
 
-# Also allow any origin configured via environment variable
-_extra_origin = os.getenv("CORS_ALLOWED_ORIGIN", "").strip()
-if _extra_origin:
-    _allowed_origins.append(_extra_origin)
+# Support comma-separated CORS_ALLOWED_ORIGIN or CORS_ALLOW_ORIGINS
+_extra_origins_raw = os.getenv("CORS_ALLOWED_ORIGIN", "") or os.getenv("CORS_ALLOW_ORIGINS", "")
+for origin in _extra_origins_raw.split(","):
+    clean_origin = origin.strip().rstrip("/")
+    if clean_origin and clean_origin not in _allowed_origins:
+        _allowed_origins.append(clean_origin)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -232,7 +236,7 @@ def root_info() -> dict:
         "status": "prototype",
         "docs": "/docs",
         "health": "/health",
-        "frontend": "https://aicte-compliance-frontend.vercel.app",
+        "frontend": "https://aicte-compliance-ai.vercel.app",
         "notice": "Advisory prototype only — not an official AICTE system.",
     }
 

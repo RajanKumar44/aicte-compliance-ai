@@ -24,7 +24,7 @@ services:
       - key: PYTHONPATH
         value: /opt/render/project/src
       - key: CORS_ALLOWED_ORIGIN
-        value: https://aicte-compliance-frontend.vercel.app
+        value: https://aicte-compliance-ai.vercel.app
 
 databases:
   - name: aicte-db
