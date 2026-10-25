@@ -3,8 +3,9 @@
 **Owner:** workstream A — **contributor not yet named** (see
 [`../WORKSTREAMS.md`](../WORKSTREAMS.md)).
 **Boundary:** this contributor works only in `frontend/` during independent development.
-**Status:** placeholder. No framework, build tooling or application has been selected or
-added. This directory contains documentation only.
+**Status:** React/TypeScript/Vite application implemented on the frontend feature branch.
+The active UI is under [`app/`](app/), with synthetic fixtures and state checks under
+[`fixtures/`](fixtures/) and [`tools/`](tools/).
 
 ## Scope
 
@@ -26,6 +27,29 @@ added. This directory contains documentation only.
   the only authority.
 - Do not include real institutional documents or personal data in fixtures.
 - Shared API changes go through a contract change and a separate integration PR.
+
+## Integration note
+
+The frontend consumes the agreed `0.1.0-draft` contract in
+[`../docs/development/API_CONTRACT.md`](../docs/development/API_CONTRACT.md), including
+`preliminary_checks_passed` and `validation_scope`. The older backend currently present
+on `main` returns `checklist_complete` and does not return `validation_scope`; this branch
+does not change backend semantics to hide that difference. End-to-end integration requires
+the approved backend contract change or a separate integration change.
+
+## Local checks
+
+From `frontend/app/`:
+
+```bash
+npm ci
+npm run lint
+npm run build
+npm run test
+```
+
+`npm run test` uses Node's built-in test runner and TypeScript type stripping; use Node.js
+22.6 or newer. No frontend test dependency is added.
 
 ## First task
 
