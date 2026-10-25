@@ -1,8 +1,16 @@
+import logging
+import os
 from datetime import date, datetime, timezone
 from typing import Literal
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy.orm import Session
+
+from backend.app.db.session import get_db
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="AICTE Compliance Assistant",
@@ -11,6 +19,28 @@ app = FastAPI(
         "Results are advisory and use synthetic demonstration data."
     ),
     version="0.3.1",
+)
+
+# ---------------------------------------------------------------------------
+# CORS — Allow frontend origins to call this API
+# ---------------------------------------------------------------------------
+_allowed_origins = [
+    "https://aicte-compliance-frontend.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+
+# Also allow any origin configured via environment variable
+_extra_origin = os.getenv("CORS_ALLOWED_ORIGIN", "").strip()
+if _extra_origin:
+    _allowed_origins.append(_extra_origin)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -192,3 +222,174 @@ app.include_router(reviews_router, prefix="/api/v1", tags=["reviews"])
 app.include_router(audit_packages_router, prefix="/api/v1", tags=["audit-packages"])
 
 
+# ---------------------------------------------------------------------------
+# Root info endpoint
+# ---------------------------------------------------------------------------
+@app.get("/")
+def root_info() -> dict:
+    return {
+        "service": "AICTE Compliance Assistant",
+        "status": "prototype",
+        "docs": "/docs",
+        "health": "/health",
+        "frontend": "https://aicte-compliance-frontend.vercel.app",
+        "notice": "Advisory prototype only — not an official AICTE system.",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Readiness probe — verifies DB connectivity
+# ---------------------------------------------------------------------------
+@app.get("/health/ready")
+def readiness_check(db: Session = Depends(get_db)) -> dict:
+    """Report whether the API can actually serve authenticated requests."""
+    from backend.app.db.session import get_database_url
+    from backend.app.db.base import Base
+    from sqlalchemy import text
+
+    reasons: list[str] = []
+    db_url = get_database_url()
+    is_deployed = not db_url.startswith("sqlite")
+
+    # Check database connectivity
+    db_reachable = False
+    try:
+        db.execute(text("SELECT 1"))
+        db_reachable = True
+    except Exception as exc:
+        reasons.append(f"Database unreachable: {exc}")
+
+    # Check if users table exists
+    users_present = False
+    try:
+        result = db.execute(text("SELECT count(*) FROM users"))
+        users_present = True
+    except Exception:
+        reasons.append("users table not found — migrations may not have run")
+
+    # Check current migration revision
+    migration_rev = None
+    try:
+        row = db.execute(text("SELECT version_num FROM alembic_version")).fetchone()
+        if row:
+            migration_rev = row[0]
+    except Exception:
+        pass
+
+    ready = db_reachable and not reasons
+    return {
+        "service": "aicte-compliance-assistant",
+        "engine": "postgresql" if is_deployed else "sqlite",
+        "deployed_environment": is_deployed,
+        "database_reachable": db_reachable,
+        "migration_revision": migration_rev,
+        "users_table_present": users_present,
+        "status": "ready" if ready else "degraded",
+        "reasons": reasons,
+        "notice": "Readiness probe — advisory deployment status only.",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Seed endpoint — bootstrap demo data for the prototype
+# ---------------------------------------------------------------------------
+@app.post("/api/v1/seed", tags=["admin"])
+def seed_demo_data(db: Session = Depends(get_db)) -> dict:
+    """Create demo user, institution, and membership if they don't already exist.
+
+    Demo credentials:
+    - username: admin / password: admin123456
+    - username: reviewer / password: reviewer123456
+    """
+    from backend.app.db.models import User, Institution, InstitutionMembership
+    from backend.app.core.security import get_password_hash
+
+    created: list[str] = []
+
+    # --- Institution ---
+    inst = db.query(Institution).filter(Institution.institution_id == "DEMO-INST-001").first()
+    if not inst:
+        inst = Institution(
+            institution_id="DEMO-INST-001",
+            display_name="Demo Engineering College",
+            status="active",
+        )
+        db.add(inst)
+        db.flush()
+        created.append("institution: DEMO-INST-001")
+
+    # --- Admin User ---
+    admin_user = db.query(User).filter(User.username == "admin").first()
+    if not admin_user:
+        admin_user = User(
+            username="admin",
+            hashed_password=get_password_hash("admin123456"),
+            display_name="Demo Admin",
+            is_active=True,
+        )
+        db.add(admin_user)
+        db.flush()
+        created.append("user: admin")
+
+    # Admin membership
+    admin_mem = (
+        db.query(InstitutionMembership)
+        .filter(
+            InstitutionMembership.user_id == admin_user.id,
+            InstitutionMembership.institution_id == inst.id,
+        )
+        .first()
+    )
+    if not admin_mem:
+        admin_mem = InstitutionMembership(
+            user_id=admin_user.id,
+            institution_id=inst.id,
+            role="institution_admin",
+            is_active=True,
+        )
+        db.add(admin_mem)
+        created.append("membership: admin → institution_admin")
+
+    # --- Reviewer User ---
+    reviewer_user = db.query(User).filter(User.username == "reviewer").first()
+    if not reviewer_user:
+        reviewer_user = User(
+            username="reviewer",
+            hashed_password=get_password_hash("reviewer123456"),
+            display_name="Demo Reviewer",
+            is_active=True,
+        )
+        db.add(reviewer_user)
+        db.flush()
+        created.append("user: reviewer")
+
+    # Reviewer membership
+    reviewer_mem = (
+        db.query(InstitutionMembership)
+        .filter(
+            InstitutionMembership.user_id == reviewer_user.id,
+            InstitutionMembership.institution_id == inst.id,
+        )
+        .first()
+    )
+    if not reviewer_mem:
+        reviewer_mem = InstitutionMembership(
+            user_id=reviewer_user.id,
+            institution_id=inst.id,
+            role="scrutiny_officer",
+            is_active=True,
+        )
+        db.add(reviewer_mem)
+        created.append("membership: reviewer → scrutiny_officer")
+
+    db.commit()
+
+    return {
+        "status": "seeded" if created else "already_seeded",
+        "created": created,
+        "demo_credentials": {
+            "admin": {"username": "admin", "password": "admin123456"},
+            "reviewer": {"username": "reviewer", "password": "reviewer123456"},
+        },
+        "notice": "Demo data only — not for production use.",
+    }

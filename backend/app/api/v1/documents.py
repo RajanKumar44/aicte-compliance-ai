@@ -427,8 +427,8 @@ def download_document_version(
             detail="Document version not found.",
         )
 
-    # Quarantine and security restriction enforcement: download only permitted if clean
-    if version.scan_status != "clean" or version.processing_status in ("quarantined", "rejected"):
+    # Quarantine and security restriction enforcement: download only permitted if clean or scan unavailable (no scanner configured)
+    if version.scan_status not in ("clean", "scan_unavailable") or version.processing_status in ("quarantined", "rejected"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Document version is quarantined or pending security scan; download is prohibited.",
