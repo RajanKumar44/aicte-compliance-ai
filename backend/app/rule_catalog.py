@@ -93,7 +93,7 @@ class SourceProvenance(BaseModel):
     verified_at: date | None = None
 
     @model_validator(mode="after")
-    def require_verification_record(self) -> "SourceProvenance":
+    def require_verification_record(self) -> SourceProvenance:
         if self.status is SourceVerificationStatus.VERIFIED:
             if not self.verified_by or self.verified_at is None:
                 raise ValueError(
@@ -150,10 +150,9 @@ class RuleVersionDraft(BaseModel):
     lifecycle: RuleLifecycle = RuleLifecycle.DRAFT
 
     @model_validator(mode="after")
-    def validate_rule_lifecycle(self) -> "RuleVersionDraft":
-        if self.effective_from and self.effective_to:
-            if self.effective_to < self.effective_from:
-                raise ValueError("effective_to must not precede effective_from")
+    def validate_rule_lifecycle(self) -> RuleVersionDraft:
+        if self.effective_from and self.effective_to and self.effective_to < self.effective_from:
+            raise ValueError("effective_to must not precede effective_from")
 
         if self.approval and self.approval.decided_at < self.source_provenance.retrieved_at:
             raise ValueError("approval.decided_at must not precede the source retrieval date")

@@ -13,7 +13,7 @@ these models were introduced.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -116,7 +116,7 @@ def test_expired_document_finding_shape():
     assert finding["evidence"]["expiry_date"] == "2020-01-01"
     # The evaluation date is the server's UTC date, not the client's.
     assert finding["evidence"]["evaluation_date"] == (
-        datetime.now(timezone.utc).date().isoformat()
+        datetime.now(UTC).date().isoformat()
     )
 
 

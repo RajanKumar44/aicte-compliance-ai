@@ -1,3 +1,4 @@
 fastapi[standard]==0.161.0
 pydantic==2.14.1
 httpx==0.28.1
+pypdf>=5.0.0

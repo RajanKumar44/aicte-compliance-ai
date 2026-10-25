@@ -61,6 +61,25 @@ export interface SavedValidationRun {
   result: ValidationResponse;
 }
 
+export interface DocumentCandidateFields {
+  expiry_date?: string | null;
+  issue_date?: string | null;
+  certificate_number?: string | null;
+  issuing_authority?: string | null;
+}
+
+export interface DocumentAnalysisResponse {
+  filename: string;
+  filesize_bytes: number;
+  sha256: string;
+  page_count: number;
+  is_scanned_only: boolean;
+  extracted_text_preview: string;
+  candidate_fields: DocumentCandidateFields;
+  warnings: string[];
+  notice: string;
+}
+
 export interface SavedValidationRunPage {
   items: SavedValidationRun[];
   has_more: boolean;
@@ -399,3 +418,46 @@ export function deleteValidationRun(runId: string, token: string) {
     (body): body is { ok: true } => body === null,
   );
 }
+
+export async function analyzeDocument(file: File): Promise<ApiResult<DocumentAnalysisResponse>> {
+  if (file.size > 10 * 1024 * 1024) {
+    return {
+      ok: false,
+      kind: "validation",
+      status: 413,
+      errors: { file: "File exceeds maximum permitted size of 10 MiB." },
+    };
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const res = await fetch(apiUrl("/api/v1/documents/analyze"), {
+      method: "POST",
+      body: formData,
+    });
+    const body = await res.json().catch(() => null);
+    if (res.ok && body && typeof body === "object") {
+      return { ok: true, data: body as DocumentAnalysisResponse };
+    }
+    const detail = (body && typeof (body as Record<string, unknown>).detail === "string")
+      ? (body as Record<string, unknown>).detail as string
+      : `Document analysis failed (${res.status}).`;
+    return {
+      ok: false,
+      kind: res.status >= 500 ? "server" : "validation",
+      status: res.status,
+      errors: { file: detail },
+      raw: body,
+    };
+  } catch (_error) {
+    return {
+      ok: false,
+      kind: "network",
+      status: 0,
+      errors: { file: "Unable to reach the document analysis service. Please check backend connection." },
+    };
+  }
+}
+

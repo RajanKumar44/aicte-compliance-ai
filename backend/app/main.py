@@ -1,13 +1,14 @@
 import os
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
+from .document_analyzer import DocumentAnalysisError, analyze_pdf_document
 from .history_store import (
     SupabaseSettings,
     bearer_token,
@@ -216,7 +217,7 @@ def _validate_application(request: ValidationRequest) -> ValidationResponse:
     submitted = set(request.submitted_documents)
 
     missing = sorted(required - submitted)
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
 
     expired = sorted(
         document
@@ -266,7 +267,7 @@ def _validate_application(request: ValidationRequest) -> ValidationResponse:
         missing_documents=missing,
         expired_documents=expired,
         findings=[Finding(**finding) for finding in findings],
-        checked_at=datetime.now(timezone.utc).isoformat(),
+        checked_at=datetime.now(UTC).isoformat(),
         source="synthetic_demo_input",
         notice=(
             "Preliminary validation only. This endpoint evaluates only the "
@@ -276,6 +277,36 @@ def _validate_application(request: ValidationRequest) -> ValidationResponse:
             "use supplied dates and require appropriate review."
         ),
     )
+
+
+class AnalyzedField(BaseModel):
+    value: str | None
+    confidence: float | None = None
+    page_number: int | None = None
+    evidence_text: str | None = None
+
+
+class DocumentAnalysisResponse(BaseModel):
+    filename: str
+    page_count: int
+    sha256: str
+    extracted_text: str
+    fields: dict[str, AnalyzedField]
+    warnings: list[str]
+    requires_human_review: bool = True
+    notice: str
+
+
+@app.post("/api/v1/documents/analyze", response_model=DocumentAnalysisResponse)
+async def analyze_document(file: UploadFile = File(...)) -> DocumentAnalysisResponse:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is missing.")
+    content = await file.read()
+    try:
+        result = analyze_pdf_document(file.filename, content)
+        return DocumentAnalysisResponse(**result)
+    except DocumentAnalysisError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
 
 
 @app.get("/api/v1/institutions", response_model=list[InstitutionAccess])
@@ -356,6 +387,7 @@ async def create_validation_run(
             "request_snapshot": request.model_dump(mode="json"),
             "response_snapshot": validation.model_dump(mode="json"),
             "ruleset_snapshot": [],
+            "checked_at": validation.checked_at,
         },
         prefer="return=representation",
     )

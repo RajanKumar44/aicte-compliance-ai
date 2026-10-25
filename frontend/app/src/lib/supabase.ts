@@ -12,7 +12,7 @@ export const supabase = supabaseConfigured
         detectSessionInUrl: true,
         flowType: "pkce",
         persistSession: true,
-        storage: window.sessionStorage,
+        storage: window.localStorage,
       },
     })
   : null;

@@ -21,7 +21,7 @@ def _preflight(origin: str) -> object:
 def test_dev_origin_preflight_is_allowed():
     response = _preflight("http://localhost:5173")
     assert response.status_code == 200
-    assert "access-control-allow-origin" in {k.lower() for k in response.headers.keys()}
+    assert "access-control-allow-origin" in {k.lower() for k in response.headers}
 
 
 def test_unknown_origin_preflight_is_not_allowed():

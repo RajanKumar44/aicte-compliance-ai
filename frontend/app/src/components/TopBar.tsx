@@ -52,8 +52,13 @@ export function TopBar({ onMenuToggle, mobileMenuOpen }: { onMenuToggle: () => v
   const location = useLocation();
   const page = pageTitles[location.pathname] || pageTitles["/"];
   const { theme, setTheme } = useTheme();
-  const { session, demoUser, signOut } = useAuth();
-  const activeUser = demoUser || (session?.user ? { name: session.user.email?.split("@")[0] || "User", role: "reviewer" } : null);
+  const { session, signOut } = useAuth();
+  const activeUser = session?.user
+    ? {
+        name: (session.user.user_metadata?.full_name as string) || session.user.email?.split("@")[0] || "User",
+        role: "Institutional Member",
+      }
+    : null;
 
   return (
     <header className="app-topbar sticky top-0 z-30 h-16 border-b border-border bg-bg-0">
