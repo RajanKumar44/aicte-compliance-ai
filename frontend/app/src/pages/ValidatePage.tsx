@@ -98,7 +98,7 @@ function ReviewList({ label, values }: { label: string; values: string[] }) {
 }
 
 export function ValidatePage() {
-  const { session } = useAuth();
+  const { session, demoUser } = useAuth();
   const location = useLocation();
   const [formState, setFormState] = useState<FormState>("form");
   const [form, setForm] = useState<ValidationRequest>(initialForm);
@@ -167,8 +167,8 @@ export function ValidatePage() {
       const apiResult = await validateDocuments(form);
       if (apiResult.ok) {
         setResult(apiResult.data);
-        if (saveToHistory && session) {
-          const saved = await saveRunUnified(form, apiResult.data, { session });
+        if (saveToHistory && (session || demoUser)) {
+          const saved = await saveRunUnified(form, apiResult.data, { session, demoUser });
           if (saved.ok) setSavedRunId(saved.data.id);
         }
         setFormState("success");
@@ -424,7 +424,7 @@ export function ValidatePage() {
                         </ul>
                       ) : <p className="mt-2 text-sm text-text-muted">No expiry dates entered</p>}
                     </div>
-                    {session ? (
+                    {session || demoUser ? (
                       <label className="flex items-start gap-3 border-t border-border pt-5 text-sm leading-relaxed text-text-body">
                         <input className="mt-1 h-4 w-4 accent-primary-500" type="checkbox" checked={saveToHistory} onChange={(event) => setSaveToHistory(event.target.checked)} disabled={formState === "loading"} />
                         <span>Save this request and result to institution audit history. Stored securely and retained for regulatory inspection.</span>
@@ -433,7 +433,7 @@ export function ValidatePage() {
                       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5 text-sm text-text-secondary">
                         <span>Save to history requires an institutional session.</span>
                         <Link to="/signin" className="font-bold text-text-heading underline underline-offset-4 hover:text-accent-strong">
-                          Sign In with Account →
+                          1-Click Demo Sign-in →
                         </Link>
                       </div>
                     )}

@@ -52,8 +52,10 @@ export function TopBar({ onMenuToggle, mobileMenuOpen }: { onMenuToggle: () => v
   const location = useLocation();
   const page = pageTitles[location.pathname] || pageTitles["/"];
   const { theme, setTheme } = useTheme();
-  const { session, signOut } = useAuth();
-  const activeUser = session?.user
+  const { session, demoUser, signOut } = useAuth();
+  const activeUser = demoUser
+    ? { name: demoUser.name, role: demoUser.role.replace(/_/g, " ") }
+    : session?.user
     ? {
         name: (session.user.user_metadata?.full_name as string) || session.user.email?.split("@")[0] || "User",
         role: "Institutional Member",

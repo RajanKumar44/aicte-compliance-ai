@@ -89,7 +89,7 @@ export function DocumentOcrVerifier({
   onPopulateDate,
   className = "",
 }: DocumentOcrVerifierProps) {
-  const [mode, setMode] = useState<"upload" | "sample">("upload");
+  const [mode, setMode] = useState<"upload" | "sample">("sample");
   const [selectedDocId, setSelectedDocId] = useState<string>("fire_noc_01");
   const [verifiedDocs, setVerifiedDocs] = useState<Record<string, boolean>>({});
 
