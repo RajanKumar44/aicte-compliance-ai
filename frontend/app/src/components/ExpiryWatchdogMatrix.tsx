@@ -164,7 +164,7 @@ ${institutionName}`;
       <CardContent className="space-y-6 p-5 sm:p-6">
         {/* Timeline Matrix Table */}
         <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="w-full min-w-[620px] text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-border bg-bg-2 text-text-muted font-bold uppercase tracking-wider">
                 <th className="p-3.5">Statutory Document</th>

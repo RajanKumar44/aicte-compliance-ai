@@ -586,6 +586,13 @@
 
 /* Theme component values live outside Tailwind's utility layers so these
    semantic defaults remain authoritative when utility classes are present. */
+.app-topbar {
+  background-color: var(--surface-page) !important;
+  border-bottom-style: solid;
+  border-bottom-width: var(--border-panel-width);
+  border-bottom-color: var(--rule);
+}
+
 .app-card {
   border-style: solid;
   border-width: var(--border-panel-width);
