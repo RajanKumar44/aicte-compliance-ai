@@ -457,7 +457,7 @@ export async function analyzeDocument(file: File): Promise<ApiResult<DocumentAna
       errors: { file: detail },
       raw: body,
     };
-  } catch (_error) {
+  } catch {
     return {
       ok: false,
       kind: "network",
@@ -553,7 +553,7 @@ export async function loginWithBackend(
       errors: Object.keys(mapped).length ? mapped : { _server: `Authentication error (${res.status}).` },
       raw: body,
     };
-  } catch (_error) {
+  } catch {
     return {
       ok: false,
       kind: "network",
@@ -580,7 +580,7 @@ export async function getBackendUserProfile(token: string): Promise<ApiResult<Ba
       errors: { _server: `Profile request failed (${res.status}).` },
       raw: body,
     };
-  } catch (_error) {
+  } catch {
     return {
       ok: false,
       kind: "network",
@@ -607,7 +607,7 @@ export async function seedBackendDemo(): Promise<ApiResult<{ status: string; dem
       errors: { _server: `Seed endpoint returned ${res.status}.` },
       raw: body,
     };
-  } catch (_error) {
+  } catch {
     return {
       ok: false,
       kind: "network",

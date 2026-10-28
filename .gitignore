@@ -17,6 +17,10 @@ dist/
 .env
 .env.*
 !.env.example
+*.db
+*.sqlite
+*.sqlite3
+node_modules/
 
 # OS / editor noise
 .DS_Store

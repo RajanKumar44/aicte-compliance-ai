@@ -24,7 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from ai.raster_benchmark import (
+from ai.raster_benchmark import (  # noqa: E402
     DATASET_LANG_TO_TESSERACT,
     SUPPORTED_IMAGE_CORRUPTIONS,
     MockRasterOCREngine,
@@ -1094,7 +1094,7 @@ class TestRenderingCapabilitySignalling:
             assert language_rendering_valid(lang) is True
 
     def _run(self, monkeypatch, capabilities, count=4):
-        from ai.raster_benchmark import (
+        from ai.raster_benchmark import (  # noqa: E402
             MockRasterOCREngine,
             RasterBenchmarkScorer,
             RasterDocumentGenerator,
