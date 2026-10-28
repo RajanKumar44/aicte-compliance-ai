@@ -1,9 +1,9 @@
 import logging
 import os
 from datetime import date, datetime, timezone
-from typing import Literal
+from typing import Any, Literal
 
-from fastapi import FastAPI, Depends
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
@@ -224,6 +224,129 @@ app.include_router(documents_router, prefix="/api/v1/applications", tags=["docum
 app.include_router(validation_router, prefix="/api/v1/applications", tags=["validation"])
 app.include_router(reviews_router, prefix="/api/v1", tags=["reviews"])
 app.include_router(audit_packages_router, prefix="/api/v1", tags=["audit-packages"])
+
+
+# ---------------------------------------------------------------------------
+# Document Analysis & Prototype History Integration
+# ---------------------------------------------------------------------------
+class CandidateFields(BaseModel):
+    expiry_date: str | None = None
+    issue_date: str | None = None
+    certificate_number: str | None = None
+    issuing_authority: str | None = None
+
+
+class DocumentAnalysisResponse(BaseModel):
+    filename: str
+    filesize_bytes: int
+    sha256: str
+    page_count: int
+    is_scanned_only: bool
+    extracted_text_preview: str
+    candidate_fields: CandidateFields
+    warnings: list[str]
+    notice: str
+
+
+@app.post("/api/v1/documents/analyze", response_model=DocumentAnalysisResponse, tags=["documents"])
+async def analyze_document_upload(file: UploadFile = File(...)) -> DocumentAnalysisResponse:
+    from backend.app.document_analyzer import DocumentAnalysisError, analyze_pdf_document
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is missing.")
+    content = await file.read()
+    try:
+        result = analyze_pdf_document(file.filename, content)
+        return DocumentAnalysisResponse(**result)
+    except DocumentAnalysisError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+
+
+@app.get("/api/v1/institutions", tags=["institutions"])
+def list_institutions(db: Session = Depends(get_db)) -> list[dict]:
+    """List institutions available to the user or prototype demo."""
+    from backend.app.db.models import Institution
+    try:
+        institutions = db.query(Institution).all()
+        if institutions:
+            return [
+                {
+                    "id": str(inst.id),
+                    "external_ref": inst.institution_id or "DEMO-INST-001",
+                    "display_name": inst.display_name or "Demo Engineering College",
+                    "role": "institution_admin",
+                }
+                for inst in institutions
+            ]
+    except Exception:
+        pass
+    return [
+        {
+            "id": "DEMO-INST-001",
+            "external_ref": "DEMO-INST-001",
+            "display_name": "Demo Engineering College",
+            "role": "institution_admin",
+        }
+    ]
+
+
+class SavedValidationRun(BaseModel):
+    id: str
+    institution_id: str
+    institution_name: str
+    application_type: str
+    created_at: str
+    checked_at: str
+    expires_at: str
+    request: dict[str, Any]
+    result: dict[str, Any]
+
+
+_SAVED_RUNS: list[SavedValidationRun] = []
+
+
+@app.post("/api/v1/validation-runs", response_model=SavedValidationRun, tags=["validation-runs"])
+def create_saved_validation_run(request: ValidationRequest) -> SavedValidationRun:
+    val_resp = validate_application(request)
+    now = datetime.now(timezone.utc)
+    run_id = f"run_{int(now.timestamp())}_{os.urandom(3).hex()}"
+    saved = SavedValidationRun(
+        id=run_id,
+        institution_id=request.institution_id,
+        institution_name=request.institution_id,
+        application_type=request.application_type,
+        created_at=now.isoformat(),
+        checked_at=val_resp.checked_at,
+        expires_at=datetime.fromtimestamp(now.timestamp() + 30 * 86400, timezone.utc).isoformat(),
+        request=request.model_dump(mode="json"),
+        result=val_resp.model_dump(mode="json"),
+    )
+    _SAVED_RUNS.insert(0, saved)
+    return saved
+
+
+@app.get("/api/v1/validation-runs", tags=["validation-runs"])
+def list_saved_validation_runs(limit: int = 25, offset: int = 0) -> dict:
+    items = _SAVED_RUNS[offset : offset + limit]
+    return {
+        "items": [item.model_dump() for item in items],
+        "has_more": offset + limit < len(_SAVED_RUNS),
+    }
+
+
+@app.get("/api/v1/validation-runs/{run_id}", response_model=SavedValidationRun, tags=["validation-runs"])
+def get_saved_validation_run(run_id: str) -> SavedValidationRun:
+    for run in _SAVED_RUNS:
+        if run.id == run_id:
+            return run
+    raise HTTPException(status_code=404, detail="Validation run not found.")
+
+
+@app.delete("/api/v1/validation-runs/{run_id}", status_code=204, tags=["validation-runs"])
+def delete_saved_validation_run(run_id: str) -> None:
+    global _SAVED_RUNS
+    _SAVED_RUNS = [run for run in _SAVED_RUNS if run.id != run_id]
+    return None
 
 
 # ---------------------------------------------------------------------------

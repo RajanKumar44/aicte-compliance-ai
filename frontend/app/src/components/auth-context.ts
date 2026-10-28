@@ -6,6 +6,8 @@ export type AuthContextValue = {
   loading: boolean;
   session: Session | null;
   user: User | null;
+  authMode: "backend" | "supabase" | null;
+  activeBackendUrl: string;
   signInWithPassword: (email: string, password: string) => Promise<string | null>;
   signUpWithPassword: (
     email: string,
@@ -13,6 +15,7 @@ export type AuthContextValue = {
     metadata?: { full_name?: string; institution_id?: string; institution_name?: string }
   ) => Promise<{ error: string | null; confirmationRequired?: boolean }>;
   sendSignInLink: (email: string) => Promise<string | null>;
+  signInWithBackend: (username: string, password: string) => Promise<string | null>;
   signOut: () => Promise<string | null>;
 };
 

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { Wifi, WifiOff, Loader2 } from "lucide-react";
-import { checkHealth } from "@/lib/api";
+import { checkHealth, API_BASE } from "@/lib/api";
 
 export function HealthIndicator() {
   const [status, setStatus] = useState<"checking" | "connected" | "unreachable">("checking");
@@ -21,7 +21,6 @@ export function HealthIndicator() {
 
   useEffect(() => {
     mountedRef.current = true;
-    // Defer initial check to avoid sync setState warning
     const initialCheck = () => {
       check();
     };
@@ -32,6 +31,15 @@ export function HealthIndicator() {
       clearInterval(interval);
     };
   }, [check]);
+
+  let targetHost = "same-origin / dev proxy";
+  try {
+    if (API_BASE) {
+      targetHost = new URL(API_BASE).hostname;
+    }
+  } catch {
+    targetHost = API_BASE;
+  }
 
   const config = {
     checking: {
@@ -69,7 +77,7 @@ export function HealthIndicator() {
           current.border
         )}
         aria-label={`API status: ${current.text}`}
-        title={lastChecked ? `Last checked: ${lastChecked.toLocaleTimeString()}` : "Checking API status…"}
+        title={`API Status: ${current.text} • Target: ${targetHost}${lastChecked ? ` • Last checked: ${lastChecked.toLocaleTimeString()}` : ""}`}
       >
         <span className={cn("w-2 h-2 rounded-full", current.dotColor)} aria-hidden="true" />
         {current.icon}

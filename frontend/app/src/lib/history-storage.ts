@@ -10,21 +10,68 @@ import {
 } from "./api";
 import type { Session } from "@supabase/supabase-js";
 
+const LOCAL_STORAGE_KEY = "aicte_local_validation_runs_v1";
+
+function getLocalRuns(): SavedValidationRun[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as SavedValidationRun[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistLocalRuns(runs: SavedValidationRun[]): void {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(runs));
+  } catch {
+    // Ignore quota or private mode errors
+  }
+}
+
+function saveLocalRun(run: SavedValidationRun): void {
+  const current = getLocalRuns();
+  const filtered = current.filter((item) => item.id !== run.id);
+  persistLocalRuns([run, ...filtered]);
+}
+
+function removeLocalRun(id: string): void {
+  const current = getLocalRuns();
+  persistLocalRuns(current.filter((item) => item.id !== id));
+}
+
 export async function saveRunUnified(
   request: ValidationRequest,
-  _result: ValidationResponse,
+  result: ValidationResponse,
   auth: { session: Session | null }
 ): Promise<ApiResult<SavedValidationRun>> {
-  if (!auth.session?.access_token) {
-    return {
-      ok: false,
-      kind: "validation",
-      status: 401,
-      errors: { auth: "You must be signed in with an institutional account to save validation history." },
-    };
+  const localRun: SavedValidationRun = {
+    id: `run_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+    institution_id: request.institution_id,
+    institution_name: request.institution_id,
+    application_type: request.application_type,
+    created_at: new Date().toISOString(),
+    checked_at: result.checked_at || new Date().toISOString(),
+    expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
+    request,
+    result,
+  };
+
+  saveLocalRun(localRun);
+
+  if (auth.session?.access_token) {
+    try {
+      const serverResult = await apiCreateSaved(request, auth.session.access_token);
+      if (serverResult.ok) {
+        saveLocalRun(serverResult.data);
+        return serverResult;
+      }
+    } catch {
+      // Fallback to local
+    }
   }
 
-  return apiCreateSaved(request, auth.session.access_token);
+  return { ok: true, data: localRun };
 }
 
 export async function fetchRunsUnified(
@@ -32,48 +79,78 @@ export async function fetchRunsUnified(
   limit = 25,
   offset = 0
 ): Promise<ApiResult<{ items: SavedValidationRun[]; has_more: boolean }>> {
-  if (!auth.session?.access_token) {
-    return {
-      ok: false,
-      kind: "validation",
-      status: 401,
-      errors: { auth: "Sign in with an authorized institutional account to access saved audit records." },
-    };
+  const localItems = getLocalRuns();
+
+  if (auth.session?.access_token) {
+    try {
+      const serverResult = await apiFetchRuns(auth.session.access_token, limit, offset);
+      if (serverResult.ok && serverResult.data.items.length > 0) {
+        // Merge and deduplicate
+        const serverIds = new Set(serverResult.data.items.map((i) => i.id));
+        const merged = [
+          ...serverResult.data.items,
+          ...localItems.filter((i) => !serverIds.has(i.id)),
+        ];
+        return {
+          ok: true,
+          data: {
+            items: merged.slice(offset, offset + limit),
+            has_more: serverResult.data.has_more || offset + limit < merged.length,
+          },
+        };
+      }
+    } catch {
+      // Fallback to local items
+    }
   }
 
-  return apiFetchRuns(auth.session.access_token, limit, offset);
+  const sliced = localItems.slice(offset, offset + limit);
+  return {
+    ok: true,
+    data: {
+      items: sliced,
+      has_more: offset + limit < localItems.length,
+    },
+  };
 }
 
 export async function fetchRunByIdUnified(
   id: string,
   auth: { session: Session | null }
 ): Promise<ApiResult<SavedValidationRun>> {
-  if (!auth.session?.access_token) {
-    return {
-      ok: false,
-      kind: "validation",
-      status: 401,
-      errors: { auth: "Sign in with an authorized institutional account to view this audit record." },
-    };
+  const localItems = getLocalRuns();
+  const localFound = localItems.find((item) => item.id === id);
+  if (localFound) {
+    return { ok: true, data: localFound };
   }
 
-  return apiFetchRun(id, auth.session.access_token);
+  if (auth.session?.access_token) {
+    return apiFetchRun(id, auth.session.access_token);
+  }
+
+  return {
+    ok: false,
+    kind: "validation",
+    status: 404,
+    errors: { not_found: "Validation record not found." },
+  };
 }
 
 export async function deleteRunUnified(
   id: string,
   auth: { session: Session | null }
 ): Promise<ApiResult<{ ok: true }>> {
-  if (!auth.session?.access_token) {
-    return {
-      ok: false,
-      kind: "validation",
-      status: 401,
-      errors: { auth: "Sign in to delete records from institutional history." },
-    };
+  removeLocalRun(id);
+
+  if (auth.session?.access_token) {
+    try {
+      await apiDeleteRun(id, auth.session.access_token);
+    } catch {
+      // Best-effort remote delete
+    }
   }
 
-  return apiDeleteRun(id, auth.session.access_token);
+  return { ok: true, data: { ok: true } };
 }
 
 function escapeCsvCell(text: string): string {

@@ -143,11 +143,17 @@ export function mapValidationErrors(
 
 // ── API client ─────────────────────────────────────────────────
 //
-// Base URL for the backend. Empty by default: in development the Vite dev
-// server proxies `/health` and `/api` to the FastAPI backend; in a split
-// deployment set VITE_API_BASE_URL in frontend/app/.env.local (no trailing
-// slash, e.g. "https://aicte-backend.example.com").
-const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "").trim().replace(/\/+$/, "");
+// Base URL for the backend. In local development (Vite dev server), empty string
+// uses the Vite proxy (/health and /api -> http://127.0.0.1:8000).
+// In production or when VITE_API_BASE_URL is set, uses the configured URL.
+// Defaults to the canonical Render backend deployment for this project.
+const DEFAULT_PROD_API_BASE = "https://aicte-compliance-api-preview.onrender.com";
+
+const RAW_API_BASE = import.meta.env.VITE_API_BASE_URL
+  ? import.meta.env.VITE_API_BASE_URL
+  : (import.meta.env.DEV ? "" : DEFAULT_PROD_API_BASE);
+
+export const API_BASE = RAW_API_BASE.trim().replace(/\/+$/, "");
 
 export function apiUrl(path: string): string {
   return `${API_BASE}${path}`;
@@ -461,3 +467,152 @@ export async function analyzeDocument(file: File): Promise<ApiResult<DocumentAna
   }
 }
 
+
+
+// ── Native Backend Integration & Diagnostics ─────────────────
+
+export interface ReadinessResponse {
+  service: string;
+  engine: string;
+  deployed_environment: boolean;
+  database_reachable: boolean;
+  migration_revision?: string | null;
+  users_table_present: boolean;
+  status: "ready" | "degraded";
+  reasons: string[];
+  notice: string;
+}
+
+export async function checkReadiness(): Promise<ApiResult<ReadinessResponse>> {
+  try {
+    const { response: res, body, parseError } = await fetchJson(apiUrl("/health/ready"));
+    if (res.ok && !parseError && isRecord(body) && typeof body.status === "string") {
+      return { ok: true, data: body as unknown as ReadinessResponse };
+    }
+    return {
+      ok: false,
+      kind: "server",
+      status: res.status,
+      errors: { _server: `Readiness check returned ${res.status}` },
+    };
+  } catch (error) {
+    const timedOut = error instanceof DOMException && error.name === "AbortError";
+    return {
+      ok: false,
+      kind: timedOut ? "timeout" : "network",
+      status: 0,
+      errors: {
+        _network: timedOut ? "Readiness check timed out." : "Unable to reach readiness probe.",
+      },
+    };
+  }
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+}
+
+export interface BackendUserProfile {
+  id: string;
+  username: string;
+  display_name: string;
+  is_active: boolean;
+}
+
+export async function loginWithBackend(
+  credentials: { username: string; password: string }
+): Promise<ApiResult<TokenResponse>> {
+  try {
+    const { response: res, body, parseError } = await fetchJson(apiUrl("/api/v1/auth/token"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(credentials),
+    });
+
+    if (res.ok && !parseError && isRecord(body) && typeof body.access_token === "string") {
+      return { ok: true, data: body as unknown as TokenResponse };
+    }
+
+    if (res.status === 401) {
+      return {
+        ok: false,
+        kind: "validation",
+        status: 401,
+        errors: { _auth: "Invalid username or password. Check credentials and try again." },
+        raw: body,
+      };
+    }
+
+    const mapped = mapValidationErrors(body);
+    return {
+      ok: false,
+      kind: "server",
+      status: res.status,
+      errors: Object.keys(mapped).length ? mapped : { _server: `Authentication error (${res.status}).` },
+      raw: body,
+    };
+  } catch (_error) {
+    return {
+      ok: false,
+      kind: "network",
+      status: 0,
+      errors: { _network: "Unable to reach backend authentication. Check server status." },
+    };
+  }
+}
+
+export async function getBackendUserProfile(token: string): Promise<ApiResult<BackendUserProfile>> {
+  try {
+    const { response: res, body, parseError } = await fetchJson(apiUrl("/api/v1/auth/me"), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (res.ok && !parseError && isRecord(body) && typeof body.id === "string") {
+      return { ok: true, data: body as unknown as BackendUserProfile };
+    }
+
+    return {
+      ok: false,
+      kind: "server",
+      status: res.status,
+      errors: { _server: `Profile request failed (${res.status}).` },
+      raw: body,
+    };
+  } catch (_error) {
+    return {
+      ok: false,
+      kind: "network",
+      status: 0,
+      errors: { _network: "Unable to reach backend profile endpoint." },
+    };
+  }
+}
+
+export async function seedBackendDemo(): Promise<ApiResult<{ status: string; demo_credentials?: Record<string, unknown> }>> {
+  try {
+    const { response: res, body, parseError } = await fetchJson(apiUrl("/api/v1/seed"), {
+      method: "POST",
+    });
+
+    if (res.ok && !parseError && isRecord(body)) {
+      return { ok: true, data: body as { status: string; demo_credentials?: Record<string, unknown> } };
+    }
+
+    return {
+      ok: false,
+      kind: "server",
+      status: res.status,
+      errors: { _server: `Seed endpoint returned ${res.status}.` },
+      raw: body,
+    };
+  } catch (_error) {
+    return {
+      ok: false,
+      kind: "network",
+      status: 0,
+      errors: { _network: "Unable to reach seed endpoint." },
+    };
+  }
+}
