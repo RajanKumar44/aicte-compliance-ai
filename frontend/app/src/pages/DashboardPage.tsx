@@ -13,6 +13,7 @@ import {
   Sparkles,
   ArrowUpRight,
   GraduationCap,
+  Archive,
 } from "lucide-react";
 import { Card, CardContent, CardTitle, CardDescription } from "@/components/Card";
 import { Button } from "@/components/Button";
@@ -117,6 +118,11 @@ export function DashboardPage() {
             <Link to="/validate">
               <Button size="lg" rightIcon={<ArrowRight className="h-4 w-4" />}>
                 Launch Scrutiny Workspace
+              </Button>
+            </Link>
+            <Link to="/vault">
+              <Button variant="secondary" size="lg" leftIcon={<Archive className="h-4 w-4" />}>
+                Document Vault
               </Button>
             </Link>
             <Link to="/history">

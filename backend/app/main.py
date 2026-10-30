@@ -1,10 +1,19 @@
 import os
 from datetime import UTC, date, datetime
 from typing import Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    UploadFile,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
@@ -507,6 +516,111 @@ class StoredDocument(BaseModel):
     scan_details: str
     created_at: str
     expires_at: str
+
+
+@app.post("/api/v1/documents", response_model=StoredDocument, status_code=201)
+async def upload_document(
+    file: UploadFile = File(...),
+    institution_id: UUID | None = Form(None),
+    institution_external_ref: str | None = Form(None),
+    document_type: str = Form("statutory_clearance"),
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> StoredDocument:
+    settings, token, user_id, client = context
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is missing.")
+    content = await file.read()
+
+    try:
+        analysis = analyze_pdf_document(file.filename, content)
+    except DocumentAnalysisError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+
+    # Look up institution memberships for current user
+    membership_res = await rest_request(
+        client,
+        settings,
+        token,
+        "GET",
+        "institution_memberships",
+        params={
+            "select": "role,institution_id,institutions(id,external_ref,display_name)",
+            "user_id": f"eq.{user_id}",
+        },
+    )
+    memberships = response_rows(membership_res)
+    target_inst_id: UUID | str | None = None
+
+    if institution_id:
+        for m in memberships:
+            if str(m.get("institution_id")) == str(institution_id):
+                target_inst_id = institution_id
+                break
+    elif institution_external_ref:
+        for m in memberships:
+            inst = m.get("institutions")
+            if isinstance(inst, list):
+                inst = inst[0] if inst else None
+            if isinstance(inst, dict) and inst.get("external_ref") == institution_external_ref:
+                target_inst_id = inst.get("id")
+                break
+    else:
+        if memberships:
+            target_inst_id = memberships[0].get("institution_id")
+
+    if not target_inst_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have active membership permissions for the target institution.",
+        )
+
+    clean_filename = "".join(c for c in file.filename if c.isalnum() or c in "._- ").strip() or "document.pdf"
+    doc_id = uuid4()
+    storage_path = f"{target_inst_id}/{doc_id}_{clean_filename}"
+
+    # Try uploading to Supabase Storage bucket 'documents'
+    try:
+        storage_url = f"{settings.url}/storage/v1/object/documents/{storage_path}"
+        await client.post(
+            storage_url,
+            content=content,
+            headers={
+                "apikey": settings.anon_key,
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/pdf",
+            },
+        )
+    except (httpx.HTTPError, OSError):
+        # Best-effort storage write; metadata is retained in database
+        pass
+
+    doc_row = {
+        "id": str(doc_id),
+        "institution_id": str(target_inst_id),
+        "uploaded_by": str(user_id),
+        "filename": file.filename,
+        "filesize_bytes": len(content),
+        "sha256": analysis["sha256"],
+        "storage_path": storage_path,
+        "document_type": document_type,
+        "extracted_metadata": analysis,
+        "scan_status": analysis.get("scan_status", "scan_unavailable"),
+        "scan_details": analysis.get("scan_details", ""),
+    }
+
+    insert_res = await rest_request(
+        client,
+        settings,
+        token,
+        "POST",
+        "institution_documents",
+        body=doc_row,
+        prefer="return=representation",
+    )
+    rows = response_rows(insert_res)
+    if not rows:
+        raise HTTPException(status_code=403, detail="Unable to record document metadata in institution vault.")
+    return StoredDocument(**rows[0])
 
 
 @app.get("/api/v1/documents", response_model=list[StoredDocument])

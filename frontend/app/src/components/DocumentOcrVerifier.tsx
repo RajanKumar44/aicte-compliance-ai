@@ -1,4 +1,5 @@
-import { useState, useRef, type ChangeEvent, type DragEvent } from "react";
+import { useState, useEffect, useRef, type ChangeEvent, type DragEvent } from "react";
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./Card";
 import { Button } from "./Button";
 import {
@@ -12,8 +13,23 @@ import {
   Loader2,
   AlertTriangle,
   RotateCcw,
+  Archive,
+  Download,
+  Trash2,
+  RefreshCw,
+  Lock,
+  ArrowRight,
 } from "lucide-react";
-import { analyzeDocument, type DocumentAnalysisResponse } from "../lib/api";
+import {
+  analyzeDocument,
+  fetchDocuments,
+  downloadStoredDocument,
+  deleteStoredDocument,
+  uploadAndStoreDocument,
+  type DocumentAnalysisResponse,
+  type StoredDocument,
+} from "../lib/api";
+import { useAuth } from "./useAuth";
 
 interface OCRSampleDoc {
   id: string;
@@ -89,12 +105,15 @@ export function DocumentOcrVerifier({
   onPopulateDate,
   className = "",
 }: DocumentOcrVerifierProps) {
-  const [mode, setMode] = useState<"upload" | "sample">("sample");
+  const { session } = useAuth();
+  const token = session?.access_token;
+
+  const [mode, setMode] = useState<"upload" | "vault" | "sample">("upload");
   const [selectedDocId, setSelectedDocId] = useState<string>("fire_noc_01");
   const [verifiedDocs, setVerifiedDocs] = useState<Record<string, boolean>>({});
 
   // Real Upload state
-  const [_uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<DocumentAnalysisResponse | null>(null);
@@ -103,6 +122,18 @@ export function DocumentOcrVerifier({
   const [isConfirmedUpload, setIsConfirmedUpload] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Vault upload / persistence state
+  const [isSavingToVault, setIsSavingToVault] = useState(false);
+  const [vaultSaveSuccess, setVaultSaveSuccess] = useState<string | null>(null);
+  const [vaultSaveError, setVaultSaveError] = useState<string | null>(null);
+
+  // Stored Documents Vault state
+  const [vaultDocs, setVaultDocs] = useState<StoredDocument[]>([]);
+  const [vaultLoading, setVaultLoading] = useState(false);
+  const [vaultError, setVaultError] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const activeDoc = OCR_SAMPLES.find((d) => d.id === selectedDocId) || OCR_SAMPLES[0];
   const isSampleVerified = verifiedDocs[activeDoc.id] ?? false;
@@ -114,9 +145,34 @@ export function DocumentOcrVerifier({
     }
   };
 
+  const loadVaultDocuments = async () => {
+    if (!token) return;
+    setVaultLoading(true);
+    setVaultError(null);
+    const result = await fetchDocuments(token);
+    setVaultLoading(false);
+    if (result.ok) {
+      setVaultDocs(result.data);
+    } else {
+      setVaultError(
+        result.kind === "network"
+          ? "Network error: Unable to reach document service."
+          : "Could not load stored documents."
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (mode === "vault" && token) {
+      void loadVaultDocuments();
+    }
+  }, [mode, token]);
+
   const handleFileProcess = async (file: File) => {
     setUploadError(null);
     setIsConfirmedUpload(false);
+    setVaultSaveSuccess(null);
+    setVaultSaveError(null);
 
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       setUploadError("Only PDF documents (.pdf) are supported for regulatory compliance analysis.");
@@ -144,6 +200,52 @@ export function DocumentOcrVerifier({
       setAnalysisResult(null);
       const errMsg = result.errors.file || "Failed to analyze document. Ensure it is a valid non-encrypted PDF.";
       setUploadError(errMsg);
+    }
+  };
+
+  const handleSaveToVault = async () => {
+    if (!uploadedFile || !token) return;
+    setIsSavingToVault(true);
+    setVaultSaveError(null);
+    setVaultSaveSuccess(null);
+
+    const result = await uploadAndStoreDocument(uploadedFile, token, {
+      documentType: selectedTargetType,
+    });
+    setIsSavingToVault(false);
+
+    if (result.ok) {
+      setVaultSaveSuccess(`Saved to Institution Vault successfully.`);
+      if (mode === "vault") {
+        void loadVaultDocuments();
+      }
+    } else {
+      setVaultSaveError(result.errors.file || "Failed to save document to institutional vault.");
+    }
+  };
+
+  const handleDownloadDoc = async (doc: StoredDocument) => {
+    if (!token) return;
+    setDownloadingId(doc.id);
+    const res = await downloadStoredDocument(doc.id, doc.filename, token);
+    setDownloadingId(null);
+    if (!res.ok) {
+      alert(res.error || "Download failed.");
+    }
+  };
+
+  const handleDeleteDoc = async (docId: string) => {
+    if (!token) return;
+    if (!window.confirm("Are you sure you want to delete this document from the institutional vault?")) {
+      return;
+    }
+    setDeletingId(docId);
+    const res = await deleteStoredDocument(docId, token);
+    setDeletingId(null);
+    if (res.ok) {
+      setVaultDocs((prev) => prev.filter((d) => d.id !== docId));
+    } else {
+      alert("Failed to delete document.");
     }
   };
 
@@ -189,6 +291,8 @@ export function DocumentOcrVerifier({
     setUploadError(null);
     setIsConfirmedUpload(false);
     setCustomExpiryDate("");
+    setVaultSaveSuccess(null);
+    setVaultSaveError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -208,10 +312,10 @@ export function DocumentOcrVerifier({
               </p>
             </div>
             <CardTitle className="mt-1 text-lg font-bold text-text-heading">
-              PDF Analysis & Metadata Verification
+              PDF Analysis & Document Vault
             </CardTitle>
             <CardDescription className="text-xs text-text-secondary">
-              Upload statutory certificates for in-memory text extraction, expiry detection, and human verification.
+              Upload statutory certificates for in-memory text extraction, expiry detection, security scanning, and institutional archival.
             </CardDescription>
           </div>
 
@@ -227,6 +331,18 @@ export function DocumentOcrVerifier({
               }`}
             >
               Upload Real PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("vault")}
+              className={`rounded px-3 py-1 text-xs font-bold transition-all flex items-center gap-1.5 ${
+                mode === "vault"
+                  ? "bg-bg-1 text-text-heading shadow-sm border border-border"
+                  : "text-text-muted hover:text-text-heading"
+              }`}
+            >
+              <Archive className="h-3 w-3" />
+              Document Vault
             </button>
             <button
               type="button"
@@ -274,7 +390,7 @@ export function DocumentOcrVerifier({
                 </h4>
                 <p className="mt-1 text-xs text-text-secondary max-w-md mx-auto">
                   Enforces strict PDF structure validation. Maximum file size: 10 MiB. Files are processed
-                  securely in-memory and raw document contents are never retained.
+                  securely in-memory with ClamAV malware scanning and text extraction.
                 </p>
 
                 <div className="mt-4 flex items-center justify-center gap-3">
@@ -300,7 +416,7 @@ export function DocumentOcrVerifier({
                   Analyzing PDF Structure & Statutory Metadata...
                 </h4>
                 <p className="text-xs text-text-secondary max-w-sm mx-auto">
-                  Inspecting PDF header, checking encryption, extracting text streams, and parsing candidate dates.
+                  Inspecting PDF header, running antivirus validation, checking OCR availability, extracting text streams, and parsing candidate dates.
                 </p>
               </div>
             ) : analysisResult ? (
@@ -346,11 +462,11 @@ export function DocumentOcrVerifier({
                         Antivirus Status: {
                           analysisResult.scan_status === "clean" ? "Clean (Verified)"
                           : analysisResult.scan_status === "infected" ? "Infected (Blocked)"
-                          : "Scanner Unavailable"
+                          : "Scanner Standby / Prototype"
                         }
                       </p>
                       <p className="text-[11px] text-text-secondary mt-0.5">
-                        {analysisResult.scan_details || "File inspected for structural conformance and text extraction."}
+                        {analysisResult.scan_details || "File inspected for structural conformance and security hygiene."}
                       </p>
                     </div>
                   </div>
@@ -367,7 +483,7 @@ export function DocumentOcrVerifier({
                       </p>
                       <p className="text-[11px] text-text-secondary mt-0.5">
                         {analysisResult.ocr_status === "unavailable"
-                          ? "Host environment lacks tesseract-ocr; text extraction used selectable font streams."
+                          ? "Host environment lacks tesseract-ocr; text extraction parsed selectable font streams."
                           : "Text streams extracted and parsed for statutory clearance candidate dates."}
                       </p>
                     </div>
@@ -424,6 +540,56 @@ export function DocumentOcrVerifier({
                       <p className="font-mono text-[10px] text-text-muted bg-bg-0 p-2 rounded border border-border break-all">
                         {analysisResult.sha256}
                       </p>
+                    </div>
+
+                    {/* Vault Storage Action */}
+                    <div className="rounded-lg border border-border bg-bg-2 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-text-heading flex items-center gap-1.5">
+                          <Archive className="h-3.5 w-3.5 text-accent-strong" />
+                          Institutional Vault Storage
+                        </span>
+                        {token ? (
+                          <span className="text-[10px] text-success-text font-bold">Authenticated</span>
+                        ) : (
+                          <span className="text-[10px] text-text-muted font-bold">Sign-in Required</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-text-secondary">
+                        Store this validated statutory certificate in your institution&apos;s encrypted vault for audit trails and repeat submissions.
+                      </p>
+                      {token ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          fullWidth
+                          onClick={handleSaveToVault}
+                          disabled={isSavingToVault || !!vaultSaveSuccess}
+                          leftIcon={isSavingToVault ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
+                        >
+                          {isSavingToVault ? "Storing in Vault..." : vaultSaveSuccess ? "Document Stored in Vault" : "Save Document to Vault"}
+                        </Button>
+                      ) : (
+                        <Link
+                          to="/signin"
+                          className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border bg-bg-0 px-3 py-1.5 text-xs font-bold text-text-heading hover:bg-bg-1"
+                        >
+                          <Lock className="h-3 w-3" />
+                          Sign In to Archive in Vault
+                        </Link>
+                      )}
+                      {vaultSaveSuccess && (
+                        <p className="text-xs text-success-text font-bold flex items-center gap-1">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          {vaultSaveSuccess}
+                        </p>
+                      )}
+                      {vaultSaveError && (
+                        <p className="text-xs text-error-text font-bold flex items-center gap-1">
+                          <AlertCircle className="h-3.5 w-3.5" />
+                          {vaultSaveError}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -534,6 +700,161 @@ export function DocumentOcrVerifier({
                 </div>
               </div>
             ) : null}
+          </div>
+        ) : mode === "vault" ? (
+          /* INSTITUTIONAL DOCUMENT VAULT */
+          <div className="space-y-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-text-heading flex items-center gap-2">
+                  <Archive className="h-4 w-4 text-accent-strong" />
+                  Institutional Document Vault
+                </h3>
+                <p className="text-xs text-text-secondary">
+                  Encrypted repository of verified statutory certificates, NOCs, and regulatory filings.
+                </p>
+              </div>
+
+              {token && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={loadVaultDocuments}
+                  disabled={vaultLoading}
+                  leftIcon={<RefreshCw className={`h-3 w-3 ${vaultLoading ? "animate-spin" : ""}`} />}
+                >
+                  Refresh Vault
+                </Button>
+              )}
+            </div>
+
+            {!token ? (
+              <div className="rounded-xl border border-border bg-bg-1 p-8 text-center space-y-4 max-w-lg mx-auto">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-accent-strong/10 text-accent-strong">
+                  <Lock className="h-6 w-6" />
+                </div>
+                <h4 className="text-sm font-bold text-text-heading">Institutional Authentication Required</h4>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                  Access to the institutional document vault is restricted to authenticated applicants, reviewers, and institution administrators. Sign in with your registered credentials to browse or download stored certificates.
+                </p>
+                <Link
+                  to="/signin"
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-accent-strong px-4 py-2 text-xs font-bold text-bg-0 hover:opacity-90"
+                >
+                  <span>Sign In to Your Institution</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            ) : vaultLoading && vaultDocs.length === 0 ? (
+              <div className="rounded-xl border border-border bg-bg-0 p-12 text-center space-y-3">
+                <Loader2 className="h-6 w-6 animate-spin text-accent-strong mx-auto" />
+                <p className="text-xs font-bold text-text-heading">Retrieving Stored Certificates...</p>
+              </div>
+            ) : vaultError ? (
+              <div className="rounded-lg border border-warning-border bg-warning-bg/40 p-4 text-xs text-warning-text flex items-center justify-between">
+                <span>{vaultError}</span>
+                <Button variant="secondary" size="sm" onClick={loadVaultDocuments}>
+                  Retry
+                </Button>
+              </div>
+            ) : vaultDocs.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border bg-bg-0 p-10 text-center space-y-3">
+                <FileText className="h-8 w-8 text-text-muted mx-auto" />
+                <h4 className="text-xs font-bold text-text-heading">No Stored Documents in Vault Yet</h4>
+                <p className="text-xs text-text-secondary max-w-sm mx-auto">
+                  Upload a PDF in the &quot;Upload Real PDF&quot; tab and select &quot;Save Document to Vault&quot; to archive it here.
+                </p>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setMode("upload")}
+                >
+                  Upload First Document
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="grid gap-3">
+                  {vaultDocs.map((doc) => {
+                    const expiry = doc.extracted_metadata?.candidate_fields &&
+                      typeof doc.extracted_metadata.candidate_fields === "object" &&
+                      "expiry_date" in doc.extracted_metadata.candidate_fields
+                        ? String((doc.extracted_metadata.candidate_fields as Record<string, unknown>).expiry_date || "")
+                        : "";
+
+                    return (
+                      <div
+                        key={doc.id}
+                        className="rounded-lg border border-border bg-bg-1 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between transition hover:border-border-focus"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-accent-strong shrink-0" />
+                            <span className="font-bold text-xs text-text-heading truncate max-w-[260px] sm:max-w-[340px]">
+                              {doc.filename}
+                            </span>
+                            <span className="rounded bg-bg-2 px-2 py-0.5 text-[10px] font-bold text-text-muted border border-border">
+                              {doc.document_type}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 text-[11px] text-text-secondary">
+                            <span>Size: {(doc.filesize_bytes / 1024).toFixed(1)} KB</span>
+                            <span>•</span>
+                            <span>Uploaded: {doc.created_at ? new Date(doc.created_at).toLocaleDateString() : "—"}</span>
+                            {expiry && (
+                              <>
+                                <span>•</span>
+                                <span className="font-mono text-accent-strong font-bold">Expiry: {expiry}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-center">
+                          {expiry && onPopulateDate && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                onPopulateDate(doc.document_type, expiry);
+                                alert(`Populated expiry date ${expiry} for ${doc.document_type} into form.`);
+                              }}
+                              className="text-xs font-semibold"
+                            >
+                              Use in Form
+                            </Button>
+                          )}
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={downloadingId === doc.id}
+                            onClick={() => handleDownloadDoc(doc)}
+                            leftIcon={
+                              downloadingId === doc.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Download className="h-3.5 w-3.5" />
+                              )
+                            }
+                          >
+                            Download
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={deletingId === doc.id}
+                            onClick={() => handleDeleteDoc(doc.id)}
+                            className="text-error-text hover:bg-error-bg/30"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           /* SAMPLE BENCHMARK SPECIMENS */

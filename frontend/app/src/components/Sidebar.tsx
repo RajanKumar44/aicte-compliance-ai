@@ -10,12 +10,14 @@ import {
   Shield,
   X,
   GraduationCap,
+  Archive,
 } from "lucide-react";
 import { Button } from "./Button";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/validate", label: "Validate", icon: ClipboardCheck },
+  { path: "/vault", label: "Document Vault", icon: Archive },
   { path: "/cadre-calculator", label: "Cadre & FSR Norms", icon: GraduationCap },
   { path: "/history", label: "Audit History", icon: Clock3 },
   { path: "/about", label: "Compliance Guide", icon: Info },

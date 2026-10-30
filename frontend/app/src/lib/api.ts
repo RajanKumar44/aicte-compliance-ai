@@ -92,6 +92,22 @@ export interface DocumentAnalysisResponse {
   notice: string;
 }
 
+export interface StoredDocument {
+  id: string;
+  institution_id: string;
+  uploaded_by: string;
+  filename: string;
+  filesize_bytes: number;
+  sha256: string;
+  storage_path: string;
+  document_type: string;
+  extracted_metadata: Record<string, unknown>;
+  scan_status: "clean" | "infected" | "scan_unavailable" | string;
+  scan_details: string;
+  created_at: string;
+  expires_at: string;
+}
+
 export interface SavedValidationRunPage {
   items: SavedValidationRun[];
   has_more: boolean;
@@ -474,5 +490,138 @@ export async function analyzeDocument(file: File): Promise<ApiResult<DocumentAna
       errors: { file: "Unable to reach the document analysis service. Please check backend connection." },
     };
   }
+}
+
+function isStoredDocument(value: unknown): value is StoredDocument {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.filename === "string"
+    && typeof value.storage_path === "string";
+}
+
+function isStoredDocumentList(value: unknown): value is StoredDocument[] {
+  return Array.isArray(value) && value.every(isStoredDocument);
+}
+
+export function fetchDocuments(token: string) {
+  return authenticatedJson<StoredDocument[]>(
+    "/api/v1/documents",
+    token,
+    {},
+    isStoredDocumentList,
+  );
+}
+
+export function fetchDocument(documentId: string, token: string) {
+  return authenticatedJson<StoredDocument>(
+    `/api/v1/documents/${encodeURIComponent(documentId)}`,
+    token,
+    {},
+    isStoredDocument,
+  );
+}
+
+export async function uploadAndStoreDocument(
+  file: File,
+  token: string,
+  options?: {
+    institutionId?: string;
+    institutionExternalRef?: string;
+    documentType?: string;
+  },
+): Promise<ApiResult<StoredDocument>> {
+  if (file.size > 10 * 1024 * 1024) {
+    return {
+      ok: false,
+      kind: "validation",
+      status: 413,
+      errors: { file: "File exceeds maximum permitted size of 10 MiB." },
+    };
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+  if (options?.institutionId) {
+    formData.append("institution_id", options.institutionId);
+  }
+  if (options?.institutionExternalRef) {
+    formData.append("institution_external_ref", options.institutionExternalRef);
+  }
+  if (options?.documentType) {
+    formData.append("document_type", options.documentType);
+  }
+
+  try {
+    const res = await fetch(apiUrl("/api/v1/documents"), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+    const body = await res.json().catch(() => null);
+    if (res.ok && isStoredDocument(body)) {
+      return { ok: true, data: body };
+    }
+    const detail = (body && typeof (body as Record<string, unknown>).detail === "string")
+      ? (body as Record<string, unknown>).detail as string
+      : `Document upload failed (${res.status}).`;
+    return {
+      ok: false,
+      kind: res.status >= 500 ? "server" : "validation",
+      status: res.status,
+      errors: { file: detail },
+      raw: body,
+    };
+  } catch {
+    return {
+      ok: false,
+      kind: "network",
+      status: 0,
+      errors: { file: "Unable to reach the document storage service." },
+    };
+  }
+}
+
+export async function downloadStoredDocument(
+  documentId: string,
+  filename: string,
+  token: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(apiUrl(`/api/v1/documents/${encodeURIComponent(documentId)}/download`), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      const detail = (body && typeof (body as Record<string, unknown>).detail === "string")
+        ? (body as Record<string, unknown>).detail as string
+        : `Download failed (${res.status}).`;
+      return { ok: false, error: detail };
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "document.pdf";
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error during download." };
+  }
+}
+
+export function deleteStoredDocument(documentId: string, token: string) {
+  return authenticatedJson<{ ok: true }>(
+    `/api/v1/documents/${encodeURIComponent(documentId)}`,
+    token,
+    { method: "DELETE" },
+    (body): body is { ok: true } => body === null,
+  );
 }
 

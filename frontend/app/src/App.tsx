@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ValidatePage } from "./pages/ValidatePage";
+import { DocumentVaultPage } from "./pages/DocumentVaultPage";
 import { AboutPage } from "./pages/AboutPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
 import { TermsPage } from "./pages/TermsPage";
@@ -16,6 +17,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/validate" element={<ValidatePage />} />
+        <Route path="/vault" element={<DocumentVaultPage />} />
         <Route path="/cadre-calculator" element={<CadreCalculatorPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
