@@ -1,34 +1,24 @@
-# Code ownership hints for this repository.
-#
-# IMPORTANT — what this file can and cannot do:
-#   CODEOWNERS only requests reviewers. It does NOT block a merge unless branch
-#   protection is configured to "Require review from Code Owners" for the branch.
-#   This session could not read branch protection (the API returned 403), so treat
-#   these rules as advisory until an owner verifies the setting in
-#   GitHub -> Settings -> Branches.
-#
-# The three workstream contributors are not yet named (see WORKSTREAMS.md).
-# Add their GitHub handles below when the repository owner assigns them; using a
-# handle that has no write access to the repository makes the rule ineffective.
+# AICTE Compliance AI — Code Owners
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 
-# Default owner for anything not matched below.
-*                           @rajaryan1111
+# Global project owner
+* @RajanKumar44
 
-# Shared surfaces: any change needs review from the other workstreams.
-/WORKSTREAMS.md             @rajaryan1111
-/README.md                  @rajaryan1111
-/pyproject.toml             @rajaryan1111
-/.gitignore                 @rajaryan1111
-/.env.example               @rajaryan1111
-/.python-version            @rajaryan1111
-/docs/                      @rajaryan1111
-/.github/                   @rajaryan1111
+# Frontend workspace, React components, and styling
+/frontend/ @RajanKumar44 @rajaryan1111
 
-# Backend / platform workstream (also currently owns the OCR implementation).
-/backend/                   @rajaryan1111
+# Backend FastAPI services, API routers, and test suites
+/backend/ @RajanKumar44 @ravikantraj25
 
-# Frontend workstream placeholder — no implementation exists yet.
-# /frontend/                @frontend-owner
+# Supabase PostgreSQL migrations, RLS policies, and SQL functions
+/supabase/migrations/ @RajanKumar44 @ravikantraj25
 
-# AI / OCR workstream placeholder — no implementation exists yet.
-# /ai/                      @ai-owner
+# CI/CD Workflows, GitHub Actions, and deployment manifests
+/.github/workflows/ @RajanKumar44
+/vercel.json @RajanKumar44
+/render.yaml @RajanKumar44
+/api/ @RajanKumar44
+
+# Canonical AICTE regulatory rules and APH compliance documentation
+/docs/canonical/ @RajanKumar44 @rajaryan1111
+/backend/app/aicte_rules.py @RajanKumar44

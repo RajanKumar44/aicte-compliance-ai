@@ -1,0 +1,28 @@
+name: "🚀 Feature Request"
+description: "Suggest an idea or feature for AICTE Compliance AI"
+title: "[FEAT] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: "Thank you for contributing feature suggestions to the AICTE Compliance AI platform!"
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to an institutional compliance bottleneck or regulatory update?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Proposed Solution / Architectural Design
+      description: Describe the solution you'd like to see implemented.
+    validations:
+      required: true
+  - type: textarea
+    id: regulatory_context
+    attributes:
+      label: AICTE Regulatory Context
+      description: Cite applicable Approval Process Handbook (APH) clauses or Council notifications.
+      placeholder: "e.g. AICTE Approval Process Handbook 2024-27, Chapter II, Clause 2.4"

@@ -12,8 +12,6 @@ from typing import Any, Literal
 from uuid import uuid4
 
 import httpx
-
-logger = logging.getLogger("action_planner")
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
@@ -26,6 +24,7 @@ from .history_store import (
     verify_user,
 )
 
+logger = logging.getLogger("action_planner")
 router = APIRouter(prefix="/api/v1/actions", tags=["action-planner"])
 
 ActionPriority = Literal["critical", "high", "medium", "low"]
