@@ -83,8 +83,10 @@ export function SignInPage() {
     setSubmitting(false);
     if (result.error) {
       setError(result.error);
+    } else if (result.confirmationRequired) {
+      setMessage("Account created. Confirm your email address to activate the session, then sign in.");
     } else {
-      setMessage("Account created and signed in successfully! Instant institutional session is active.");
+      setMessage("Account created and signed in. Your account is verified by the authentication service and your institution membership has been created in the database.");
     }
   }
 
