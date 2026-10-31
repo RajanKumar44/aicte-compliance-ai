@@ -628,3 +628,40 @@ export async function deleteStoredDocument(documentId: string, token: string): P
   );
 }
 
+
+
+export interface ServerVerifiedIdentity {
+  authenticated: boolean;
+  user_id: string;
+  email: string | null;
+  role: string;
+  institution_id: string | null;
+  institution_name: string | null;
+  membership_verified: boolean;
+  database_memberships: Array<{
+    role: string;
+    created_at?: string;
+    institutions?: {
+      id?: string;
+      external_ref?: string;
+      display_name?: string;
+    };
+  }>;
+  email_confirmed_at: string | null;
+  user_metadata: Record<string, unknown>;
+  app_metadata: Record<string, unknown>;
+  server_verified_at: string;
+  auth_provider: string;
+}
+
+export async function fetchServerIdentity(token?: string | null): Promise<ServerVerifiedIdentity> {
+  const headers: HeadersInit = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(apiUrl("/api/v1/me"), { headers });
+  if (!res.ok) {
+    const errorBody = (await res.json().catch(() => ({ detail: "Unknown verification error" }))) as { detail?: string };
+    throw new Error(errorBody.detail || `Server verification failed with status ${res.status}`);
+  }
+  return res.json();
+}

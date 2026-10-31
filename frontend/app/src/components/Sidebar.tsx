@@ -13,6 +13,7 @@ import {
   Archive,
   CheckSquare,
   Scale,
+  UserCheck,
 } from "lucide-react";
 import { Button } from "./Button";
 
@@ -26,6 +27,7 @@ const navItems = [
   { path: "/cadre-calculator", label: "Cadre & FSR Norms", icon: GraduationCap },
   { path: "/history", label: "Audit History", icon: Clock3 },
   { path: "/about", label: "Compliance Guide", icon: Info },
+  { path: "/session-check", label: "Session Inspector", icon: UserCheck },
 ] as const;
 
 export function Sidebar({

@@ -18,6 +18,7 @@ import {
   Archive,
   CheckSquare,
   Scale,
+  UserCheck,
   Bell,
   CheckCheck,
 } from "lucide-react";
@@ -69,6 +70,11 @@ const pageTitles: Record<string, { title: string; description: string; icon: Rea
     title: "Audit History",
     description: "Saved institutional runs",
     icon: <Clock3 className="h-5 w-5" />,
+  },
+  "/session-check": {
+    title: "Session Inspector",
+    description: "Server-side Supabase authentication sanity check",
+    icon: <UserCheck className="h-5 w-5" />,
   },
   "/about": {
     title: "Compliance Guide",

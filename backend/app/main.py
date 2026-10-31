@@ -28,6 +28,7 @@ from .application_service import (
 from .document_analyzer import DocumentAnalysisError, analyze_pdf_document
 from .history_store import (
     SupabaseSettings,
+    _headers,
     bearer_token,
     require_settings,
     response_rows,
@@ -261,6 +262,109 @@ def get_version() -> VersionResponse:
 @app.get("/health", response_model=HealthResponse)
 def health_check() -> HealthResponse:
     return HealthResponse(status="ok", service="aicte-compliance-assistant")
+
+
+class MeResponse(BaseModel):
+    authenticated: bool
+    user_id: str
+    email: str | None = None
+    role: str = "applicant"
+    institution_id: str | None = None
+    institution_name: str | None = None
+    membership_verified: bool = False
+    database_memberships: list[dict[str, Any]] = Field(default_factory=list)
+    email_confirmed_at: str | None = None
+    user_metadata: dict[str, Any] = Field(default_factory=dict)
+    app_metadata: dict[str, Any] = Field(default_factory=dict)
+    server_verified_at: str
+    auth_provider: str = "supabase"
+
+
+@app.get("/api/v1/me", response_model=MeResponse, tags=["Authentication"])
+async def get_current_user_profile(
+    authorization: str | None = Header(default=None),
+    client: httpx.AsyncClient = Depends(_supabase_client),
+) -> MeResponse:
+    """Sanity-check endpoint reporting server-verified identity from Supabase Auth and database RLS.
+
+    Returns the genuine identity that backend endpoints and Row Level Security see.
+    Rejects missing, fake or expired bearer tokens with HTTP 401.
+    """
+    settings = require_settings()
+    token = bearer_token(authorization)
+    try:
+        response = await client.get(
+            f"{settings.url}/auth/v1/user",
+            headers=_headers(settings, token),
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail="Authentication service is unavailable.") from exc
+
+    if response.status_code in (401, 403):
+        raise HTTPException(
+            status_code=401,
+            detail="Session token was rejected by Supabase Auth server. Session is expired, fake, or invalid.",
+        )
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication service returned an unexpected error verifying this session.",
+        )
+
+    user_data = response.json()
+    user_id = str(user_data.get("id"))
+    email = user_data.get("email")
+    email_confirmed_at = user_data.get("email_confirmed_at") or user_data.get("confirmed_at")
+    user_metadata = user_data.get("user_metadata") or {}
+    app_metadata = user_data.get("app_metadata") or {}
+
+    role = user_metadata.get("role", "applicant")
+    institution_id = user_metadata.get("institution_id")
+    institution_name = user_metadata.get("institution_name")
+    database_memberships: list[dict[str, Any]] = []
+    membership_verified = False
+
+    try:
+        mem_resp = await rest_request(
+            client,
+            settings,
+            token,
+            "GET",
+            "institution_memberships?select=role,created_at,institutions(id,external_ref,display_name)",
+        )
+        if mem_resp.status_code == 200:
+            rows = mem_resp.json()
+            if isinstance(rows, list) and len(rows) > 0:
+                database_memberships = rows
+                membership_verified = True
+                first_row = rows[0]
+                role = first_row.get("role") or role
+                inst = first_row.get("institutions")
+                if isinstance(inst, dict):
+                    institution_id = inst.get("external_ref") or inst.get("id") or institution_id
+                    institution_name = inst.get("display_name") or institution_name
+                elif isinstance(inst, list) and len(inst) > 0:
+                    institution_id = inst[0].get("external_ref") or inst[0].get("id") or institution_id
+                    institution_name = inst[0].get("display_name") or institution_name
+    except (httpx.HTTPError, HTTPException, KeyError, TypeError, ValueError):
+        # Best-effort database membership retrieval
+        database_memberships = []
+
+    return MeResponse(
+        authenticated=True,
+        user_id=user_id,
+        email=email,
+        role=role,
+        institution_id=institution_id,
+        institution_name=institution_name,
+        membership_verified=membership_verified,
+        database_memberships=database_memberships,
+        email_confirmed_at=email_confirmed_at,
+        user_metadata=user_metadata,
+        app_metadata=app_metadata,
+        server_verified_at=datetime.now(UTC).isoformat(),
+        auth_provider="supabase",
+    )
 
 
 @app.post("/api/v1/validate", response_model=ValidationResponse)

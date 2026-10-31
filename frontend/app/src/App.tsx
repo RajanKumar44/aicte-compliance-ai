@@ -13,6 +13,7 @@ import { ApplicationsPage } from "./pages/ApplicationsPage";
 import { ApplicationDetailPage } from "./pages/ApplicationDetailPage";
 import { CadreCalculatorPage } from "./pages/CadreCalculatorPage";
 import { SignInPage } from "./pages/SignInPage";
+import { SessionInspectorPage } from "./pages/SessionInspectorPage";
 import { RequireAuth } from "./components/RequireAuth";
 
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/signin" element={<SignInPage />} />
+        <Route path="/session-check" element={<SessionInspectorPage />} />
         <Route path="/applications" element={<RequireAuth><ApplicationsPage /></RequireAuth>} />
         <Route path="/applications/:applicationId" element={<RequireAuth><ApplicationDetailPage /></RequireAuth>} />
         <Route path="/history" element={<RequireAuth><HistoryPage /></RequireAuth>} />
