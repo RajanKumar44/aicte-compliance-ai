@@ -212,6 +212,39 @@ def _saved_run(row: dict[str, Any]) -> SavedValidationRun:
         raise HTTPException(status_code=503, detail="Stored history record is invalid.") from exc
 
 
+class VersionResponse(BaseModel):
+    service: str = "aicte-compliance-assistant"
+    version: str = "0.5.0"
+    environment: str = "production"
+    commit_sha: str = "unknown"
+    build_time: str = ""
+
+
+@app.get("/version", response_model=VersionResponse)
+def get_version() -> VersionResponse:
+    commit_sha = (
+        os.getenv("VERCEL_GIT_COMMIT_SHA")
+        or os.getenv("RENDER_GIT_COMMIT")
+        or os.getenv("GIT_COMMIT_SHA")
+        or os.getenv("GITHUB_SHA")
+        or "dev-local"
+    )
+    environment = (
+        os.getenv("VERCEL_ENV")
+        or os.getenv("RENDER_ENV")
+        or os.getenv("ENVIRONMENT")
+        or "production"
+    )
+    build_time = os.getenv("BUILD_TIMESTAMP") or datetime.now(UTC).isoformat()
+    return VersionResponse(
+        service="aicte-compliance-assistant",
+        version="0.5.0",
+        environment=environment,
+        commit_sha=commit_sha,
+        build_time=build_time,
+    )
+
+
 @app.get("/health", response_model=HealthResponse)
 def health_check() -> HealthResponse:
     return HealthResponse(status="ok", service="aicte-compliance-assistant")

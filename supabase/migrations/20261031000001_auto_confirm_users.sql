@@ -22,3 +22,4 @@ create trigger on_auth_user_auto_confirm
 update auth.users
 set email_confirmed_at = now()
 where email_confirmed_at is null;
+
