@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 LINK = re.compile(r"\[[^\]]*\]\(([^)#\s]+)?(#[^)\s]+)?\)")
 FENCE = re.compile(r"```.*?```", re.DOTALL)
 HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*$", re.MULTILINE)
-SKIP_SCHEMES = ("http://", "https://", "mailto:")
+SKIP_SCHEMES = ("http://", "https://", "mailto:", "file://")
 
 # Directories that are not part of the documentation surface.
 SKIP_DIRS = {".git", ".venv", "node_modules", "__pycache__", ".pytest_cache", ".ruff_cache"}
