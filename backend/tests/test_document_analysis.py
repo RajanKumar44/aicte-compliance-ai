@@ -3,12 +3,44 @@ from __future__ import annotations
 
 import io
 
+import httpx
+import pytest
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 
-from backend.app.main import app
+from backend.app.main import _supabase_client, app
+
+ACCESS_TOKEN = "document-analysis-test-token"
+
+
+@pytest.fixture(autouse=True)
+def authenticated_analysis(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://test-project.supabase.co")
+    monkeypatch.setenv("SUPABASE_PUBLISHABLE_KEY", "sb_publishable_test")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/auth/v1/user" and request.headers.get("Authorization") == f"Bearer {ACCESS_TOKEN}":
+            return httpx.Response(200, json={"id": "11111111-1111-4111-8111-111111111111"})
+        return httpx.Response(401, json={"message": "Invalid token"})
+
+    async def override_client():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            yield client
+
+    app.dependency_overrides[_supabase_client] = override_client
+    yield
+    app.dependency_overrides.pop(_supabase_client, None)
+
 
 client = TestClient(app)
+
+
+def test_analyze_document_requires_authentication():
+    response = client.post(
+        "/api/v1/documents/analyze",
+        files={"file": ("certificate.pdf", b"%PDF-1.4", "application/pdf")},
+    )
+    assert response.status_code == 401
 
 
 def _create_minimal_pdf(text: str = "Hello World", encrypt_password: str | None = None) -> bytes:
@@ -25,6 +57,7 @@ def test_analyze_document_rejects_non_pdf_extension():
     response = client.post(
         "/api/v1/documents/analyze",
         files={"file": ("document.txt", b"plain text", "text/plain")},
+        headers={"Authorization": f"Bearer {ACCESS_TOKEN}"},
     )
     assert response.status_code == 400
     assert "Only PDF documents (.pdf) are supported" in response.json()["detail"]
@@ -34,6 +67,7 @@ def test_analyze_document_rejects_corrupted_pdf():
     response = client.post(
         "/api/v1/documents/analyze",
         files={"file": ("certificate.pdf", b"Not a real PDF", "application/pdf")},
+        headers={"Authorization": f"Bearer {ACCESS_TOKEN}"},
     )
     assert response.status_code == 400
     assert "valid PDF header" in response.json()["detail"]
@@ -45,6 +79,7 @@ def test_analyze_document_rejects_oversized_file():
     response = client.post(
         "/api/v1/documents/analyze",
         files={"file": ("large.pdf", oversized, "application/pdf")},
+        headers={"Authorization": f"Bearer {ACCESS_TOKEN}"},
     )
     assert response.status_code == 413
     assert "10 MiB processing limit" in response.json()["detail"]
@@ -55,6 +90,7 @@ def test_analyze_document_rejects_encrypted_pdf():
     response = client.post(
         "/api/v1/documents/analyze",
         files={"file": ("locked.pdf", encrypted_pdf, "application/pdf")},
+        headers={"Authorization": f"Bearer {ACCESS_TOKEN}"},
     )
     assert response.status_code == 400
     assert "Encrypted or password-protected PDFs are not supported" in response.json()["detail"]
@@ -65,6 +101,7 @@ def test_analyze_valid_pdf():
     response = client.post(
         "/api/v1/documents/analyze",
         files={"file": ("clearance.pdf", valid_pdf, "application/pdf")},
+        headers={"Authorization": f"Bearer {ACCESS_TOKEN}"},
     )
     assert response.status_code == 200
     payload = response.json()
@@ -85,6 +122,7 @@ def test_analyze_document_rejects_eicar_test_virus():
     response = client.post(
         "/api/v1/documents/analyze",
         files={"file": ("infected.pdf", infected_pdf, "application/pdf")},
+        headers={"Authorization": f"Bearer {ACCESS_TOKEN}"},
     )
     assert response.status_code == 400
     assert "Security Alert" in response.json()["detail"]

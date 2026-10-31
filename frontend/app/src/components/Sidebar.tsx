@@ -16,6 +16,7 @@ import { Button } from "./Button";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/applications", label: "Applications", icon: ClipboardCheck },
   { path: "/validate", label: "Validate", icon: ClipboardCheck },
   { path: "/vault", label: "Document Vault", icon: Archive },
   { path: "/cadre-calculator", label: "Cadre & FSR Norms", icon: GraduationCap },

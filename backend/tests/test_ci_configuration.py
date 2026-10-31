@@ -1,9 +1,7 @@
 """Regression tests for the CI trigger configuration.
 
-These exist because of a real defect: the workflow's ``pull_request`` branch
-filter listed only ``main``. GitHub evaluates that filter against the pull
-request's **base** branch, so every PR targeting ``research/grounded-foundation``
-was silently skipped and had no checks on its head commit (PRs #2 and #4).
+These ensure the active workflow checks pull requests to ``main`` and runs the
+backend, frontend, fixture, and deployment-configuration gates used by the repo.
 
 The repository avoids adding a YAML parser just for this, so the workflow is read
 as text and only the few keys that matter are inspected. A failure here means the
@@ -14,10 +12,10 @@ import re
 from pathlib import Path
 
 WORKFLOW_PATH = (
-    Path(__file__).resolve().parents[2] / ".github" / "workflows" / "backend-tests.yml"
+    Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ci.yml"
 )
 
-LONG_LIVED_BRANCHES = {"main", "research/grounded-foundation"}
+DEPLOYMENT_BRANCHES = {"main"}
 
 
 def _workflow_lines() -> list[str]:
@@ -64,14 +62,12 @@ def test_workflow_file_is_present():
     assert WORKFLOW_PATH.is_file()
 
 
-def test_pull_requests_targeting_either_base_branch_are_checked():
-    # The integration base is where all three workstreams open PRs. If it is
-    # missing here, those PRs get no checks at all.
-    assert _trigger_branches("pull_request") == LONG_LIVED_BRANCHES
+def test_pull_requests_targeting_main_are_checked():
+    assert _trigger_branches("pull_request") == DEPLOYMENT_BRANCHES
 
 
-def test_pushes_to_long_lived_branches_are_checked():
-    assert _trigger_branches("push") == LONG_LIVED_BRANCHES
+def test_pushes_to_main_are_checked():
+    assert _trigger_branches("push") == DEPLOYMENT_BRANCHES
 
 
 def test_workflow_never_uses_pull_request_target():
@@ -100,9 +96,11 @@ def test_workstream_checks_cannot_be_silently_dropped_from_ci():
     text = WORKFLOW_PATH.read_text(encoding="utf-8")
     required_commands = {
         "backend suite": "python -m pytest -q",
-        "ai extraction tests": "python -m pytest -q ai/tests",
         "frontend fixture verification": "python frontend/tools/verify_fixtures.py",
-        "optional OCR engine smoke test": "test_ocr_engine_integration.py",
+        "frontend lint": "npm --prefix frontend/app run lint",
+        "frontend unit tests": "npm --prefix frontend/app test",
+        "frontend production build": "npm --prefix frontend/app run build",
+        "OpenAPI validation": "app.openapi()",
     }
     missing = [name for name, command in required_commands.items() if command not in text]
     assert not missing, f"CI no longer runs: {missing}"

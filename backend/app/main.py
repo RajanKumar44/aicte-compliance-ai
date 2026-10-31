@@ -18,6 +18,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 from .antivirus_scanner import is_download_permitted
+from .application_service import (
+    build_checklist,
+    generate_application_findings,
+    overall_application_status,
+    report_payload,
+)
 from .document_analyzer import DocumentAnalysisError, analyze_pdf_document
 from .history_store import (
     SupabaseSettings,
@@ -355,9 +361,14 @@ class DocumentAnalysisResponse(BaseModel):
 
 
 @app.post("/api/v1/documents/analyze", response_model=DocumentAnalysisResponse)
-async def analyze_document(file: UploadFile = File(...)) -> DocumentAnalysisResponse:
+async def analyze_document(
+    file: UploadFile = File(...),
+    _context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> DocumentAnalysisResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is missing.")
+    if file.size is not None and file.size > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File exceeds the 10 MiB processing limit.")
     content = await file.read()
     try:
         result = analyze_pdf_document(file.filename, content)
@@ -552,7 +563,8 @@ class StoredDocument(BaseModel):
     scan_status: str
     scan_details: str
     created_at: str
-    expires_at: str
+    expires_at: str | None = None
+    application_link: dict[str, Any] | None = Field(default=None)
 
 
 @app.post("/api/v1/documents", response_model=StoredDocument, status_code=201)
@@ -560,12 +572,16 @@ async def upload_document(
     file: UploadFile = File(...),
     institution_id: UUID | None = Form(None),
     institution_external_ref: str | None = Form(None),
+    application_id: UUID | None = Form(None),
+    checklist_item_id: str | None = Form(None),
     document_type: str = Form("statutory_clearance"),
     context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
 ) -> StoredDocument:
     settings, token, user_id, client = context
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is missing.")
+    if file.size is not None and file.size > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File exceeds the 10 MiB processing limit.")
     content = await file.read()
 
     try:
@@ -587,8 +603,27 @@ async def upload_document(
     )
     memberships = response_rows(membership_res)
     target_inst_id: UUID | str | None = None
+    application_rows: list[dict[str, Any]] = []
 
-    if institution_id:
+    if application_id:
+        app_res = await rest_request(
+            client, settings, token, "GET", "applications",
+            params={
+                "select": "id,institution_id,institution_external_ref,status",
+                "id": f"eq.{application_id}",
+                "limit": "1",
+            },
+        )
+        application_rows = response_rows(app_res)
+        if not application_rows:
+            raise HTTPException(status_code=404, detail="Application was not found or access denied.")
+        application_institution_id = str(application_rows[0].get("institution_id"))
+        if institution_id and str(institution_id) != application_institution_id:
+            raise HTTPException(status_code=403, detail="Application does not belong to the selected institution.")
+        if not any(str(m.get("institution_id")) == application_institution_id for m in memberships):
+            raise HTTPException(status_code=403, detail="You do not have active membership permissions for the application institution.")
+        target_inst_id = application_institution_id
+    elif institution_id:
         for m in memberships:
             if str(m.get("institution_id")) == str(institution_id):
                 target_inst_id = institution_id
@@ -613,12 +648,12 @@ async def upload_document(
 
     clean_filename = "".join(c for c in file.filename if c.isalnum() or c in "._- ").strip() or "document.pdf"
     doc_id = uuid4()
-    storage_path = f"{target_inst_id}/{doc_id}_{clean_filename}"
+    storage_path = f"{target_inst_id}/{user_id}/{doc_id}_{clean_filename}"
 
-    # Try uploading to Supabase Storage bucket 'documents'
+    # Save the PDF to the private production vault before inserting metadata.
     try:
-        storage_url = f"{settings.url}/storage/v1/object/documents/{storage_path}"
-        await client.post(
+        storage_url = f"{settings.url}/storage/v1/object/institution-documents/{storage_path}"
+        storage_res = await client.post(
             storage_url,
             content=content,
             headers={
@@ -627,22 +662,24 @@ async def upload_document(
                 "Content-Type": "application/pdf",
             },
         )
-    except (httpx.HTTPError, OSError):
-        # Best-effort storage write; metadata is retained in database
-        pass
+        if storage_res.status_code not in (200, 201):
+            raise HTTPException(status_code=502, detail="Document content could not be saved to secure storage.")
+    except (httpx.HTTPError, OSError) as exc:
+        raise HTTPException(status_code=503, detail="Document storage is unavailable.") from exc
 
     doc_row = {
-        "id": str(doc_id),
         "institution_id": str(target_inst_id),
         "uploaded_by": str(user_id),
-        "filename": file.filename,
-        "filesize_bytes": len(content),
+        "original_filename": clean_filename,
+        "content_type": "application/pdf",
+        "size_bytes": len(content),
         "sha256": analysis["sha256"],
         "storage_path": storage_path,
         "document_type": document_type,
         "extracted_metadata": analysis,
-        "scan_status": analysis.get("scan_status", "scan_unavailable"),
-        "scan_details": analysis.get("scan_details", ""),
+        # Never elevate an analyzer result into a trusted malware scan result.
+        "scan_status": "scan_unavailable",
+        "scan_detail": analysis.get("scan_details", "Antivirus scan status is unavailable."),
     }
 
     insert_res = await rest_request(
@@ -650,14 +687,74 @@ async def upload_document(
         settings,
         token,
         "POST",
-        "institution_documents",
+        "document_versions",
         body=doc_row,
         prefer="return=representation",
     )
-    rows = response_rows(insert_res)
+    try:
+        rows = response_rows(insert_res)
+    except HTTPException:
+        try:
+            await client.delete(
+                f"{settings.url}/storage/v1/object/institution-documents/{storage_path}",
+                headers={"apikey": settings.anon_key, "Authorization": f"Bearer {token}"},
+            )
+        except (httpx.HTTPError, OSError):
+            # Keep the primary persistence failure visible; storage cleanup is best effort.
+            pass
+        raise
     if not rows:
         raise HTTPException(status_code=403, detail="Unable to record document metadata in institution vault.")
-    return StoredDocument(**rows[0])
+    stored_doc = {
+        "id": rows[0]["id"],
+        "institution_id": rows[0]["institution_id"],
+        "uploaded_by": rows[0]["uploaded_by"],
+        "filename": rows[0].get("original_filename", clean_filename),
+        "filesize_bytes": rows[0].get("size_bytes", len(content)),
+        "sha256": rows[0]["sha256"],
+        "storage_path": rows[0]["storage_path"],
+        "document_type": rows[0].get("document_type", document_type),
+        "extracted_metadata": rows[0].get("extracted_metadata", analysis),
+        "scan_status": rows[0].get("scan_status", "scan_unavailable"),
+        "scan_details": rows[0].get("scan_detail", ""),
+        "created_at": rows[0]["created_at"],
+        "expires_at": None,
+    }
+
+    # Optional: link the new document to a pending application.
+    if application_id:
+        if not application_rows or str(application_rows[0].get("institution_id")) != str(stored_doc["institution_id"]):
+            raise HTTPException(status_code=403, detail="Application does not belong to this institution.")
+        link_row = {
+            "application_id": application_id,
+            "document_id": stored_doc["id"],
+            "checklist_item_id": checklist_item_id,
+            "uploaded_by": str(user_id),
+        }
+        link_res = await rest_request(
+            client, settings, token, "POST", "application_documents",
+            body=link_row, prefer="return=representation",
+        )
+        link_rows = response_rows(link_res)
+        if not link_rows:
+            raise HTTPException(status_code=403, detail="Unable to link the document to the application.")
+        await rest_request(
+            client, settings, token, "POST", "application_audit_events",
+            body={
+                "application_id": application_id,
+                "user_id": str(user_id),
+                "action": "document_linked",
+                "detail": {
+                    "document_id": stored_doc["id"],
+                    "filename": stored_doc["filename"],
+                    "checklist_item_id": checklist_item_id,
+                },
+            },
+            prefer="return=minimal",
+        )
+        stored_doc["application_link"] = link_rows[0]
+
+    return StoredDocument(**stored_doc)
 
 
 @app.get("/api/v1/documents", response_model=list[StoredDocument])
@@ -670,15 +767,15 @@ async def list_documents(
         settings,
         token,
         "GET",
-        "institution_documents",
+        "document_versions",
         params={
-            "select": "id,institution_id,uploaded_by,filename,filesize_bytes,sha256,storage_path,document_type,extracted_metadata,scan_status,scan_details,created_at,expires_at",
+            "select": "id,institution_id,uploaded_by,filename:original_filename,filesize_bytes:size_bytes,sha256,storage_path,document_type,extracted_metadata,scan_status,scan_details:scan_detail,created_at",
             "order": "created_at.desc",
             "limit": "50",
         },
     )
     rows = response_rows(response)
-    return [StoredDocument(**row) for row in rows]
+    return [StoredDocument(**{**row, "expires_at": None}) for row in rows]
 
 
 @app.get("/api/v1/documents/{document_id}", response_model=StoredDocument)
@@ -692,9 +789,9 @@ async def get_document(
         settings,
         token,
         "GET",
-        "institution_documents",
+        "document_versions",
         params={
-            "select": "id,institution_id,uploaded_by,filename,filesize_bytes,sha256,storage_path,document_type,extracted_metadata,scan_status,scan_details,created_at,expires_at",
+            "select": "id,institution_id,uploaded_by,filename:original_filename,filesize_bytes:size_bytes,sha256,storage_path,document_type,extracted_metadata,scan_status,scan_details:scan_detail,created_at",
             "id": f"eq.{document_id}",
             "limit": "1",
         },
@@ -702,7 +799,7 @@ async def get_document(
     rows = response_rows(response)
     if not rows:
         raise HTTPException(status_code=404, detail="Document was not found or access denied.")
-    return StoredDocument(**rows[0])
+    return StoredDocument(**{**rows[0], "expires_at": None})
 
 
 @app.get("/api/v1/documents/{document_id}/download")
@@ -718,9 +815,9 @@ async def download_document(
         settings,
         token,
         "GET",
-        "institution_documents",
+        "document_versions",
         params={
-            "select": "id,filename,storage_path,scan_status",
+            "select": "id,filename:original_filename,storage_path,scan_status",
             "id": f"eq.{document_id}",
             "limit": "1",
         },
@@ -734,7 +831,7 @@ async def download_document(
     if not permitted:
         raise HTTPException(status_code=403, detail=reason)
 
-    storage_url = f"{settings.url}/storage/v1/object/authenticated/documents/{doc['storage_path']}"
+    storage_url = f"{settings.url}/storage/v1/object/authenticated/institution-documents/{doc['storage_path']}"
     storage_res = await client.get(
         storage_url,
         headers={"apikey": settings.anon_key, "Authorization": f"Bearer {token}"},
@@ -749,8 +846,6 @@ async def download_document(
         "Content-Disposition": f'attachment; filename="{doc.get("filename", "document.pdf")}"',
         "Content-Type": "application/pdf",
     }
-    if scan_status == "scan_unavailable":
-        headers["X-Compliance-Security-Warning"] = "unscanned-prototype-download"
     return Response(content=storage_res.content, media_type="application/pdf", headers=headers)
 
 
@@ -760,33 +855,10 @@ async def update_document(
     updates: StoredDocumentUpdate,
     context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
 ) -> StoredDocument:
-    settings, token, _user_id, client = context
-    update_data: dict[str, Any] = {}
-    if updates.document_type is not None:
-        update_data["document_type"] = updates.document_type
-    if updates.extracted_metadata is not None:
-        update_data["extracted_metadata"] = updates.extracted_metadata
-
-    if not update_data:
-        raise HTTPException(status_code=400, detail="No fields provided for update.")
-
-    response = await rest_request(
-        client,
-        settings,
-        token,
-        "PATCH",
-        "institution_documents",
-        params={
-            "id": f"eq.{document_id}",
-            "select": "id,institution_id,uploaded_by,filename,filesize_bytes,sha256,storage_path,document_type,extracted_metadata,scan_status,scan_details,created_at,expires_at",
-        },
-        body=update_data,
-        prefer="return=representation",
+    raise HTTPException(
+        status_code=405,
+        detail="Document analysis metadata is immutable after upload.",
     )
-    rows = response_rows(response)
-    if not rows:
-        raise HTTPException(status_code=404, detail="Document was not found or access denied.")
-    return StoredDocument(**rows[0])
 
 
 @app.delete("/api/v1/documents/{document_id}", status_code=204)
@@ -794,17 +866,432 @@ async def delete_document(
     document_id: UUID,
     context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
 ) -> None:
-    settings, token, _user_id, client = context
+    raise HTTPException(
+        status_code=405,
+        detail="Document version records are retained and cannot be deleted.",
+    )
+
+
+
+# ---------------------------------------------------------------------------
+# Applications — institution-scoped workflow over the document vault
+# ---------------------------------------------------------------------------
+
+
+class ApplicationCreate(BaseModel):
+    institution_id: str  # external ref, e.g. SYNTH-INST-001
+    application_type: Literal["eoa", "new_program", "intake_change"]
+    academic_year: str = Field(min_length=4, max_length=20)
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class ApplicationRecord(BaseModel):
+    id: UUID
+    institution_id: UUID
+    institution_external_ref: str
+    created_by: UUID
+    application_type: str
+    academic_year: str
+    params: dict[str, Any]
+    checklist: list[dict[str, Any]]
+    status: str
+    created_at: str
+    expires_at: str | None = None
+
+
+class ApplicationFinding(BaseModel):
+    id: UUID
+    application_id: UUID
+    code: str
+    severity: str
+    rule_id: str
+    message: str
+    evidence: dict[str, Any] = Field(default_factory=dict)
+    recommended_action: str = ""
+    status: str
+    created_at: str
+    resolved_by: UUID | None = None
+    resolved_at: str | None = None
+
+
+class FindingReviewInput(BaseModel):
+    decision: Literal["resolve", "reject", "escalate"]
+    rationale: str = Field(min_length=10, max_length=4000)
+
+
+def _row_to_application(row: dict[str, Any]) -> ApplicationRecord:
+    institution = row.get("institutions")
+    if isinstance(institution, list):
+        institution = institution[0] if institution else {}
+    if not isinstance(institution, dict):
+        institution = {}
+    return ApplicationRecord(
+        id=row["id"],
+        institution_id=row["institution_id"],
+        institution_external_ref=institution.get("external_ref") or row.get("institution_external_ref", ""),
+        created_by=row["created_by"],
+        application_type=row["application_type"],
+        academic_year=row["academic_year"],
+        params=row.get("params") or {},
+        checklist=row.get("checklist") or [],
+        status=row.get("status", "draft"),
+        created_at=row["created_at"],
+        expires_at=row.get("expires_at"),
+    )
+
+
+def _APPLICATION_SELECT() -> str:
+    return ("id,institution_id,institution_external_ref,application_type,academic_year,"
+            "params,checklist,status,created_at,created_by,expires_at,created_by,"
+            "institutions(external_ref,display_name)")
+
+
+async def _load_application(
+    client: httpx.AsyncClient,
+    settings: SupabaseSettings,
+    token: str,
+    application_id: UUID,
+) -> dict[str, Any]:
     response = await rest_request(
-        client,
-        settings,
-        token,
-        "DELETE",
-        "institution_documents",
-        params={"id": f"eq.{document_id}", "select": "id"},
-        prefer="return=representation",
+        client, settings, token, "GET", "applications",
+        params={"select": _APPLICATION_SELECT(), "id": f"eq.{application_id}", "limit": "1"},
     )
     rows = response_rows(response)
     if not rows:
-        raise HTTPException(status_code=404, detail="Document was not found or access denied.")
+        raise HTTPException(status_code=404, detail="Application was not found or access denied.")
+    return rows[0]
 
+
+async def _membership_role_for_institution(
+    client: httpx.AsyncClient,
+    settings: SupabaseSettings,
+    token: str,
+    user_id: UUID,
+    institution_uuid: UUID,
+) -> str | None:
+    response = await rest_request(
+        client, settings, token, "GET", "institution_memberships",
+        params={
+            "select": "role",
+            "user_id": f"eq.{user_id}",
+            "institution_id": f"eq.{institution_uuid}",
+            "limit": "1",
+        },
+    )
+    rows = response_rows(response)
+    return rows[0].get("role") if rows else None
+
+
+async def _record_audit_event(
+    client: httpx.AsyncClient,
+    settings: SupabaseSettings,
+    token: str,
+    *,
+    application_id: UUID,
+    user_id: UUID,
+    action: str,
+    detail: dict[str, Any],
+) -> None:
+    try:
+        await rest_request(
+            client, settings, token, "POST", "application_audit_events",
+            body={
+                "application_id": str(application_id),
+                "user_id": str(user_id),
+                "action": action,
+                "detail": detail,
+            },
+            prefer="return=minimal",
+        )
+    except HTTPException:
+        pass  # audit is best effort; primary action result is unaffected
+
+
+@app.post("/api/v1/applications", response_model=ApplicationRecord, status_code=201)
+async def create_application(
+    payload: ApplicationCreate,
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> ApplicationRecord:
+    settings, token, user_id, client = context
+    membership_rows = response_rows(await rest_request(
+        client, settings, token, "GET", "institution_memberships",
+        params={"select": "institutions(id,external_ref,display_name)", "user_id": f"eq.{user_id}"},
+    ))
+    target = None
+    for membership in membership_rows:
+        institution = membership.get("institutions")
+        if isinstance(institution, list):
+            institution = institution[0] if institution else None
+        if isinstance(institution, dict) and institution.get("external_ref") == payload.institution_id:
+            target = institution
+            break
+    if not target:
+        raise HTTPException(status_code=404, detail="Institution access is not provisioned for this account.")
+
+    checklist = build_checklist(payload.params)
+    insert_response = await rest_request(
+        client, settings, token, "POST", "applications",
+        body={
+            "institution_id": target["id"],
+            "institution_external_ref": payload.institution_id,
+            "created_by": str(user_id),
+            "application_type": payload.application_type,
+            "academic_year": payload.academic_year,
+            "params": payload.params,
+            "checklist": checklist,
+            "status": "submitted",
+        },
+        prefer="return=representation",
+    )
+    rows = response_rows(insert_response)
+    if not rows:
+        raise HTTPException(status_code=403, detail="This account cannot create applications for this institution.")
+    row = dict(rows[0])
+    row["institutions"] = target
+    await _record_audit_event(
+        client, settings, token,
+        application_id=row["id"], user_id=user_id,
+        action="application_created",
+        detail={"academic_year": payload.academic_year, "application_type": payload.application_type},
+    )
+    return _row_to_application(row)
+
+
+@app.get("/api/v1/applications", response_model=list[ApplicationRecord])
+async def list_applications(
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> list[ApplicationRecord]:
+    settings, token, _user_id, client = context
+    response = await rest_request(
+        client, settings, token, "GET", "applications",
+        params={"select": _APPLICATION_SELECT(), "order": "created_at.desc", "limit": "50"},
+    )
+    rows = response_rows(response)
+    return [_row_to_application(row) for row in rows]
+
+
+@app.get("/api/v1/applications/{application_id}", response_model=ApplicationRecord)
+async def get_application(
+    application_id: UUID,
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> ApplicationRecord:
+    settings, token, _user_id, client = context
+    row = await _load_application(client, settings, token, application_id)
+    return _row_to_application(row)
+
+
+@app.post("/api/v1/applications/{application_id}/validate", response_model=list[ApplicationFinding])
+async def validate_application_id(
+    application_id: UUID,
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> list[ApplicationFinding]:
+    settings, token, user_id, client = context
+    application = await _load_application(client, settings, token, application_id)
+
+    docs_response = await rest_request(
+        client, settings, token, "GET", "application_documents",
+        params={
+            "select": "id,checklist_item_id,documents:document_versions(*)",
+            "application_id": f"eq.{application_id}",
+            "limit": "100",
+        },
+    )
+    linked_rows = response_rows(docs_response)
+
+    findings = generate_application_findings(
+        application=application,
+        checklist=application.get("checklist") or [],
+        linked_documents=linked_rows,
+        institution_external_ref=application.get("institution_external_ref", ""),
+    )
+
+    # Replace only OPEN findings; keep resolved/escalated decision history.
+    await rest_request(
+        client, settings, token, "DELETE", "application_findings",
+        params={"application_id": f"eq.{application_id}", "status": "eq.open"},
+        prefer="return=minimal",
+    )
+    if findings:
+        body_rows = [dict(f, application_id=str(application_id), opened_by=str(user_id)) for f in findings]
+        insert_res = await rest_request(
+            client, settings, token, "POST", "application_findings",
+            body=body_rows,
+            prefer="return=representation",
+        )
+        saved = response_rows(insert_res)
+    else:
+        saved = []
+
+    overall = overall_application_status(findings)
+    await rest_request(
+        client, settings, token, "PATCH", "applications",
+        params={"id": f"eq.{application_id}"},
+        body={"status": overall},
+        prefer="return=minimal",
+    )
+    await _record_audit_event(
+        client, settings, token,
+        application_id=application_id, user_id=user_id,
+        action="validation_run",
+        detail={"overall_status": overall, "finding_count": len(findings)},
+    )
+    return [ApplicationFinding(**row) for row in saved]
+
+
+@app.get("/api/v1/applications/{application_id}/findings", response_model=list[ApplicationFinding])
+async def list_application_findings(
+    application_id: UUID,
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> list[ApplicationFinding]:
+    settings, token, _user_id, client = context
+    response = await rest_request(
+        client, settings, token, "GET", "application_findings",
+        params={
+            "select": "id,application_id,code,severity,rule_id,message,evidence,recommended_action,status,created_at,resolved_by,resolved_at",
+            "application_id": f"eq.{application_id}",
+            "limit": "200",
+        },
+    )
+    rows = response_rows(response)
+    severity_rank = {"critical": 0, "high": 1, "medium": 2, "info": 3}
+    rows.sort(key=lambda r: severity_rank.get(r.get("severity", "info"), 3))
+    return [ApplicationFinding(**row) for row in rows]
+
+
+@app.post("/api/v1/applications/{application_id}/findings/{finding_id}/review", response_model=ApplicationFinding)
+async def review_application_finding(
+    application_id: UUID,
+    finding_id: UUID,
+    payload: FindingReviewInput,
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> ApplicationFinding:
+    settings, token, user_id, client = context
+    application = await _load_application(client, settings, token, application_id)
+    role = await _membership_role_for_institution(
+        client, settings, token, user_id, application["institution_id"]
+    )
+    if role not in ("reviewer", "institution_admin"):
+        raise HTTPException(status_code=403, detail="Only reviewers or institution administrators can record review decisions.")
+
+    status_map = {"resolve": "resolved", "reject": "rejected", "escalate": "escalated"}
+    new_status = status_map[payload.decision]
+
+    update_res = await rest_request(
+        client, settings, token, "PATCH", "application_findings",
+        params={"id": f"eq.{finding_id}", "application_id": f"eq.{application_id}"},
+        body={
+            "status": new_status,
+            "resolved_by": str(user_id),
+            "resolved_at": datetime.now(UTC).isoformat(),
+        },
+        prefer="return=representation",
+    )
+    updated = response_rows(update_res)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Finding was not found for this application.")
+
+    await rest_request(
+        client, settings, token, "POST", "application_reviews",
+        body={
+            "finding_id": str(finding_id),
+            "application_id": str(application_id),
+            "reviewed_by": str(user_id),
+            "decision": payload.decision,
+            "rationale": payload.rationale,
+        },
+        prefer="return=minimal",
+    )
+    await _record_audit_event(
+        client, settings, token,
+        application_id=application_id, user_id=user_id,
+        action=f"finding_{payload.decision}",
+        detail={"finding_id": str(finding_id), "rationale": payload.rationale[:500]},
+    )
+    return ApplicationFinding(**updated[0])
+
+
+@app.get("/api/v1/applications/{application_id}/report")
+async def application_report(
+    application_id: UUID,
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+):
+    from fastapi.responses import JSONResponse
+
+    settings, token, _user_id, client = context
+    application = await _load_application(client, settings, token, application_id)
+
+    findings_res = await rest_request(
+        client, settings, token, "GET", "application_findings",
+        params={"select": "id,code,severity,rule_id,message,evidence,recommended_action,status,created_at,resolved_by,resolved_at", "application_id": f"eq.{application_id}", "limit": "200"},
+    )
+    findings_rows = response_rows(findings_res)
+
+    reviews_res = await rest_request(
+        client, settings, token, "GET", "application_reviews",
+        params={"select": "id,reviewed_by,decision,rationale,created_at", "application_id": f"eq.{application_id}", "limit": "200"},
+    )
+    reviews_rows = response_rows(reviews_res)
+
+    audit_res = await rest_request(
+        client, settings, token, "GET", "application_audit_events",
+        params={"select": "id,user_id,action,detail,created_at", "application_id": f"eq.{application_id}", "order": "created_at.asc", "limit": "200"},
+    )
+    audit_rows = response_rows(audit_res)
+
+    docs_res = await rest_request(
+        client, settings, token, "GET", "application_documents",
+        params={"select": "id,checklist_item_id,documents:document_versions(id,filename:original_filename,scan_status,extracted_metadata)", "application_id": f"eq.{application_id}", "limit": "100"},
+    )
+    doc_rows = response_rows(docs_res)
+
+    institution = application.get("institutions")
+    if isinstance(institution, list):
+        institution = institution[0] if institution else {}
+    if not isinstance(institution, dict):
+        institution = {}
+
+    payload = report_payload(
+        application=application,
+        institution=institution,
+        checklist=application.get("checklist") or [],
+        findings=findings_rows,
+        reviews=reviews_rows,
+        audit_events=audit_rows,
+        documents=[{**(d.get("documents") or {}), "link": d} for d in doc_rows],
+    )
+    return JSONResponse(
+        content=payload,
+        headers={"Content-Disposition": f'attachment; filename="preliminary-report-{application_id}.json"'},
+    )
+
+
+@app.get("/api/v1/applications/{application_id}/documents", response_model=list[StoredDocument])
+async def list_application_documents(
+    application_id: UUID,
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> list[StoredDocument]:
+    settings, token, _user_id, client = context
+    _ = await _load_application(client, settings, token, application_id)
+    response = await rest_request(
+        client, settings, token, "GET", "application_documents",
+        params={
+            "select": ("id,checklist_item_id,document:document_versions(id,institution_id,uploaded_by,"
+                       "filename:original_filename,filesize_bytes:size_bytes,sha256,storage_path,document_type,"
+                       "extracted_metadata,scan_status,scan_details:scan_detail,created_at)"),
+            "application_id": f"eq.{application_id}",
+            "limit": "100",
+        },
+    )
+    rows = response_rows(response)
+    result: list[StoredDocument] = []
+    for row in rows:
+        document = row.get("document")
+        if not isinstance(document, dict) or not document.get("id"):
+            continue
+        document = dict(document)
+        document["application_link"] = {
+            "application_id": application_id,
+            "checklist_item_id": row.get("checklist_item_id"),
+        }
+        result.append(StoredDocument(**{**document, "expires_at": None}))
+    return result

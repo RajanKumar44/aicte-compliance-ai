@@ -22,6 +22,7 @@ Exit codes: 0 clean, 1 at least one problem, 2 fixtures directory missing/empty.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -105,7 +106,7 @@ def _compare(actual: Any, expected: Any, path: str, problems: list[str]) -> None
         for key in sorted(set(expected) - set(actual)):
             problems.append(f"{path}.{key}: in the fixture, missing from the live response")
         for key in sorted(set(expected) & set(actual)):
-            if key == "checked_at":
+            if key in {"checked_at", "evaluation_date"}:
                 continue
             _compare(actual[key], expected[key], f"{path}.{key}", problems)
         return
@@ -118,6 +119,11 @@ def _compare(actual: Any, expected: Any, path: str, problems: list[str]) -> None
         for index, (actual_item, expected_item) in enumerate(zip(actual, expected, strict=False)):
             _compare(actual_item, expected_item, f"{path}[{index}]", problems)
         return
+    if path.endswith(".message") and isinstance(actual, str) and isinstance(expected, str):
+        # Expiry messages include today's date; evidence still carries the
+        # independently checked expiry_date while evaluation_date is time-varying.
+        actual = re.sub(r"\b\d{4}-\d{2}-\d{2}\b", "<date>", actual)
+        expected = re.sub(r"\b\d{4}-\d{2}-\d{2}\b", "<date>", expected)
     if actual != expected:
         problems.append(f"{path}: live {actual!r} != fixture {expected!r}")
 

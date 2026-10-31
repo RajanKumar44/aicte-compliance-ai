@@ -105,7 +105,7 @@ export interface StoredDocument {
   scan_status: "clean" | "infected" | "scan_unavailable" | string;
   scan_details: string;
   created_at: string;
-  expires_at: string;
+  expires_at?: string | null;
   scrutiny_status?: "pending" | "verified" | "needs_renewal" | "flagged";
   issuing_authority?: string;
   certificate_number?: string;
@@ -183,7 +183,7 @@ export function mapValidationErrors(
 // slash, e.g. "https://aicte-backend.example.com").
 const API_BASE = (
   import.meta.env.VITE_API_BASE_URL ??
-  (import.meta.env.PROD ? "https://aicte-compliance-backend-live.vercel.app" : "")
+  ""
 ).trim().replace(/\/+$/, "");
 
 export function apiUrl(path: string): string {
@@ -456,7 +456,7 @@ export function deleteValidationRun(runId: string, token: string) {
   );
 }
 
-export async function analyzeDocument(file: File): Promise<ApiResult<DocumentAnalysisResponse>> {
+export async function analyzeDocument(file: File, token: string): Promise<ApiResult<DocumentAnalysisResponse>> {
   if (file.size > 10 * 1024 * 1024) {
     return {
       ok: false,
@@ -472,6 +472,7 @@ export async function analyzeDocument(file: File): Promise<ApiResult<DocumentAna
   try {
     const res = await fetch(apiUrl("/api/v1/documents/analyze"), {
       method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
       body: formData,
     });
     const body = await res.json().catch(() => null);
@@ -499,36 +500,6 @@ export async function analyzeDocument(file: File): Promise<ApiResult<DocumentAna
 }
 
 
-const VAULT_STORAGE_KEY = "aicte_vault_docs_backup";
-
-function getLocalVaultDocs(): StoredDocument[] {
-  try {
-    const raw = localStorage.getItem(VAULT_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as StoredDocument[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveLocalVaultDoc(doc: StoredDocument): void {
-  try {
-    const docs = getLocalVaultDocs().filter((d: StoredDocument) => d.id !== doc.id);
-    docs.unshift(doc);
-    localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(docs));
-  } catch {
-    // ignore
-  }
-}
-
-function deleteLocalVaultDoc(id: string): void {
-  try {
-    const docs = getLocalVaultDocs().filter((d: StoredDocument) => d.id !== id);
-    localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(docs));
-  } catch {
-    // ignore
-  }
-}
-
 function isStoredDocument(value: unknown): value is StoredDocument {
   return isRecord(value)
     && typeof value.id === "string"
@@ -541,23 +512,7 @@ function isStoredDocumentList(value: unknown): value is StoredDocument[] {
 }
 
 export async function fetchDocuments(token: string): Promise<ApiResult<StoredDocument[]>> {
-  const localDocs = getLocalVaultDocs();
-  try {
-    const res = await authenticatedJson<StoredDocument[]>(
-      "/api/v1/documents",
-      token,
-      {},
-      isStoredDocumentList,
-    );
-    if (res.ok) {
-      const cloudIds = new Set(res.data.map((d) => d.id));
-      const merged = [...res.data, ...localDocs.filter((d: StoredDocument) => !cloudIds.has(d.id))];
-      return { ok: true, data: merged };
-    }
-  } catch {
-    // fallback
-  }
-  return { ok: true, data: localDocs };
+  return authenticatedJson<StoredDocument[]>("/api/v1/documents", token, {}, isStoredDocumentList);
 }
 
 export function fetchDocument(documentId: string, token: string) {
@@ -587,32 +542,6 @@ export async function uploadAndStoreDocument(
     };
   }
 
-  let analyzedData: Record<string, unknown> = {};
-  try {
-    const analysisRes = await analyzeDocument(file);
-    if (analysisRes.ok) {
-      analyzedData = analysisRes.data as unknown as Record<string, unknown>;
-    }
-  } catch {
-    // continue
-  }
-
-  const localBackupDoc: StoredDocument = {
-    id: "doc-" + Date.now().toString(36) + "-" + Math.random().toString(36).substring(2, 7),
-    institution_id: options?.institutionId || "SYNTH-INST-001",
-    uploaded_by: "institution-user",
-    filename: file.name,
-    filesize_bytes: file.size,
-    sha256: (analyzedData.sha256 as string) || "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    storage_path: "vault/" + file.name,
-    document_type: options?.documentType || "statutory_clearance",
-    extracted_metadata: analyzedData,
-    scan_status: (analyzedData.scan_status as string) || "clean",
-    scan_details: (analyzedData.scan_details as string) || "ClamAV scanned: No threats detected.",
-    created_at: new Date().toISOString(),
-    expires_at: new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
-  };
-
   const formData = new FormData();
   formData.append("file", file);
   if (options?.institutionId) formData.append("institution_id", options.institutionId);
@@ -628,16 +557,24 @@ export async function uploadAndStoreDocument(
       body: formData,
     });
     const body = await res.json().catch(() => null);
-    if (res.ok && isStoredDocument(body)) {
-      saveLocalVaultDoc(body);
-      return { ok: true, data: body };
-    }
+    if (res.ok && isStoredDocument(body)) return { ok: true, data: body };
+    const detail = isRecord(body) && typeof body.detail === "string"
+      ? body.detail : `Document upload failed (${res.status}).`;
+    return {
+      ok: false,
+      kind: res.status >= 500 ? "server" : "validation",
+      status: res.status,
+      errors: { file: detail },
+      raw: body,
+    };
   } catch {
-    // fallback
+    return {
+      ok: false,
+      kind: "network",
+      status: 0,
+      errors: { file: "Unable to reach secure document storage. Please check the backend connection." },
+    };
   }
-
-  saveLocalVaultDoc(localBackupDoc);
-  return { ok: true, data: localBackupDoc };
 }
 
 export async function downloadStoredDocument(
@@ -663,34 +600,10 @@ export async function downloadStoredDocument(
       document.body.removeChild(a);
       return { ok: true };
     }
-  } catch {
-    // fallback
-  }
-
-  try {
-    const sampleBlob = new Blob(
-      [
-        `%PDF-1.4
-%AICTE Compliance Vault Document
-Filename: ${filename}
-DocumentID: ${documentId}
-Timestamp: ${new Date().toISOString()}
-%%EOF`,
-      ],
-      { type: "application/pdf" }
-    );
-    const url = window.URL.createObjectURL(sampleBlob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename || "document.pdf";
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-    return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Download failed." };
   }
+  return { ok: false, error: "The document could not be downloaded from secure storage." };
 }
 
 export async function updateStoredDocument(
@@ -698,59 +611,20 @@ export async function updateStoredDocument(
   updates: Partial<StoredDocument>,
   token: string
 ): Promise<ApiResult<StoredDocument>> {
-  const docs = getLocalVaultDocs();
-  const index = docs.findIndex((d) => d.id === documentId);
-  let updatedDoc: StoredDocument | null = null;
-  if (index !== -1) {
-    updatedDoc = { ...docs[index], ...updates };
-    docs[index] = updatedDoc;
-    localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(docs));
-  }
-
-  try {
-    const res = await authenticatedJson<StoredDocument>(
-      `/api/v1/documents/${encodeURIComponent(documentId)}`,
-      token,
-      {
-        method: "PATCH",
-        body: JSON.stringify({
-          document_type: updates.document_type,
-          extracted_metadata: updates.extracted_metadata || (updatedDoc ? updatedDoc.extracted_metadata : {}),
-        }),
-      },
-      isStoredDocument,
-    );
-    if (res.ok) {
-      saveLocalVaultDoc(res.data);
-      return res;
-    }
-  } catch {
-    // fallback to local
-  }
-
-  if (updatedDoc) {
-    return { ok: true, data: updatedDoc };
-  }
-  return {
-    ok: false,
-    kind: "server",
-    status: 404,
-    errors: { document: "Document not found in vault." },
-  };
+  return authenticatedJson<StoredDocument>(
+    `/api/v1/documents/${encodeURIComponent(documentId)}`,
+    token,
+    { method: "PATCH", body: JSON.stringify(updates) },
+    isStoredDocument,
+  );
 }
 
 export async function deleteStoredDocument(documentId: string, token: string): Promise<ApiResult<{ ok: true }>> {
-  deleteLocalVaultDoc(documentId);
-  try {
-    await authenticatedJson<{ ok: true }>(
-      `/api/v1/documents/${encodeURIComponent(documentId)}`,
-      token,
-      { method: "DELETE" },
-      (body): body is { ok: true } => body === null,
-    );
-  } catch {
-    // local deleted already
-  }
-  return { ok: true, data: { ok: true } };
+  return authenticatedJson<{ ok: true }>(
+    `/api/v1/documents/${encodeURIComponent(documentId)}`,
+    token,
+    { method: "DELETE" },
+    (body): body is { ok: true } => body === null,
+  );
 }
 
