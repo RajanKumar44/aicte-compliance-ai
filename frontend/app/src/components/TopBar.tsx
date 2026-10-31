@@ -123,6 +123,14 @@ export function TopBar({ onMenuToggle, mobileMenuOpen }: { onMenuToggle: () => v
             <option value="neo-brutalism">Neo Brutalism</option>
           </select>
           <HealthIndicator />
+          <span
+            className="hidden xl:inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-1 px-2.5 py-1 font-mono text-[11px] text-text-muted select-none"
+            title={`Build: ${__APP_COMMIT_SHA__} • Compiled: ${new Date(__APP_BUILD_TIME__).toLocaleString()}`}
+          >
+            <span className="font-sans font-bold text-text-secondary">v0.5.0</span>
+            <span>•</span>
+            <span className="text-accent-strong font-semibold">{__APP_COMMIT_SHA__.substring(0, 7)}</span>
+          </span>
         </div>
       </div>
     </header>

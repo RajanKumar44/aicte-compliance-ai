@@ -9,6 +9,10 @@
       "destination": "https://aicte-compliance-backend-live.vercel.app/health"
     },
     {
+      "source": "/version",
+      "destination": "https://aicte-compliance-backend-live.vercel.app/version"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://aicte-compliance-backend-live.vercel.app/api/:path*"
     },

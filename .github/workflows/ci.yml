@@ -1,0 +1,143 @@
+name: Continuous Integration & Deployment Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-ci:
+    name: Frontend Lint, Test & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/app/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend/app ci
+
+      - name: Run frontend linter (oxlint)
+        run: npm --prefix frontend/app run lint
+
+      - name: Run frontend unit tests
+        run: npm --prefix frontend/app test
+
+      - name: Build production bundle
+        env:
+          VITE_API_BASE_URL: https://aicte-compliance-backend-live.vercel.app
+          VERCEL_GIT_COMMIT_SHA: ${{ github.sha }}
+        run: npm --prefix frontend/app run build
+
+  backend-ci:
+    name: Backend Lint, Test & Schema Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
+      - name: Run ruff linter
+        run: python -m ruff check backend/app
+
+      - name: Run backend pytest suite
+        run: python -m pytest -q backend/tests/test_validation.py backend/tests/test_document_analysis.py
+
+      - name: Validate OpenAPI & Version endpoint
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'backend')
+          from app.main import app
+          schema = app.openapi()
+          paths = schema.get('paths', {})
+          assert '/version' in paths, 'Missing /version endpoint'
+          assert '/health' in paths, 'Missing /health endpoint'
+          assert '/api/v1/validate' in paths, 'Missing /api/v1/validate'
+          assert '/api/v1/documents' in paths, 'Missing /api/v1/documents'
+          print('OpenAPI schema valid with', len(paths), 'endpoints')
+          "
+
+  integration-checks:
+    name: Monorepo Integration & Deployment Config Checks
+    needs: [frontend-ci, backend-ci]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install test dependencies
+        run: python -m pip install -r backend/requirements-dev.txt
+
+      - name: Verify frontend fixtures against FastAPI contract
+        run: python frontend/tools/verify_fixtures.py
+
+      - name: Verify deployment configuration files
+        run: |
+          test -f vercel.json && echo "✓ Root vercel.json exists"
+          test -f frontend/app/vercel.json && echo "✓ Frontend vercel.json exists"
+          test -f render.yaml && echo "✓ render.yaml exists"
+          test -f api/index.py && echo "✓ Vercel serverless entry point api/index.py exists"
+
+  deploy-notify:
+    name: Deployment Pipeline Gate & Render Webhook
+    needs: [integration-checks]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Log release metadata
+        run: |
+          echo "=========================================================="
+          echo "All CI checks PASSED for commit: ${{ github.sha }}"
+          echo "Triggering automated Vercel & Render release pipeline"
+          echo "=========================================================="
+
+      - name: Trigger Render Deploy Hook (if secret configured)
+        env:
+          RENDER_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -n "$RENDER_HOOK" ]; then
+            echo "Dispatching deployment trigger to Render service..."
+            curl -s -X POST "$RENDER_HOOK" && echo "Render deployment triggered successfully"
+          else
+            echo "RENDER_DEPLOY_HOOK_URL secret not set. Relying on Render Git integration / autoDeployTrigger: commit in render.yaml."
+          fi
