@@ -18,7 +18,7 @@ create table if not exists public.applications (
     checklist jsonb not null default '[]'::jsonb,
     status text not null default 'submitted',
     created_at timestamptz not null default now(),
-    expires_at timestamptz generated always as (created_at + interval '365 days') stored
+    expires_at timestamptz not null default (now() + interval '365 days')
 );
 
 create index if not exists applications_institution_idx
