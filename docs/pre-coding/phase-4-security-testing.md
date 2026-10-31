@@ -162,7 +162,7 @@ Security and testing preparation is documented. Controls are not claimed impleme
 
 ## Follow-up implementation evidence — 2026-10-23
 
-A GitHub Actions workflow was added at [`.github/workflows/backend-tests.yml`](../../.github/workflows/backend-tests.yml) on `research/grounded-foundation`. It installs `backend/requirements-dev.txt` with Python 3.12 and runs `python -m pytest -q`, with read-only repository permissions and a 10-minute job timeout. The workflow file was read back from GitHub. **No associated workflow run or status check was visible at the time of this review**, so this is CI configuration added, not a passing test result.
+The active GitHub Actions workflow is [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), triggered by pull requests and pushes to `main`. It runs backend lint and tests, frontend lint/tests/build, fixture verification, and deployment-configuration checks. The workflow itself is not evidence of a passing run; check the associated GitHub status for each commit.
 
 No authentication provider, server-side RBAC, tenant-bound database, upload endpoint, private object store, malware scanner, durable audit trail, or production secrets/retention configuration exists in the inspected prototype. Implementing those without approved identity, data lifecycle, hosting and operational constraints would risk creating false security. Phase 4 remains **NOT PASSED** until scoped controls are implemented and negative tests pass in an actual run.
 

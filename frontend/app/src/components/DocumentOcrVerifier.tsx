@@ -152,7 +152,7 @@ export function DocumentOcrVerifier({
   const [editAuthority, setEditAuthority] = useState("");
   const [editCertNo, setEditCertNo] = useState("");
   const [editExpiryDate, setEditExpiryDate] = useState("");
-  const [editStatus, setEditStatus] = useState<string>("verified");
+  const [editStatus, setEditStatus] = useState<string>("pending");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Scrutiny Dossier Modal
@@ -171,7 +171,12 @@ export function DocumentOcrVerifier({
   const loadVaultDocuments = async () => {
     setVaultLoading(true);
     setVaultError(null);
-    const result = await fetchDocuments(token || "demo-token");
+    if (!token) {
+      setVaultLoading(false);
+      setVaultError("Sign in to view institution documents.");
+      return;
+    }
+    const result = await fetchDocuments(token);
     setVaultLoading(false);
     if (result.ok) {
       setVaultDocs(result.data);
@@ -202,7 +207,12 @@ export function DocumentOcrVerifier({
     setUploadedFile(file);
     setIsAnalyzing(true);
 
-    const result = await analyzeDocument(file);
+    if (!token) {
+      setIsAnalyzing(false);
+      setUploadError("Sign in before analyzing or storing a document.");
+      return;
+    }
+    const result = await analyzeDocument(file, token);
     setIsAnalyzing(false);
 
     if (result.ok) {
@@ -225,7 +235,11 @@ export function DocumentOcrVerifier({
     setVaultSaveError(null);
     setVaultSaveSuccess(null);
 
-    const result = await uploadAndStoreDocument(uploadedFile, token || "demo-token", {
+    if (!token) {
+      setVaultSaveError("Sign in before storing a document.");
+      return;
+    }
+    const result = await uploadAndStoreDocument(uploadedFile, token, {
       documentType: selectedTargetType,
     });
     setIsSavingToVault(false);
@@ -240,7 +254,11 @@ export function DocumentOcrVerifier({
 
   const handleDownloadDoc = async (doc: StoredDocument) => {
     setDownloadingId(doc.id);
-    const res = await downloadStoredDocument(doc.id, doc.filename, token || "demo-token");
+    if (!token) {
+      alert("Sign in before downloading a document.");
+      return;
+    }
+    const res = await downloadStoredDocument(doc.id, doc.filename, token);
     setDownloadingId(null);
     if (!res.ok) {
       alert(res.error || "Download failed.");
@@ -248,11 +266,15 @@ export function DocumentOcrVerifier({
   };
 
   const handleDeleteDoc = async (docId: string) => {
-    if (!window.confirm("Are you sure you want to delete this document from the institutional vault?")) {
+    if (!window.confirm("Document versions are retained in the institutional vault. Continue to request deletion?")) {
+      return;
+    }
+    if (!token) {
+      alert("Sign in before deleting a document.");
       return;
     }
     setDeletingId(docId);
-    const res = await deleteStoredDocument(docId, token || "demo-token");
+    const res = await deleteStoredDocument(docId, token);
     setDeletingId(null);
     if (res.ok) {
       setVaultDocs((prev) => prev.filter((d) => d.id !== docId));
@@ -260,7 +282,7 @@ export function DocumentOcrVerifier({
         setInspectedDoc(null);
       }
     } else {
-      alert("Failed to delete document.");
+      alert(res.errors.document || res.errors._server || "Failed to delete document.");
     }
   };
 
@@ -271,11 +293,15 @@ export function DocumentOcrVerifier({
     setEditAuthority((cf?.issuing_authority as string) || doc.issuing_authority || "");
     setEditCertNo((cf?.certificate_number as string) || doc.certificate_number || "");
     setEditExpiryDate((cf?.expiry_date as string) || doc.custom_expiry_date || "");
-    setEditStatus(doc.scrutiny_status || "verified");
+    setEditStatus(doc.scrutiny_status || "pending");
   };
 
   const handleSaveMetadataChanges = async () => {
     if (!inspectedDoc) return;
+    if (!token) {
+      alert("Sign in before updating document metadata.");
+      return;
+    }
     setIsSavingEdit(true);
 
     const existingMetadata = inspectedDoc.extracted_metadata || {};
@@ -302,7 +328,7 @@ export function DocumentOcrVerifier({
         certificate_number: editCertNo,
         custom_expiry_date: editExpiryDate,
       },
-      token || "demo-token"
+      token
     );
 
     setIsSavingEdit(false);
@@ -311,7 +337,7 @@ export function DocumentOcrVerifier({
       setIsEditingMetadata(false);
       void loadVaultDocuments();
     } else {
-      alert("Failed to save changes to document metadata.");
+      alert(res.errors.document || res.errors._server || "Failed to save changes to document metadata.");
     }
   };
 
@@ -1004,7 +1030,7 @@ export function DocumentOcrVerifier({
                   const expiry = (cf?.expiry_date as string) || doc.custom_expiry_date || "";
                   const authority = (cf?.issuing_authority as string) || doc.issuing_authority || "";
                   const certNo = (cf?.certificate_number as string) || doc.certificate_number || "";
-                  const scrutinyStatus = doc.scrutiny_status || "verified";
+                  const scrutinyStatus = doc.scrutiny_status || "pending";
 
                   const today = new Date().toISOString().split("T")[0];
                   let isExpired = false;
@@ -1239,7 +1265,6 @@ export function DocumentOcrVerifier({
                           onChange={(e) => setEditStatus(e.target.value)}
                           className="w-full rounded border border-border bg-bg-1 p-2 text-text-heading focus:border-accent-strong focus:outline-none font-semibold"
                         >
-                          <option value="verified">Verified & Audited</option>
                           <option value="pending">Pending Scrutiny Review</option>
                           <option value="needs_renewal">Needs Renewal / Approaching Expiry</option>
                           <option value="flagged">Flagged for Clarification</option>
@@ -1270,11 +1295,13 @@ export function DocumentOcrVerifier({
                     <div className="grid gap-3 sm:grid-cols-2 text-xs">
                       <div className="rounded-lg border border-border bg-bg-0 p-3 space-y-1">
                         <span className="text-[10px] font-bold uppercase text-text-muted block">Security & Scanner</span>
-                        <p className="font-bold text-success-text flex items-center gap-1.5">
-                          <ShieldCheck className="h-4 w-4" />
-                          <span>Clean (ClamAV Verified)</span>
+                        <p className={`font-bold flex items-center gap-1.5 ${
+                          inspectedDoc.scan_status === "clean" ? "text-success-text" : "text-warning-text"
+                        }`}>
+                          {inspectedDoc.scan_status === "clean" ? <ShieldCheck className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+                          <span>{inspectedDoc.scan_status === "clean" ? "Malware scan passed" : inspectedDoc.scan_status === "infected" ? "Malware detected" : "Malware scan unavailable; download blocked"}</span>
                         </p>
-                        <p className="text-[10px] text-text-secondary mt-1">{inspectedDoc.scan_details || "No threats identified."}</p>
+                        <p className="text-[10px] text-text-secondary mt-1">{inspectedDoc.scan_details || "No trusted malware scan result is available."}</p>
                       </div>
 
                       <div className="rounded-lg border border-border bg-bg-0 p-3 space-y-1">
@@ -1295,7 +1322,7 @@ export function DocumentOcrVerifier({
                     <div className="h-36 overflow-y-auto rounded-lg border border-border bg-bg-0 p-3 font-mono text-[11px] leading-relaxed text-text-body whitespace-pre-wrap">
                       {(inspectedDoc.extracted_metadata?.extracted_text_preview as string) ||
                         (inspectedDoc.extracted_metadata?.extracted_text as string) ||
-                        "Document text extracted cleanly during validation inspection."}
+                        "No text was extracted from this document."}
                     </div>
                   </div>
 

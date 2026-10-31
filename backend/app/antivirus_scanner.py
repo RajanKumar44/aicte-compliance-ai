@@ -116,7 +116,7 @@ def is_download_permitted(scan_status: str) -> tuple[bool, str]:
     """Determine whether file download is permitted based on security policy.
 
     Infected files are NEVER permitted.
-    Unscanned files default to blocked unless ALLOW_UNSCANNED_DOWNLOADS=true.
+    Unscanned files are always blocked until a trusted scanner marks them clean.
     """
     if scan_status == "infected":
         return False, "Download blocked: File was flagged as infected with malware."
@@ -125,13 +125,7 @@ def is_download_permitted(scan_status: str) -> tuple[bool, str]:
         return True, "Permitted: File passed antivirus verification."
 
     # scan_status == "scan_unavailable" or "pending"
-    allow_unscanned = os.environ.get("ALLOW_UNSCANNED_DOWNLOADS", "false").lower() in ("true", "1")
-    if allow_unscanned:
-        return (
-            True,
-            "Permitted under prototype policy: Antivirus scanner was unavailable. Download with caution.",
-        )
-
+    # There is intentionally no environment-variable bypass for unscanned content.
     return (
         False,
         ("Download blocked: File could not be verified by an active antivirus scanner. "

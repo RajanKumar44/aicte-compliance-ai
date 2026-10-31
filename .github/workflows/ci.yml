@@ -43,7 +43,6 @@ jobs:
 
       - name: Build production bundle
         env:
-          VITE_API_BASE_URL: https://aicte-compliance-backend-live.vercel.app
           VERCEL_GIT_COMMIT_SHA: ${{ github.sha }}
         run: npm --prefix frontend/app run build
 
@@ -71,7 +70,7 @@ jobs:
         run: python -m ruff check backend/app
 
       - name: Run backend pytest suite
-        run: python -m pytest -q backend/tests/test_validation.py backend/tests/test_document_analysis.py
+        run: python -m pytest -q backend/tests
 
       - name: Validate OpenAPI & Version endpoint
         run: |
@@ -118,7 +117,7 @@ jobs:
           test -f api/index.py && echo "✓ Vercel serverless entry point api/index.py exists"
 
   deploy-notify:
-    name: Deployment Pipeline Gate & Render Webhook
+    name: Git Deployment Pipeline Gate
     needs: [integration-checks]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -128,16 +127,5 @@ jobs:
         run: |
           echo "=========================================================="
           echo "All CI checks PASSED for commit: ${{ github.sha }}"
-          echo "Triggering automated Vercel & Render release pipeline"
+          echo "Git-based Vercel and Render deployments will track this main-branch commit"
           echo "=========================================================="
-
-      - name: Trigger Render Deploy Hook (if secret configured)
-        env:
-          RENDER_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
-        run: |
-          if [ -n "$RENDER_HOOK" ]; then
-            echo "Dispatching deployment trigger to Render service..."
-            curl -s -X POST "$RENDER_HOOK" && echo "Render deployment triggered successfully"
-          else
-            echo "RENDER_DEPLOY_HOOK_URL secret not set. Relying on Render Git integration / autoDeployTrigger: commit in render.yaml."
-          fi

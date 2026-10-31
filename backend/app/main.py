@@ -1,5 +1,5 @@
 import os
-from datetime import UTC, date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
@@ -361,9 +361,14 @@ class DocumentAnalysisResponse(BaseModel):
 
 
 @app.post("/api/v1/documents/analyze", response_model=DocumentAnalysisResponse)
-async def analyze_document(file: UploadFile = File(...)) -> DocumentAnalysisResponse:
+async def analyze_document(
+    file: UploadFile = File(...),
+    _context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> DocumentAnalysisResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is missing.")
+    if file.size is not None and file.size > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File exceeds the 10 MiB processing limit.")
     content = await file.read()
     try:
         result = analyze_pdf_document(file.filename, content)
@@ -558,7 +563,7 @@ class StoredDocument(BaseModel):
     scan_status: str
     scan_details: str
     created_at: str
-    expires_at: str
+    expires_at: str | None = None
     application_link: dict[str, Any] | None = Field(default=None)
 
 
@@ -575,6 +580,8 @@ async def upload_document(
     settings, token, user_id, client = context
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is missing.")
+    if file.size is not None and file.size > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File exceeds the 10 MiB processing limit.")
     content = await file.read()
 
     try:
@@ -596,8 +603,27 @@ async def upload_document(
     )
     memberships = response_rows(membership_res)
     target_inst_id: UUID | str | None = None
+    application_rows: list[dict[str, Any]] = []
 
-    if institution_id:
+    if application_id:
+        app_res = await rest_request(
+            client, settings, token, "GET", "applications",
+            params={
+                "select": "id,institution_id,institution_external_ref,status",
+                "id": f"eq.{application_id}",
+                "limit": "1",
+            },
+        )
+        application_rows = response_rows(app_res)
+        if not application_rows:
+            raise HTTPException(status_code=404, detail="Application was not found or access denied.")
+        application_institution_id = str(application_rows[0].get("institution_id"))
+        if institution_id and str(institution_id) != application_institution_id:
+            raise HTTPException(status_code=403, detail="Application does not belong to the selected institution.")
+        if not any(str(m.get("institution_id")) == application_institution_id for m in memberships):
+            raise HTTPException(status_code=403, detail="You do not have active membership permissions for the application institution.")
+        target_inst_id = application_institution_id
+    elif institution_id:
         for m in memberships:
             if str(m.get("institution_id")) == str(institution_id):
                 target_inst_id = institution_id
@@ -622,12 +648,12 @@ async def upload_document(
 
     clean_filename = "".join(c for c in file.filename if c.isalnum() or c in "._- ").strip() or "document.pdf"
     doc_id = uuid4()
-    storage_path = f"{target_inst_id}/{doc_id}_{clean_filename}"
+    storage_path = f"{target_inst_id}/{user_id}/{doc_id}_{clean_filename}"
 
-    # Try uploading to Supabase Storage bucket 'documents'
+    # Save the PDF to the private production vault before inserting metadata.
     try:
-        storage_url = f"{settings.url}/storage/v1/object/documents/{storage_path}"
-        await client.post(
+        storage_url = f"{settings.url}/storage/v1/object/institution-documents/{storage_path}"
+        storage_res = await client.post(
             storage_url,
             content=content,
             headers={
@@ -636,22 +662,24 @@ async def upload_document(
                 "Content-Type": "application/pdf",
             },
         )
-    except (httpx.HTTPError, OSError):
-        # Best-effort storage write; metadata is retained in database
-        pass
+        if storage_res.status_code not in (200, 201):
+            raise HTTPException(status_code=502, detail="Document content could not be saved to secure storage.")
+    except (httpx.HTTPError, OSError) as exc:
+        raise HTTPException(status_code=503, detail="Document storage is unavailable.") from exc
 
     doc_row = {
-        "id": str(doc_id),
         "institution_id": str(target_inst_id),
         "uploaded_by": str(user_id),
-        "filename": file.filename,
-        "filesize_bytes": len(content),
+        "original_filename": clean_filename,
+        "content_type": "application/pdf",
+        "size_bytes": len(content),
         "sha256": analysis["sha256"],
         "storage_path": storage_path,
         "document_type": document_type,
         "extracted_metadata": analysis,
-        "scan_status": analysis.get("scan_status", "scan_unavailable"),
-        "scan_details": analysis.get("scan_details", ""),
+        # Never elevate an analyzer result into a trusted malware scan result.
+        "scan_status": "scan_unavailable",
+        "scan_detail": analysis.get("scan_details", "Antivirus scan status is unavailable."),
     }
 
     insert_res = await rest_request(
@@ -659,31 +687,44 @@ async def upload_document(
         settings,
         token,
         "POST",
-        "institution_documents",
+        "document_versions",
         body=doc_row,
         prefer="return=representation",
     )
-    rows = response_rows(insert_res)
+    try:
+        rows = response_rows(insert_res)
+    except HTTPException:
+        try:
+            await client.delete(
+                f"{settings.url}/storage/v1/object/institution-documents/{storage_path}",
+                headers={"apikey": settings.anon_key, "Authorization": f"Bearer {token}"},
+            )
+        except (httpx.HTTPError, OSError):
+            # Keep the primary persistence failure visible; storage cleanup is best effort.
+            pass
+        raise
     if not rows:
         raise HTTPException(status_code=403, detail="Unable to record document metadata in institution vault.")
-    stored_doc = rows[0]
+    stored_doc = {
+        "id": rows[0]["id"],
+        "institution_id": rows[0]["institution_id"],
+        "uploaded_by": rows[0]["uploaded_by"],
+        "filename": rows[0].get("original_filename", clean_filename),
+        "filesize_bytes": rows[0].get("size_bytes", len(content)),
+        "sha256": rows[0]["sha256"],
+        "storage_path": rows[0]["storage_path"],
+        "document_type": rows[0].get("document_type", document_type),
+        "extracted_metadata": rows[0].get("extracted_metadata", analysis),
+        "scan_status": rows[0].get("scan_status", "scan_unavailable"),
+        "scan_details": rows[0].get("scan_detail", ""),
+        "created_at": rows[0]["created_at"],
+        "expires_at": None,
+    }
 
     # Optional: link the new document to a pending application.
     if application_id:
-        app_res = await rest_request(
-            client, settings, token, "GET", "applications",
-            params={
-                "select": "id,institution_id,institution_external_ref,status",
-                "id": f"eq.{application_id}",
-                "limit": "1",
-            },
-        )
-        app_rows = response_rows(app_res)
-        if not app_rows or str(app_rows[0].get("institution_id")) != str(stored_doc["institution_id"]):
-            raise HTTPException(
-                status_code=403,
-                detail="Application does not belong to this institution or was not found.",
-            )
+        if not application_rows or str(application_rows[0].get("institution_id")) != str(stored_doc["institution_id"]):
+            raise HTTPException(status_code=403, detail="Application does not belong to this institution.")
         link_row = {
             "application_id": application_id,
             "document_id": stored_doc["id"],
@@ -726,15 +767,15 @@ async def list_documents(
         settings,
         token,
         "GET",
-        "institution_documents",
+        "document_versions",
         params={
-            "select": "id,institution_id,uploaded_by,filename,filesize_bytes,sha256,storage_path,document_type,extracted_metadata,scan_status,scan_details,created_at,expires_at",
+            "select": "id,institution_id,uploaded_by,filename:original_filename,filesize_bytes:size_bytes,sha256,storage_path,document_type,extracted_metadata,scan_status,scan_details:scan_detail,created_at",
             "order": "created_at.desc",
             "limit": "50",
         },
     )
     rows = response_rows(response)
-    return [StoredDocument(**row) for row in rows]
+    return [StoredDocument(**{**row, "expires_at": None}) for row in rows]
 
 
 @app.get("/api/v1/documents/{document_id}", response_model=StoredDocument)
@@ -748,9 +789,9 @@ async def get_document(
         settings,
         token,
         "GET",
-        "institution_documents",
+        "document_versions",
         params={
-            "select": "id,institution_id,uploaded_by,filename,filesize_bytes,sha256,storage_path,document_type,extracted_metadata,scan_status,scan_details,created_at,expires_at",
+            "select": "id,institution_id,uploaded_by,filename:original_filename,filesize_bytes:size_bytes,sha256,storage_path,document_type,extracted_metadata,scan_status,scan_details:scan_detail,created_at",
             "id": f"eq.{document_id}",
             "limit": "1",
         },
@@ -758,7 +799,7 @@ async def get_document(
     rows = response_rows(response)
     if not rows:
         raise HTTPException(status_code=404, detail="Document was not found or access denied.")
-    return StoredDocument(**rows[0])
+    return StoredDocument(**{**rows[0], "expires_at": None})
 
 
 @app.get("/api/v1/documents/{document_id}/download")
@@ -774,9 +815,9 @@ async def download_document(
         settings,
         token,
         "GET",
-        "institution_documents",
+        "document_versions",
         params={
-            "select": "id,filename,storage_path,scan_status",
+            "select": "id,filename:original_filename,storage_path,scan_status",
             "id": f"eq.{document_id}",
             "limit": "1",
         },
@@ -790,7 +831,7 @@ async def download_document(
     if not permitted:
         raise HTTPException(status_code=403, detail=reason)
 
-    storage_url = f"{settings.url}/storage/v1/object/authenticated/documents/{doc['storage_path']}"
+    storage_url = f"{settings.url}/storage/v1/object/authenticated/institution-documents/{doc['storage_path']}"
     storage_res = await client.get(
         storage_url,
         headers={"apikey": settings.anon_key, "Authorization": f"Bearer {token}"},
@@ -805,8 +846,6 @@ async def download_document(
         "Content-Disposition": f'attachment; filename="{doc.get("filename", "document.pdf")}"',
         "Content-Type": "application/pdf",
     }
-    if scan_status == "scan_unavailable":
-        headers["X-Compliance-Security-Warning"] = "unscanned-prototype-download"
     return Response(content=storage_res.content, media_type="application/pdf", headers=headers)
 
 
@@ -816,33 +855,10 @@ async def update_document(
     updates: StoredDocumentUpdate,
     context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
 ) -> StoredDocument:
-    settings, token, _user_id, client = context
-    update_data: dict[str, Any] = {}
-    if updates.document_type is not None:
-        update_data["document_type"] = updates.document_type
-    if updates.extracted_metadata is not None:
-        update_data["extracted_metadata"] = updates.extracted_metadata
-
-    if not update_data:
-        raise HTTPException(status_code=400, detail="No fields provided for update.")
-
-    response = await rest_request(
-        client,
-        settings,
-        token,
-        "PATCH",
-        "institution_documents",
-        params={
-            "id": f"eq.{document_id}",
-            "select": "id,institution_id,uploaded_by,filename,filesize_bytes,sha256,storage_path,document_type,extracted_metadata,scan_status,scan_details,created_at,expires_at",
-        },
-        body=update_data,
-        prefer="return=representation",
+    raise HTTPException(
+        status_code=405,
+        detail="Document analysis metadata is immutable after upload.",
     )
-    rows = response_rows(response)
-    if not rows:
-        raise HTTPException(status_code=404, detail="Document was not found or access denied.")
-    return StoredDocument(**rows[0])
 
 
 @app.delete("/api/v1/documents/{document_id}", status_code=204)
@@ -850,19 +866,10 @@ async def delete_document(
     document_id: UUID,
     context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
 ) -> None:
-    settings, token, _user_id, client = context
-    response = await rest_request(
-        client,
-        settings,
-        token,
-        "DELETE",
-        "institution_documents",
-        params={"id": f"eq.{document_id}", "select": "id"},
-        prefer="return=representation",
+    raise HTTPException(
+        status_code=405,
+        detail="Document version records are retained and cannot be deleted.",
     )
-    rows = response_rows(response)
-    if not rows:
-        raise HTTPException(status_code=404, detail="Document was not found or access denied.")
 
 
 
@@ -1084,7 +1091,7 @@ async def validate_application_id(
     docs_response = await rest_request(
         client, settings, token, "GET", "application_documents",
         params={
-            "select": "id,checklist_item_id,documents(*)",
+            "select": "id,checklist_item_id,documents:document_versions(*)",
             "application_id": f"eq.{application_id}",
             "limit": "100",
         },
@@ -1175,7 +1182,7 @@ async def review_application_finding(
         body={
             "status": new_status,
             "resolved_by": str(user_id),
-            "resolved_at": datetime.now(timezone.utc).isoformat(),
+            "resolved_at": datetime.now(UTC).isoformat(),
         },
         prefer="return=representation",
     )
@@ -1233,7 +1240,7 @@ async def application_report(
 
     docs_res = await rest_request(
         client, settings, token, "GET", "application_documents",
-        params={"select": "id,checklist_item_id,documents(id,filename,scan_status,extracted_metadata)", "application_id": f"eq.{application_id}", "limit": "100"},
+        params={"select": "id,checklist_item_id,documents:document_versions(id,filename:original_filename,scan_status,extracted_metadata)", "application_id": f"eq.{application_id}", "limit": "100"},
     )
     doc_rows = response_rows(docs_res)
 
@@ -1268,9 +1275,9 @@ async def list_application_documents(
     response = await rest_request(
         client, settings, token, "GET", "application_documents",
         params={
-            "select": ("id,checklist_item_id,documents(id,institution_id,uploaded_by,filename,"
-                       "filesize_bytes,sha256,storage_path,document_type,extracted_metadata,"
-                       "scan_status,scan_details,created_at,expires_at)"),
+            "select": ("id,checklist_item_id,document:document_versions(id,institution_id,uploaded_by,"
+                       "filename:original_filename,filesize_bytes:size_bytes,sha256,storage_path,document_type,"
+                       "extracted_metadata,scan_status,scan_details:scan_detail,created_at)"),
             "application_id": f"eq.{application_id}",
             "limit": "100",
         },
@@ -1278,7 +1285,7 @@ async def list_application_documents(
     rows = response_rows(response)
     result: list[StoredDocument] = []
     for row in rows:
-        document = row.get("documents")
+        document = row.get("document")
         if not isinstance(document, dict) or not document.get("id"):
             continue
         document = dict(document)
@@ -1286,5 +1293,5 @@ async def list_application_documents(
             "application_id": application_id,
             "checklist_item_id": row.get("checklist_item_id"),
         }
-        result.append(StoredDocument(**document))
+        result.append(StoredDocument(**{**document, "expires_at": None}))
     return result

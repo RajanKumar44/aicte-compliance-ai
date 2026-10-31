@@ -52,7 +52,7 @@ create policy applications_update_member
 create table if not exists public.application_documents (
     id uuid primary key default gen_random_uuid(),
     application_id uuid not null references public.applications(id) on delete cascade,
-    document_id uuid not null unique references public.institution_documents(id) on delete cascade,
+    document_id uuid not null unique references public.document_versions(id) on delete restrict,
     checklist_item_id text,
     uploaded_by uuid not null references auth.users(id) on delete restrict,
     created_at timestamptz not null default now()
@@ -84,6 +84,10 @@ create policy application_documents_insert_member
         and exists (
             select 1 from public.applications a
             where a.id = application_id
+              and exists (
+                  select 1 from public.document_versions d
+                  where d.id = document_id and d.institution_id = a.institution_id
+              )
               and public.has_institution_role(a.institution_id, array['applicant', 'institution_admin'])
         )
     );
@@ -255,4 +259,4 @@ values (
     'in_review',
     'Application checklist demo scope still in review. No rule is approved or evaluated from official sources.'
 )
-on conflict (application_type, academic_year) do update set review_note = excluded.review_note;
+on conflict (application_type, academic_year) do nothing;

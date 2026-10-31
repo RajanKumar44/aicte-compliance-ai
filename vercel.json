@@ -6,23 +6,23 @@
   "rewrites": [
     {
       "source": "/health",
-      "destination": "https://aicte-compliance-backend-live.vercel.app/health"
+      "destination": "https://aicte-compliance-backend.onrender.com/health"
     },
     {
       "source": "/version",
-      "destination": "https://aicte-compliance-backend-live.vercel.app/version"
+      "destination": "https://aicte-compliance-backend.onrender.com/version"
     },
     {
       "source": "/api/:path*",
-      "destination": "https://aicte-compliance-backend-live.vercel.app/api/:path*"
+      "destination": "https://aicte-compliance-backend.onrender.com/api/:path*"
     },
     {
       "source": "/docs",
-      "destination": "https://aicte-compliance-backend-live.vercel.app/docs"
+      "destination": "https://aicte-compliance-backend.onrender.com/docs"
     },
     {
       "source": "/openapi.json",
-      "destination": "https://aicte-compliance-backend-live.vercel.app/openapi.json"
+      "destination": "https://aicte-compliance-backend.onrender.com/openapi.json"
     },
     {
       "source": "/(.*)",

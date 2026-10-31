@@ -27,7 +27,7 @@ says nothing about document authenticity.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any, Literal
 
 # ---------------------------------------------------------------------------
@@ -167,7 +167,7 @@ def resolve_checklist(checklist_snapshot: list[dict[str, Any]], params: dict[str
 # ---------------------------------------------------------------------------
 
 def _today() -> date:
-    return datetime.now(timezone.utc).date()
+    return datetime.now(UTC).date()
 
 
 def _parse_iso(value: Any) -> date | None:
@@ -252,7 +252,7 @@ def generate_application_findings(
 ) -> list[dict[str, Any]]:
     """Run the demo rule engine over an application's linked documents.
 
-    ``linked_documents`` rows must embed the institution_documents row either
+    ``linked_documents`` rows must embed the document_versions row either
     directly or under ``documents`` (PostgREST embed shape).
     """
     findings: list[dict[str, Any]] = []
@@ -504,7 +504,7 @@ def report_payload(
     documents: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Build the downloadable preliminary scrutiny report."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     return {
         "report_kind": "preliminary_scrutiny_report",
         "report_version": RULE_VERSION,
