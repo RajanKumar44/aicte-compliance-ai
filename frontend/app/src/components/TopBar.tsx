@@ -1,9 +1,38 @@
+import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { HealthIndicator } from "./HealthIndicator";
 import { useTheme, type ThemeName } from "./ThemeContext";
-import { Shield, ChevronRight, LayoutDashboard, ClipboardCheck, Info, FileLock2, FileText, Menu, X, Clock3, GraduationCap } from "lucide-react";
+import {
+  Shield,
+  ChevronRight,
+  LayoutDashboard,
+  ClipboardCheck,
+  Info,
+  FileLock2,
+  FileText,
+  Menu,
+  X,
+  Clock3,
+  GraduationCap,
+  Archive,
+  CheckSquare,
+  Scale,
+  Bell,
+  CheckCheck,
+} from "lucide-react";
 import { useAuth } from "./useAuth";
+
+const API_BASE = import.meta.env.VITE_API_URL || "";
+
+interface InAppNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: string;
+  is_read: boolean;
+  created_at: string;
+}
 
 const pageTitles: Record<string, { title: string; description: string; icon: React.ReactNode }> = {
   "/": {
@@ -15,6 +44,21 @@ const pageTitles: Record<string, { title: string; description: string; icon: Rea
     title: "Validate",
     description: "Document validation workspace",
     icon: <ClipboardCheck className="h-5 w-5" />,
+  },
+  "/vault": {
+    title: "Document Vault",
+    description: "Institutional document custody & extraction",
+    icon: <Archive className="h-5 w-5" />,
+  },
+  "/action-planner": {
+    title: "Action Planner",
+    description: "Corrective action tracking & verification",
+    icon: <CheckSquare className="h-5 w-5" />,
+  },
+  "/regulatory-impact": {
+    title: "Regulatory Impact",
+    description: "Norm change intelligence & institutional diffs",
+    icon: <Scale className="h-5 w-5" />,
   },
   "/cadre-calculator": {
     title: "Cadre & FSR Calculator",
@@ -53,12 +97,49 @@ export function TopBar({ onMenuToggle, mobileMenuOpen }: { onMenuToggle: () => v
   const page = pageTitles[location.pathname] || pageTitles["/"];
   const { theme, setTheme } = useTheme();
   const { session, signOut } = useAuth();
+  const [notifications, setNotifications] = useState<InAppNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+
   const activeUser = session?.user
     ? {
         name: (session.user.user_metadata?.full_name as string) || session.user.email?.split("@")[0] || "User",
         role: "Institutional Member",
       }
     : null;
+
+  const fetchNotifs = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/notifications?limit=10`);
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data);
+      }
+      const countRes = await fetch(`${API_BASE}/api/notifications/unread-count`);
+      if (countRes.ok) {
+        const c = await countRes.json();
+        setUnreadCount(c.unread_count || 0);
+      }
+    } catch {
+      // Fallback silent
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, 45000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleMarkAllRead = async () => {
+    try {
+      await fetch(`${API_BASE}/api/notifications/mark-all-read`, { method: "POST" });
+      setUnreadCount(0);
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    } catch {
+      // Silent error
+    }
+  };
 
   return (
     <header className="app-topbar sticky top-0 z-30 h-16 border-b border-border bg-bg-0">
@@ -89,6 +170,70 @@ export function TopBar({ onMenuToggle, mobileMenuOpen }: { onMenuToggle: () => v
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          {/* Notification Bell */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="relative p-2 rounded-lg text-text-secondary hover:bg-bg-2 hover:text-text-heading transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              aria-label="Compliance notifications"
+            >
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-danger-500 text-[10px] font-bold text-white ring-2 ring-bg-0">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+
+            {showNotifications && (
+              <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl border border-border bg-bg-1 shadow-2xl z-50 overflow-hidden">
+                <div className="p-3 border-b border-border flex items-center justify-between bg-bg-2/50">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-text-heading">Compliance Notifications</span>
+                    {unreadCount > 0 && (
+                      <span className="text-[10px] bg-primary-500/20 text-primary-400 font-bold px-1.5 py-0.5 rounded">
+                        {unreadCount} unread
+                      </span>
+                    )}
+                  </div>
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleMarkAllRead}
+                      className="text-[11px] font-semibold text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                    >
+                      <CheckCheck className="h-3 w-3" /> Mark all read
+                    </button>
+                  )}
+                </div>
+
+                <div className="max-h-80 overflow-y-auto divide-y divide-border/50">
+                  {notifications.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-text-muted">No notifications yet.</div>
+                  ) : (
+                    notifications.map((notif) => (
+                      <div
+                        key={notif.id}
+                        className={`p-3 text-xs transition-colors ${
+                          notif.is_read ? "bg-bg-1 text-text-secondary" : "bg-primary-500/5 text-text-heading font-medium"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <span className="font-bold text-text-heading">{notif.title}</span>
+                          <span className="text-[10px] text-text-muted">
+                            {new Date(notif.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                        <p className="text-text-secondary text-[11px] line-clamp-2">{notif.message}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           {activeUser ? (
             <div className="flex items-center gap-2">
               <div className="hidden sm:flex flex-col items-end text-xs">
@@ -112,6 +257,7 @@ export function TopBar({ onMenuToggle, mobileMenuOpen }: { onMenuToggle: () => v
               Sign In
             </Link>
           )}
+
           <label className="sr-only" htmlFor="theme-select">Appearance theme</label>
           <select
             id="theme-select"

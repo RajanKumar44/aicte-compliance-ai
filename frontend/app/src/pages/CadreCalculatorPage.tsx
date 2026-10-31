@@ -83,10 +83,11 @@ export function CadreCalculatorPage() {
   const totalStudents = Math.max(1, annualIntake * durationYears);
   const requiredFaculty = Math.ceil(totalStudents / targetFsr);
 
-  // 1:2:6 ratio calculation (1+2+6 = 9 parts)
-  const reqProfessors = Math.max(1, Math.ceil(requiredFaculty * (1 / 9)));
-  const reqAssocProfs = Math.max(1, Math.ceil(requiredFaculty * (2 / 9)));
-  const reqAsstProfs = Math.max(1, requiredFaculty - (reqProfessors + reqAssocProfs));
+  // AICTE APH 2024-27 Annexure 5: Cadre ratio is NOT applicable to Diploma
+  const isCadreApplicable = programKey !== "polytechnic_diploma";
+  const reqProfessors = isCadreApplicable ? Math.max(1, Math.ceil(requiredFaculty * (1 / 9))) : 0;
+  const reqAssocProfs = isCadreApplicable ? Math.max(1, Math.ceil(requiredFaculty * (2 / 9))) : 0;
+  const reqAsstProfs = isCadreApplicable ? Math.max(1, requiredFaculty - (reqProfessors + reqAssocProfs)) : requiredFaculty;
 
   const totalExistingFaculty = professors + assocProfs + asstProfs;
   const currentRatio = totalExistingFaculty > 0 ? (totalStudents / totalExistingFaculty).toFixed(1) : "N/A";
@@ -103,10 +104,7 @@ export function CadreCalculatorPage() {
 
   const hasAnyDeficiency =
     totalDeficit > 0 ||
-    profDeficit > 0 ||
-    assocDeficit > 0 ||
-    profPhdMissing > 0 ||
-    assocPhdMissing > 0;
+    (isCadreApplicable && (profDeficit > 0 || assocDeficit > 0 || profPhdMissing > 0 || assocPhdMissing > 0));
 
   const loadPreset = (preset: DepartmentPreset) => {
     setProgramKey(preset.programKey);
@@ -185,16 +183,26 @@ export function CadreCalculatorPage() {
                 onChange={(e) => {
                   const k = e.target.value;
                   setProgramKey(k);
-                  if (k === "management_pg" || k === "mca_pg") setDurationYears(2);
-                  else if (k === "polytechnic_diploma") setDurationYears(3);
+                  if (k === "management_pg" || k === "mca_pg" || k === "engineering_pg" || k === "hmct_pg") setDurationYears(2);
+                  else if (k === "polytechnic_diploma" || k === "management_ug") setDurationYears(3);
+                  else if (k === "architecture_ug") setDurationYears(5);
                   else setDurationYears(4);
+                  if (k === "engineering_pg") setTargetFsr(15);
+                  else if (k === "management_ug" || k === "polytechnic_diploma") setTargetFsr(25);
+                  else if (k === "hmct_pg") setTargetFsr(12);
+                  else if (k === "architecture_ug") setTargetFsr(10);
+                  else setTargetFsr(20);
                 }}
                 className="app-control w-full rounded-md border border-border bg-bg-1 px-3 py-2 text-sm text-text-heading"
               >
-                <option value="engineering_ug">Engineering & Technology (UG - B.Tech)</option>
-                <option value="management_pg">Management (MBA / PGDM)</option>
-                <option value="mca_pg">Computer Applications (MCA)</option>
-                <option value="polytechnic_diploma">Polytechnic Diploma in Engg.</option>
+                <option value="engineering_ug">Engineering & Technology (UG - B.Tech - 1:20)</option>
+                <option value="engineering_pg">Engineering & Technology (PG - M.Tech - 1:15)</option>
+                <option value="management_ug">Management (UG - BBA / BMS - 1:25)</option>
+                <option value="management_pg">Management (PG - MBA / PGDM - 1:20)</option>
+                <option value="mca_pg">Computer Applications (MCA - 1:20)</option>
+                <option value="hmct_pg">Hotel Management & Catering Tech (PG - HMCT - 1:12)</option>
+                <option value="architecture_ug">Architecture & Planning (UG - B.Arch - 1:10)</option>
+                <option value="polytechnic_diploma">Polytechnic Diploma in Engg. (1:25 - Cadre Excluded)</option>
               </select>
             </div>
 
