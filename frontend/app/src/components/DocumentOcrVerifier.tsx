@@ -20,6 +20,10 @@ import {
   Search,
   X,
   Sparkles,
+  Edit3,
+  Printer,
+  FileCheck,
+  Check,
 } from "lucide-react";
 import {
   analyzeDocument,
@@ -27,6 +31,7 @@ import {
   downloadStoredDocument,
   deleteStoredDocument,
   uploadAndStoreDocument,
+  updateStoredDocument,
   type DocumentAnalysisResponse,
   type StoredDocument,
 } from "../lib/api";
@@ -89,12 +94,12 @@ const OCR_SAMPLES: OCRSampleDoc[] = [
 ];
 
 export const MANDATORY_AICTE_CHECKLIST = [
-  { key: "Fire Safety Certificate", label: "Fire Safety NOC", category: "Safety & Fire" },
-  { key: "Building Structural Stability Certificate", label: "Structural Stability", category: "Infrastructure" },
-  { key: "Land Ownership Deed / 30-Year Registered Lease", label: "Land Title / 30-Yr Lease", category: "Infrastructure" },
-  { key: "Occupancy Certificate", label: "Occupancy Certificate", category: "Infrastructure" },
-  { key: "AICTE Approval Letter (EoA)", label: "Previous AICTE EoA", category: "Approvals" },
-  { key: "Affiliating University NOC", label: "University Affiliation NOC", category: "Approvals" },
+  { key: "Fire Safety Certificate", label: "Fire Safety NOC", category: "Safety & Fire", isPermanent: false },
+  { key: "Building Structural Stability Certificate", label: "Structural Stability", category: "Infrastructure", isPermanent: false },
+  { key: "Land Ownership Deed / 30-Year Registered Lease", label: "Land Title / 30-Yr Lease", category: "Infrastructure", isPermanent: true },
+  { key: "Occupancy Certificate", label: "Occupancy Certificate", category: "Infrastructure", isPermanent: true },
+  { key: "AICTE Approval Letter (EoA)", label: "Previous AICTE EoA", category: "Approvals", isPermanent: false },
+  { key: "Affiliating University NOC", label: "University Affiliation NOC", category: "Approvals", isPermanent: false },
 ] as const;
 
 interface DocumentOcrVerifierProps {
@@ -106,8 +111,10 @@ export function DocumentOcrVerifier({
   onPopulateDate,
   className = "",
 }: DocumentOcrVerifierProps) {
-  const { session } = useAuth();
+  const { session, user } = useAuth();
   const token = session?.access_token;
+  const institutionName = (user?.user_metadata?.full_name as string) || "Technical Institute";
+  const institutionCode = (user?.user_metadata?.institution_id as string) || "SYNTH-INST-001";
 
   const [mode, setMode] = useState<"upload" | "vault" | "sample">("upload");
   const [selectedDocId, setSelectedDocId] = useState<string>("fire_noc_01");
@@ -139,7 +146,17 @@ export function DocumentOcrVerifier({
   // Real-world Vault Filtering & Inspection state
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [expiryFilter, setExpiryFilter] = useState<string>("all");
   const [inspectedDoc, setInspectedDoc] = useState<StoredDocument | null>(null);
+  const [isEditingMetadata, setIsEditingMetadata] = useState(false);
+  const [editAuthority, setEditAuthority] = useState("");
+  const [editCertNo, setEditCertNo] = useState("");
+  const [editExpiryDate, setEditExpiryDate] = useState("");
+  const [editStatus, setEditStatus] = useState<string>("verified");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Scrutiny Dossier Modal
+  const [showDossierModal, setShowDossierModal] = useState(false);
 
   const activeDoc = OCR_SAMPLES.find((d) => d.id === selectedDocId) || OCR_SAMPLES[0];
   const isSampleVerified = verifiedDocs[activeDoc.id] ?? false;
@@ -247,6 +264,57 @@ export function DocumentOcrVerifier({
     }
   };
 
+  const handleOpenInspect = (doc: StoredDocument) => {
+    setInspectedDoc(doc);
+    setIsEditingMetadata(false);
+    const cf = doc.extracted_metadata?.candidate_fields as Record<string, unknown> | undefined;
+    setEditAuthority((cf?.issuing_authority as string) || doc.issuing_authority || "");
+    setEditCertNo((cf?.certificate_number as string) || doc.certificate_number || "");
+    setEditExpiryDate((cf?.expiry_date as string) || doc.custom_expiry_date || "");
+    setEditStatus(doc.scrutiny_status || "verified");
+  };
+
+  const handleSaveMetadataChanges = async () => {
+    if (!inspectedDoc) return;
+    setIsSavingEdit(true);
+
+    const existingMetadata = inspectedDoc.extracted_metadata || {};
+    const existingCf = (existingMetadata.candidate_fields as Record<string, unknown>) || {};
+
+    const updatedCandidateFields = {
+      ...existingCf,
+      issuing_authority: editAuthority,
+      certificate_number: editCertNo,
+      expiry_date: editExpiryDate,
+    };
+
+    const updatedMetadata = {
+      ...existingMetadata,
+      candidate_fields: updatedCandidateFields,
+    };
+
+    const res = await updateStoredDocument(
+      inspectedDoc.id,
+      {
+        extracted_metadata: updatedMetadata,
+        scrutiny_status: editStatus as "verified" | "pending" | "needs_renewal" | "flagged",
+        issuing_authority: editAuthority,
+        certificate_number: editCertNo,
+        custom_expiry_date: editExpiryDate,
+      },
+      token || "demo-token"
+    );
+
+    setIsSavingEdit(false);
+    if (res.ok) {
+      setInspectedDoc(res.data);
+      setIsEditingMetadata(false);
+      void loadVaultDocuments();
+    } else {
+      alert("Failed to save changes to document metadata.");
+    }
+  };
+
   const handleFileInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -254,7 +322,7 @@ export function DocumentOcrVerifier({
     }
   };
 
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+  const handleDrop = (e: DragEvent<HTMLLabelElement>) => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
@@ -263,7 +331,7 @@ export function DocumentOcrVerifier({
     }
   };
 
-  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+  const handleDragOver = (e: DragEvent<HTMLLabelElement>) => {
     e.preventDefault();
     setIsDragging(true);
   };
@@ -313,11 +381,13 @@ export function DocumentOcrVerifier({
       if (doc?.extracted_metadata?.candidate_fields && typeof doc.extracted_metadata.candidate_fields === "object") {
         const cf = doc.extracted_metadata.candidate_fields as Record<string, unknown>;
         expiry = String(cf.expiry_date || "");
+      } else if (doc?.custom_expiry_date) {
+        expiry = doc.custom_expiry_date;
       }
 
       let isExpired = false;
       let isExpiringSoon = false;
-      if (expiry) {
+      if (expiry && !item.isPermanent) {
         const diffDays = Math.ceil((new Date(expiry).getTime() - new Date(today).getTime()) / (1000 * 3600 * 24));
         if (diffDays <= 0) isExpired = true;
         else if (diffDays <= 60) isExpiringSoon = true;
@@ -341,6 +411,8 @@ export function DocumentOcrVerifier({
 
   // Filtered documents for vault display
   const filteredVaultDocs = useMemo(() => {
+    const today = new Date().toISOString().split("T")[0];
+
     return vaultDocs.filter((doc) => {
       const matchesSearch =
         searchQuery.trim() === "" ||
@@ -359,9 +431,24 @@ export function DocumentOcrVerifier({
             doc.document_type.toLowerCase().includes("noc") ||
             doc.document_type.toLowerCase().includes("eoa")));
 
-      return matchesSearch && matchesCat;
+      let matchesExpiry = true;
+      const cf = doc.extracted_metadata?.candidate_fields as Record<string, unknown> | undefined;
+      const expiry = (cf?.expiry_date as string) || doc.custom_expiry_date || "";
+
+      if (expiryFilter !== "all") {
+        if (!expiry) {
+          matchesExpiry = expiryFilter === "permanent";
+        } else {
+          const diffDays = Math.ceil((new Date(expiry).getTime() - new Date(today).getTime()) / (1000 * 3600 * 24));
+          if (expiryFilter === "expired") matchesExpiry = diffDays <= 0;
+          else if (expiryFilter === "expiring_soon") matchesExpiry = diffDays > 0 && diffDays <= 60;
+          else if (expiryFilter === "valid") matchesExpiry = diffDays > 60;
+        }
+      }
+
+      return matchesSearch && matchesCat && matchesExpiry;
     });
-  }, [vaultDocs, searchQuery, categoryFilter]);
+  }, [vaultDocs, searchQuery, categoryFilter, expiryFilter]);
 
   const handleAutoPopulateFormFromVault = () => {
     if (!onPopulateDate) return;
@@ -441,46 +528,38 @@ export function DocumentOcrVerifier({
           /* REAL PDF UPLOAD WORKFLOW */
           <div className="space-y-6">
             {!analysisResult && !isAnalyzing ? (
-              /* ENTIRE BOX IS FULLY CLICKABLE VIA ONCLICK ON CONTAINER */
-              <div
+              /* ENTIRE BOX IS FULLY CLICKABLE VIA NATIVE LABEL ON INPUT */
+              <label
+                htmlFor="pdf-upload-input"
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
-                onClick={() => fileInputRef.current?.click()}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    fileInputRef.current?.click();
-                  }
-                }}
-                className={`group relative cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-all select-none ${
+                className={`group relative block w-full cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-all select-none ${
                   isDragging
-                    ? "border-accent-strong bg-accent-strong/10 scale-[1.01]"
-                    : "border-border bg-bg-0 hover:border-accent-strong hover:bg-bg-1 shadow-sm"
+                    ? "border-accent-strong bg-accent-strong/10 scale-[1.01] shadow-md ring-2 ring-accent-strong/20"
+                    : "border-border bg-bg-0 hover:border-accent-strong hover:bg-bg-1/80 shadow-sm"
                 }`}
               >
                 <input
                   ref={fileInputRef}
+                  id="pdf-upload-input"
                   type="file"
                   accept="application/pdf,.pdf"
                   onChange={handleFileInputChange}
                   className="sr-only"
-                  id="pdf-upload-input"
                 />
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary-500/10 text-accent-strong transition-transform group-hover:scale-110">
+                <div className="pointer-events-none mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary-500/10 text-accent-strong transition-transform group-hover:scale-110">
                   <UploadCloud className="h-7 w-7" />
                 </div>
-                <h4 className="mt-3.5 text-base font-bold text-text-heading group-hover:text-accent-strong transition-colors">
-                  Click anywhere or drag & drop a statutory PDF certificate
+                <h4 className="pointer-events-none mt-3.5 text-base font-bold text-text-heading group-hover:text-accent-strong transition-colors">
+                  Click anywhere in this box or drag & drop a statutory PDF certificate
                 </h4>
-                <p className="mt-1 text-xs text-text-secondary max-w-md mx-auto leading-relaxed">
+                <p className="pointer-events-none mt-1 text-xs text-text-secondary max-w-md mx-auto leading-relaxed">
                   Enforces strict PDF structure validation. Maximum file size: 10 MiB. Files are processed
                   securely in-memory with ClamAV malware scanning and text extraction.
                 </p>
 
-                <div className="mt-4 flex items-center justify-center gap-3">
+                <div className="pointer-events-none mt-4 flex items-center justify-center gap-3">
                   <span className="inline-flex items-center justify-center rounded-md bg-accent-strong px-4 py-2 text-xs font-bold text-bg-0 shadow-sm transition group-hover:opacity-95">
                     Select PDF from Device
                   </span>
@@ -492,7 +571,7 @@ export function DocumentOcrVerifier({
                     <span>{uploadError}</span>
                   </div>
                 )}
-              </div>
+              </label>
             ) : isAnalyzing ? (
               <div className="rounded-xl border border-border bg-bg-0 p-12 text-center space-y-4">
                 <Loader2 className="h-8 w-8 animate-spin text-accent-strong mx-auto" />
@@ -520,183 +599,116 @@ export function DocumentOcrVerifier({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={resetUpload} leftIcon={<RotateCcw className="h-3.5 w-3.5" />}>
+                      Upload Another
+                    </Button>
                     <Button
-                      variant="ghost"
+                      variant="primary"
                       size="sm"
-                      onClick={resetUpload}
-                      leftIcon={<RotateCcw className="h-3.5 w-3.5" />}
+                      onClick={handleSaveToVault}
+                      disabled={isSavingToVault || Boolean(vaultSaveSuccess)}
+                      leftIcon={isSavingToVault ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
                     >
-                      Analyze Another PDF
+                      {vaultSaveSuccess ? "Deposited in Vault" : isSavingToVault ? "Storing..." : "Deposit in Vault"}
                     </Button>
                   </div>
                 </div>
 
-                {/* Antivirus & OCR Status Indicators */}
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className={`rounded-lg border p-3 text-xs flex items-start gap-2.5 ${
-                    analysisResult.scan_status === "clean"
-                      ? "border-success-border bg-success-bg/40 text-success-text"
-                      : analysisResult.scan_status === "infected"
-                      ? "border-error-border bg-error-bg/40 text-error-text"
-                      : "border-warning-border bg-warning-bg/40 text-text-body"
-                  }`}>
-                    <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5 text-accent-strong" />
-                    <div>
-                      <p className="font-bold">
-                        Antivirus Status: {
-                          analysisResult.scan_status === "clean" ? "Clean (Verified)"
-                          : analysisResult.scan_status === "infected" ? "Infected (Blocked)"
-                          : "Scanner Standby / Clean"
-                        }
-                      </p>
-                      <p className="text-[11px] text-text-secondary mt-0.5">
-                        {analysisResult.scan_details || "File inspected for structural conformance and security hygiene."}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg border border-border bg-bg-1 p-3 text-xs flex items-start gap-2.5 text-text-body">
-                    <ScanText className="h-4 w-4 shrink-0 mt-0.5 text-accent-strong" />
-                    <div>
-                      <p className="font-bold">
-                        OCR Pipeline: {
-                          analysisResult.ocr_status === "completed" ? "OCR Engine Applied"
-                          : analysisResult.ocr_status === "unavailable" ? "OCR Engine Unavailable"
-                          : "Native Selectable PDF Stream"
-                        }
-                      </p>
-                      <p className="text-[11px] text-text-secondary mt-0.5">
-                        {analysisResult.ocr_status === "unavailable"
-                          ? "Host environment lacks tesseract-ocr; text extraction parsed selectable font streams."
-                          : "Text streams extracted and parsed for statutory clearance candidate dates."}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Scanned/Image Warning */}
-                {analysisResult.is_scanned_only && (
-                  <div className="flex items-start gap-2.5 rounded-lg border border-warning-border bg-warning-bg/40 p-3.5 text-xs text-text-body">
-                    <AlertTriangle className="h-4 w-4 text-warning-text shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-bold text-warning-text">Scanned / Raster PDF Detected</p>
-                      <p className="mt-0.5 text-text-secondary">
-                        This document does not contain an embedded selectable text layer. Extracted dates or
-                        authorities may require manual entry from visual inspection.
-                      </p>
-                    </div>
+                {vaultSaveSuccess && (
+                  <div className="rounded-lg border border-success-border bg-success-bg/30 p-3 text-xs text-success-text flex items-center justify-between">
+                    <span className="font-semibold flex items-center gap-1.5">
+                      <CheckCircle2 className="h-4 w-4" />
+                      {vaultSaveSuccess}
+                    </span>
+                    <Button variant="secondary" size="sm" onClick={() => setMode("vault")}>
+                      View in Vault
+                    </Button>
                   </div>
                 )}
 
-                {/* Additional Warnings */}
-                {analysisResult.warnings?.length > 0 && (
-                  <div className="space-y-1">
-                    {analysisResult.warnings.map((w, idx) => (
-                      <p key={idx} className="text-xs text-warning-text flex items-center gap-1.5">
-                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                        <span>{w}</span>
-                      </p>
-                    ))}
+                {vaultSaveError && (
+                  <div className="rounded-lg border border-error-border bg-error-bg/30 p-3 text-xs text-error-text flex items-center gap-1.5">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>{vaultSaveError}</span>
                   </div>
                 )}
 
-                {/* Side-by-Side Review Grid */}
+                {/* Analysis Layout */}
                 <div className="grid gap-6 md:grid-cols-2">
-                  {/* Left: Text Preview & Cryptographic Proof */}
+                  {/* Left Column: Security & Extraction */}
+                  <div className="space-y-4">
+                    {/* Antivirus & Hygiene Card */}
+                    <div className="rounded-xl border border-border bg-bg-1 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-wider text-text-muted">
+                          Malware Scan & File Hygiene
+                        </span>
+                        {analysisResult.scan_status === "clean" ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-success-bg/40 px-2 py-0.5 text-[11px] font-bold text-success-text border border-success-border">
+                            <ShieldCheck className="h-3.5 w-3.5" />
+                            Clean
+                          </span>
+                        ) : analysisResult.scan_status === "infected" ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-error-bg/40 px-2 py-0.5 text-[11px] font-bold text-error-text border border-error-border">
+                            <AlertCircle className="h-3.5 w-3.5" />
+                            Infected
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded bg-warning-bg/40 px-2 py-0.5 text-[11px] font-bold text-warning-text border border-warning-border">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            Scan Daemon Standby
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-text-secondary leading-relaxed">
+                        {analysisResult.scan_details}
+                      </p>
+                      <div className="rounded bg-bg-0 p-2 font-mono text-[10px] text-text-muted border border-border break-all">
+                        SHA-256: {analysisResult.sha256}
+                      </div>
+                    </div>
+
+                    {/* OCR Text Stream Preview */}
+                    <div className="rounded-xl border border-border bg-bg-1 p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-wider text-text-muted">
+                          Extracted Text Preview
+                        </span>
+                        <span className="text-[10px] text-text-muted">
+                          {analysisResult.extracted_text_preview ? `${analysisResult.extracted_text_preview.length} chars` : "0 chars"}
+                        </span>
+                      </div>
+                      <div className="h-40 overflow-y-auto rounded-lg border border-border bg-bg-0 p-3 font-mono text-[11px] leading-relaxed text-text-body whitespace-pre-wrap">
+                        {analysisResult.extracted_text_preview || "No text detected directly in document streams."}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: AICTE Scrutiny Mapping & Confirmation */}
                   <div className="rounded-xl border border-border bg-bg-1 p-5 space-y-4">
                     <div className="flex items-center justify-between border-b border-border pb-3">
-                      <span className="text-xs font-bold uppercase tracking-wider text-text-muted">
-                        Extracted Document Text
-                      </span>
-                      <span className="font-mono text-[10px] text-text-muted bg-bg-2 px-2 py-0.5 rounded border border-border">
-                        {analysisResult.is_scanned_only ? "Image Only" : "Selectable Stream"}
-                      </span>
-                    </div>
-
-                    <div className="h-48 overflow-y-auto rounded-lg border border-border bg-bg-0 p-3 font-mono text-[11px] leading-relaxed text-text-body whitespace-pre-wrap">
-                      {analysisResult.extracted_text_preview || "No selectable text stream found in PDF."}
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted block">
-                        SHA-256 Cryptographic Hash
-                      </span>
-                      <p className="font-mono text-[10px] text-text-muted bg-bg-0 p-2 rounded border border-border break-all">
-                        {analysisResult.sha256}
-                      </p>
-                    </div>
-
-                    {/* Vault Storage Action */}
-                    <div className="rounded-lg border border-border bg-bg-2 p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-text-heading flex items-center gap-1.5">
-                          <Archive className="h-3.5 w-3.5 text-accent-strong" />
-                          Institutional Vault Archival
-                        </span>
-                        <span className="text-[10px] text-success-text font-bold">Authorized</span>
-                      </div>
-                      <p className="text-[11px] text-text-secondary">
-                        Store this validated statutory certificate in your institution&apos;s vault for audit trails and repeat submissions.
-                      </p>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        fullWidth
-                        onClick={handleSaveToVault}
-                        disabled={isSavingToVault || Boolean(vaultSaveSuccess)}
-                        leftIcon={isSavingToVault ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
-                      >
-                        {isSavingToVault ? "Storing in Vault..." : vaultSaveSuccess ? "Document Stored in Vault" : "Save Document to Vault"}
-                      </Button>
-                      {vaultSaveSuccess && (
-                        <p className="text-xs text-success-text font-bold flex items-center gap-1">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          {vaultSaveSuccess}
-                        </p>
-                      )}
-                      {vaultSaveError && (
-                        <p className="text-xs text-error-text font-bold flex items-center gap-1">
-                          <AlertCircle className="h-3.5 w-3.5" />
-                          {vaultSaveError}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Right: Candidate Fields & Form Mapping */}
-                  <div className="rounded-xl border border-border bg-bg-1 p-5 space-y-4">
-                    <div className="border-b border-border pb-3">
                       <h4 className="text-xs font-bold uppercase tracking-wider text-text-muted">
-                        Candidate Field Extraction & Mapping
+                        Statutory Scrutiny Candidate Fields
                       </h4>
-                      <p className="text-[11px] text-text-secondary mt-0.5">
-                        Verify and edit extracted values before populating into the compliance form.
-                      </p>
+                      <span className="text-[11px] font-bold text-accent-strong">
+                        Preliminary Match
+                      </span>
                     </div>
 
-                    <div className="space-y-3 text-xs">
+                    <div className="space-y-3.5 text-xs">
                       <div>
                         <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">
                           Detected Issuing Authority
                         </label>
-                        <p className="font-medium text-text-heading bg-bg-0 p-2 rounded border border-border">
-                          {analysisResult.candidate_fields?.issuing_authority || "Not explicitly identified in text"}
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">
-                          Certificate Identifier / Ref
-                        </label>
-                        <p className="font-mono text-text-heading bg-bg-0 p-2 rounded border border-border">
-                          {analysisResult.candidate_fields?.certificate_number || "Not detected"}
+                        <p className="font-semibold text-text-heading bg-bg-0 p-2 rounded border border-border">
+                          {analysisResult.candidate_fields?.issuing_authority || "Authority pattern not matched"}
                         </p>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">
-                            Detected Issue Date
+                            Issue Date
                           </label>
                           <p className="font-mono text-text-body bg-bg-0 p-2 rounded border border-border">
                             {analysisResult.candidate_fields?.issue_date || "—"}
@@ -776,7 +788,7 @@ export function DocumentOcrVerifier({
           <div className="space-y-6">
             {/* 1. AICTE Mandatory Document Checklist Completeness Tracker */}
             <div className="rounded-xl border border-border bg-bg-1 p-5 space-y-4">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-accent-strong" />
@@ -838,6 +850,8 @@ export function DocumentOcrVerifier({
                             ? "Expired — Needs Renewal"
                             : item.isExpiringSoon
                             ? "Expiring Soon (<60d)"
+                            : item.isPermanent
+                            ? "Permanent Clear"
                             : `Valid (${item.expiry})`
                           : "Missing from Vault"}
                       </p>
@@ -858,7 +872,7 @@ export function DocumentOcrVerifier({
               </div>
             </div>
 
-            {/* 2. Controls Bar: Search & Category Filter */}
+            {/* 2. Controls Bar: Search, Category & Expiry Filters */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-3">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative">
@@ -868,10 +882,11 @@ export function DocumentOcrVerifier({
                     placeholder="Search documents..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="h-8.5 rounded-lg border border-border bg-bg-0 pl-8 pr-3 text-xs text-text-heading focus:border-accent-strong focus:outline-none w-48 sm:w-60"
+                    className="h-8.5 rounded-lg border border-border bg-bg-0 pl-8 pr-3 text-xs text-text-heading focus:border-accent-strong focus:outline-none w-44 sm:w-56"
                   />
                 </div>
 
+                {/* Category Filter */}
                 <div className="flex items-center gap-1 rounded-lg border border-border bg-bg-2 p-0.5">
                   {[
                     { id: "all", label: "All" },
@@ -893,9 +908,32 @@ export function DocumentOcrVerifier({
                     </button>
                   ))}
                 </div>
+
+                {/* Expiry Risk Filter */}
+                <select
+                  value={expiryFilter}
+                  onChange={(e) => setExpiryFilter(e.target.value)}
+                  className="h-8 rounded-lg border border-border bg-bg-0 px-2 text-xs font-semibold text-text-heading focus:border-accent-strong focus:outline-none"
+                  aria-label="Filter by expiry status"
+                >
+                  <option value="all">All Validity Statuses</option>
+                  <option value="valid">🟢 Valid & Active</option>
+                  <option value="expiring_soon">🟡 Expiring Soon (&lt;60d)</option>
+                  <option value="expired">🔴 Expired / Overdue</option>
+                  <option value="permanent">🔵 Permanent Records</option>
+                </select>
               </div>
 
               <div className="flex items-center gap-2 self-end sm:self-auto">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowDossierModal(true)}
+                  disabled={vaultDocs.length === 0}
+                  leftIcon={<Printer className="h-3.5 w-3.5" />}
+                >
+                  Export Dossier
+                </Button>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -924,6 +962,7 @@ export function DocumentOcrVerifier({
                 </Button>
               </div>
             )}
+
             {/* 3. Document Cards List */}
             {vaultLoading && vaultDocs.length === 0 ? (
               <div className="rounded-xl border border-border bg-bg-0 p-12 text-center space-y-3">
@@ -945,25 +984,27 @@ export function DocumentOcrVerifier({
               </div>
             ) : filteredVaultDocs.length === 0 ? (
               <div className="rounded-xl border border-border bg-bg-0 p-8 text-center space-y-2">
-                <p className="text-xs text-text-muted font-medium">No documents match your search or filter.</p>
+                <p className="text-xs text-text-muted font-medium">No documents match your search or filter criteria.</p>
                 <button
                   type="button"
                   onClick={() => {
                     setSearchQuery("");
                     setCategoryFilter("all");
+                    setExpiryFilter("all");
                   }}
                   className="text-xs text-accent-strong underline font-bold"
                 >
-                  Clear filters
+                  Clear all filters
                 </button>
               </div>
             ) : (
               <div className="grid gap-3">
                 {filteredVaultDocs.map((doc) => {
                   const cf = doc.extracted_metadata?.candidate_fields as Record<string, unknown> | undefined;
-                  const expiry = cf && typeof cf === "object" ? String(cf.expiry_date || "") : "";
-                  const authority = cf && typeof cf === "object" ? String(cf.issuing_authority || "") : "";
-                  const certNo = cf && typeof cf === "object" ? String(cf.certificate_number || "") : "";
+                  const expiry = (cf?.expiry_date as string) || doc.custom_expiry_date || "";
+                  const authority = (cf?.issuing_authority as string) || doc.issuing_authority || "";
+                  const certNo = (cf?.certificate_number as string) || doc.certificate_number || "";
+                  const scrutinyStatus = doc.scrutiny_status || "verified";
 
                   const today = new Date().toISOString().split("T")[0];
                   let isExpired = false;
@@ -982,12 +1023,34 @@ export function DocumentOcrVerifier({
                       <div className="space-y-1.5 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <FileText className="h-4.5 w-4.5 text-accent-strong shrink-0" />
-                          <span className="font-bold text-sm text-text-heading truncate max-w-[260px] sm:max-w-[340px]">
+                          <span className="font-bold text-sm text-text-heading truncate max-w-[240px] sm:max-w-[320px]">
                             {doc.filename}
                           </span>
                           <span className="rounded bg-bg-2 px-2 py-0.5 text-[10px] font-bold text-text-muted border border-border">
                             {doc.document_type}
                           </span>
+
+                          {/* Scrutiny Verification Status Badge */}
+                          <span
+                            className={`rounded px-2 py-0.5 text-[10px] font-bold border ${
+                              scrutinyStatus === "verified"
+                                ? "bg-success-bg/30 text-success-text border-success-border"
+                                : scrutinyStatus === "needs_renewal"
+                                ? "bg-warning-bg/30 text-warning-text border-warning-border"
+                                : scrutinyStatus === "flagged"
+                                ? "bg-error-bg/30 text-error-text border-error-border"
+                                : "bg-bg-2 text-text-muted border-border"
+                            }`}
+                          >
+                            {scrutinyStatus === "verified"
+                              ? "Audited & Verified"
+                              : scrutinyStatus === "needs_renewal"
+                              ? "Needs Renewal"
+                              : scrutinyStatus === "flagged"
+                              ? "Clarification Flagged"
+                              : "Pending Scrutiny"}
+                          </span>
+
                           {/* Expiry Risk Badge */}
                           {expiry ? (
                             isExpired ? (
@@ -1005,7 +1068,7 @@ export function DocumentOcrVerifier({
                             )
                           ) : (
                             <span className="rounded bg-bg-2 text-text-muted px-2 py-0.5 text-[10px] font-bold border border-border">
-                              No Expiry Specified
+                              Permanent Title / No Expiry
                             </span>
                           )}
                         </div>
@@ -1033,10 +1096,10 @@ export function DocumentOcrVerifier({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setInspectedDoc(doc)}
+                          onClick={() => handleOpenInspect(doc)}
                           leftIcon={<Eye className="h-3.5 w-3.5" />}
                         >
-                          Inspect
+                          Inspect & Edit
                         </Button>
 
                         {expiry && onPopulateDate && (
@@ -1085,7 +1148,7 @@ export function DocumentOcrVerifier({
               </div>
             )}
 
-            {/* 4. In-App Document Inspection Modal Drawer */}
+            {/* 4. In-App Document Inspection & Metadata Editor Modal */}
             {inspectedDoc && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in">
                 <div className="relative w-full max-w-2xl rounded-2xl border border-border bg-bg-1 p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
@@ -1097,7 +1160,7 @@ export function DocumentOcrVerifier({
                           {inspectedDoc.filename}
                         </h4>
                         <p className="text-[11px] text-text-muted">
-                          {inspectedDoc.document_type} • ID: {inspectedDoc.id}
+                          {inspectedDoc.document_type} • Ref ID: {inspectedDoc.id}
                         </p>
                       </div>
                     </div>
@@ -1110,31 +1173,126 @@ export function DocumentOcrVerifier({
                     </button>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                    <div className="rounded-lg border border-border bg-bg-0 p-3 space-y-1">
-                      <span className="text-[10px] font-bold uppercase text-text-muted block">Security & Scanner</span>
-                      <p className="font-bold text-success-text flex items-center gap-1.5">
-                        <ShieldCheck className="h-4 w-4" />
-                        <span>Clean (ClamAV Verified)</span>
-                      </p>
-                      <p className="text-[10px] text-text-secondary mt-1">{inspectedDoc.scan_details || "No threats identified."}</p>
-                    </div>
-
-                    <div className="rounded-lg border border-border bg-bg-0 p-3 space-y-1">
-                      <span className="text-[10px] font-bold uppercase text-text-muted block">Regulatory Scope</span>
-                      <p className="font-bold text-text-heading">{inspectedDoc.document_type}</p>
-                      <p className="text-[10px] text-text-secondary">
-                        Deposited: {new Date(inspectedDoc.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
+                  {/* Mode Toggle: View Details vs Edit Details */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-text-muted">
+                      {isEditingMetadata ? "Correct / Edit Metadata Details" : "Extracted Certificate Details"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingMetadata(!isEditingMetadata)}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-accent-strong hover:underline"
+                    >
+                      <Edit3 className="h-3.5 w-3.5" />
+                      <span>{isEditingMetadata ? "Cancel Editing" : "Edit Metadata"}</span>
+                    </button>
                   </div>
+
+                  {isEditingMetadata ? (
+                    /* Metadata Edit Form */
+                    <div className="space-y-4 rounded-xl border border-border bg-bg-0 p-4 text-xs">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">
+                          Issuing Authority
+                        </label>
+                        <input
+                          type="text"
+                          value={editAuthority}
+                          onChange={(e) => setEditAuthority(e.target.value)}
+                          placeholder="e.g. State Directorate of Fire and Emergency Services"
+                          className="w-full rounded border border-border bg-bg-1 p-2 text-text-heading focus:border-accent-strong focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">
+                            Certificate / NOC Reference Number
+                          </label>
+                          <input
+                            type="text"
+                            value={editCertNo}
+                            onChange={(e) => setEditCertNo(e.target.value)}
+                            placeholder="e.g. NOC-2024-9912"
+                            className="w-full rounded border border-border bg-bg-1 p-2 font-mono text-text-heading focus:border-accent-strong focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">
+                            Validity Expiry Date (YYYY-MM-DD)
+                          </label>
+                          <input
+                            type="date"
+                            value={editExpiryDate}
+                            onChange={(e) => setEditExpiryDate(e.target.value)}
+                            className="w-full rounded border border-border bg-bg-1 p-2 font-mono font-bold text-accent-strong focus:border-accent-strong focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">
+                          Institutional Scrutiny Status
+                        </label>
+                        <select
+                          value={editStatus}
+                          onChange={(e) => setEditStatus(e.target.value)}
+                          className="w-full rounded border border-border bg-bg-1 p-2 text-text-heading focus:border-accent-strong focus:outline-none font-semibold"
+                        >
+                          <option value="verified">Verified & Audited</option>
+                          <option value="pending">Pending Scrutiny Review</option>
+                          <option value="needs_renewal">Needs Renewal / Approaching Expiry</option>
+                          <option value="flagged">Flagged for Clarification</option>
+                        </select>
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setIsEditingMetadata(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          disabled={isSavingEdit}
+                          onClick={handleSaveMetadataChanges}
+                          leftIcon={isSavingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                        >
+                          {isSavingEdit ? "Saving..." : "Save Corrections"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Metadata View Grid */
+                    <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                      <div className="rounded-lg border border-border bg-bg-0 p-3 space-y-1">
+                        <span className="text-[10px] font-bold uppercase text-text-muted block">Security & Scanner</span>
+                        <p className="font-bold text-success-text flex items-center gap-1.5">
+                          <ShieldCheck className="h-4 w-4" />
+                          <span>Clean (ClamAV Verified)</span>
+                        </p>
+                        <p className="text-[10px] text-text-secondary mt-1">{inspectedDoc.scan_details || "No threats identified."}</p>
+                      </div>
+
+                      <div className="rounded-lg border border-border bg-bg-0 p-3 space-y-1">
+                        <span className="text-[10px] font-bold uppercase text-text-muted block">Regulatory Scope</span>
+                        <p className="font-bold text-text-heading">{inspectedDoc.document_type}</p>
+                        <p className="text-[10px] text-text-secondary">
+                          Deposited: {new Date(inspectedDoc.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* OCR Text Stream Preview */}
                   <div className="space-y-1.5">
                     <span className="text-xs font-bold uppercase tracking-wider text-text-muted block">
                       Extracted Text Stream & OCR Preview
                     </span>
-                    <div className="h-44 overflow-y-auto rounded-lg border border-border bg-bg-0 p-3 font-mono text-[11px] leading-relaxed text-text-body whitespace-pre-wrap">
+                    <div className="h-36 overflow-y-auto rounded-lg border border-border bg-bg-0 p-3 font-mono text-[11px] leading-relaxed text-text-body whitespace-pre-wrap">
                       {(inspectedDoc.extracted_metadata?.extracted_text_preview as string) ||
                         (inspectedDoc.extracted_metadata?.extracted_text as string) ||
                         "Document text extracted cleanly during validation inspection."}
@@ -1167,10 +1325,144 @@ export function DocumentOcrVerifier({
                 </div>
               </div>
             )}
+
+            {/* 5. Institutional Scrutiny Dossier Modal */}
+            {showDossierModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in">
+                <div className="relative w-full max-w-3xl rounded-2xl border border-border bg-bg-1 p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+                  <div className="flex items-center justify-between border-b border-border pb-3">
+                    <div className="flex items-center gap-2">
+                      <FileCheck className="h-6 w-6 text-accent-strong shrink-0" />
+                      <div>
+                        <h3 className="text-base font-extrabold text-text-heading">
+                          AICTE Institutional Compliance Dossier
+                        </h3>
+                        <p className="text-xs text-text-secondary">
+                          Official Regulatory Clearance Summary for AICTE Scrutiny Committee & EVC
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowDossierModal(false)}
+                      className="rounded-lg p-1.5 text-text-muted hover:bg-bg-2 hover:text-text-heading transition"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  {/* Institution Details Header */}
+                  <div className="rounded-xl border border-border bg-bg-0 p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-text-muted block">Institution Code</span>
+                      <p className="font-mono font-bold text-text-heading">{institutionCode}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-text-muted block">Applicant Name</span>
+                      <p className="font-semibold text-text-heading">{institutionName}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-text-muted block">Scrutiny Scope</span>
+                      <p className="font-semibold text-accent-strong">EoA 2026-27 Approval</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-text-muted block">Readiness Meter</span>
+                      <p className="font-bold text-success-text">
+                        {vaultChecklistStatus.depositedCount} / {MANDATORY_AICTE_CHECKLIST.length} ({vaultChecklistStatus.percentage}%)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Clearances Table */}
+                  <div className="overflow-x-auto rounded-lg border border-border">
+                    <table className="w-full text-left text-xs">
+                      <thead className="border-b border-border bg-bg-2 text-text-heading font-bold">
+                        <tr>
+                          <th className="p-2.5">Mandatory Clearances</th>
+                          <th className="p-2.5">Status</th>
+                          <th className="p-2.5">Validity Date</th>
+                          <th className="p-2.5">Authority / Ref</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border bg-bg-0">
+                        {vaultChecklistStatus.items.map((item) => {
+                          const doc = item.document;
+                          const cf = doc?.extracted_metadata?.candidate_fields as Record<string, unknown> | undefined;
+                          const auth = (cf?.issuing_authority as string) || doc?.issuing_authority || "—";
+                          const cert = (cf?.certificate_number as string) || doc?.certificate_number || "";
+
+                          return (
+                            <tr key={item.key} className="hover:bg-bg-1/50 transition">
+                              <td className="p-2.5">
+                                <p className="font-bold text-text-heading">{item.label}</p>
+                                <p className="text-[10px] text-text-muted">{item.category}</p>
+                              </td>
+                              <td className="p-2.5">
+                                {item.deposited ? (
+                                  item.isExpired ? (
+                                    <span className="rounded bg-error-bg/40 text-error-text px-1.5 py-0.5 text-[10px] font-bold">
+                                      Expired
+                                    </span>
+                                  ) : item.isExpiringSoon ? (
+                                    <span className="rounded bg-warning-bg/40 text-warning-text px-1.5 py-0.5 text-[10px] font-bold">
+                                      Expiring Soon
+                                    </span>
+                                  ) : (
+                                    <span className="rounded bg-success-bg/40 text-success-text px-1.5 py-0.5 text-[10px] font-bold">
+                                      Deposited & Valid
+                                    </span>
+                                  )
+                                ) : (
+                                  <span className="rounded bg-bg-2 text-text-muted px-1.5 py-0.5 text-[10px] font-bold">
+                                    Missing
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-2.5 font-mono">
+                                {item.isPermanent ? "Permanent Record" : item.expiry || "—"}
+                              </td>
+                              <td className="p-2.5 text-text-secondary">
+                                <p className="truncate max-w-[200px]">{auth}</p>
+                                {cert && <p className="font-mono text-[10px] text-text-muted">Ref: {cert}</p>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-border pt-3">
+                    <p className="text-[11px] text-text-muted italic">
+                      Dossier compiled from cryptographic SHA-256 records in institutional vault.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button variant="secondary" size="sm" onClick={() => setShowDossierModal(false)}>
+                        Close
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => window.print()}
+                        leftIcon={<Printer className="h-3.5 w-3.5" />}
+                      >
+                        Print Dossier
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           /* SAMPLE BENCHMARK SPECIMENS */
           <div className="space-y-6">
+            <div className="rounded-lg border border-border bg-bg-2 p-3 text-xs text-text-secondary flex items-center justify-between">
+              <span>
+                <strong>Benchmark Reference Specimens:</strong> These samples demonstrate expected OCR metadata patterns and digital signature structures. They do not alter your institution's live scrutiny score.
+              </span>
+            </div>
+
             <div className="flex items-center gap-2 border-b border-border pb-3">
               <span className="text-xs font-bold uppercase tracking-wider text-text-muted">
                 Select Preloaded Benchmark:

@@ -44,7 +44,7 @@ export function SignInPage() {
   }
 
   if (session) {
-    return <Navigate to={location.state?.from || "/history"} replace />;
+    return <Navigate to={location.state?.from || "/vault"} replace />;
   }
 
   async function handlePasswordSignIn(event: FormEvent<HTMLFormElement>) {
@@ -327,20 +327,36 @@ export function SignInPage() {
               <p className="text-[11px] text-text-secondary leading-relaxed">
                 Skip registration and email confirmation. Instantly access the compliance workspace and document vault as a pre-authorized Institutional Member.
               </p>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                fullWidth
-                onClick={async () => {
-                  setSubmitting(true);
-                  await signInWithPassword("coordinator@aicte-demo.edu", "DemoPass123!");
-                  setSubmitting(false);
-                }}
-                disabled={submitting}
-              >
-                Continue as Institutional Member (1-Click)
-              </Button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={async () => {
+                    setSubmitting(true);
+                    await signInWithPassword("principal@institution.edu", "Institute2026!");
+                    setSubmitting(false);
+                  }}
+                  disabled={submitting}
+                  leftIcon={<Shield className="h-3.5 w-3.5" />}
+                >
+                  Enter as Institutional Lead
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={async () => {
+                    setSubmitting(true);
+                    await signInWithPassword("reviewer@aicte-india.org", "Reviewer2026!");
+                    setSubmitting(false);
+                  }}
+                  disabled={submitting}
+                  leftIcon={<Shield className="h-3.5 w-3.5" />}
+                >
+                  Enter as Scrutiny Reviewer
+                </Button>
+              </div>
             </div>
 
             <p className="text-center text-xs text-text-secondary">
@@ -424,6 +440,11 @@ export function SignInPage() {
                 />
               </div>
 
+              <div className="rounded-lg border border-success-border bg-success-bg/25 p-2.5 text-[11px] text-success-text flex items-center gap-2">
+                <Shield className="h-4 w-4 shrink-0 text-success-text" />
+                <span>Instant Institutional Validation: Your account is verified immediately upon registration. No email confirmation is required.</span>
+              </div>
+
               <Button
                 type="submit"
                 variant="primary"
@@ -431,7 +452,7 @@ export function SignInPage() {
                 disabled={submitting}
                 leftIcon={<UserPlus className="h-4 w-4" />}
               >
-                {submitting ? "Creating account…" : "Register Institutional Account"}
+                {submitting ? "Creating account…" : "Register & Sign In Instantly"}
               </Button>
             </form>
 

@@ -20,6 +20,10 @@ class SupabaseSettings:
     url: str
     publishable_key: str
 
+    @property
+    def anon_key(self) -> str:
+        return self.publishable_key
+
     @classmethod
     def from_environment(cls) -> SupabaseSettings | None:
         url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")

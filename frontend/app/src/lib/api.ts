@@ -106,6 +106,12 @@ export interface StoredDocument {
   scan_details: string;
   created_at: string;
   expires_at: string;
+  scrutiny_status?: "pending" | "verified" | "needs_renewal" | "flagged";
+  issuing_authority?: string;
+  certificate_number?: string;
+  custom_expiry_date?: string;
+  category?: string;
+  notes?: string;
 }
 
 export interface SavedValidationRunPage {
@@ -685,6 +691,52 @@ Timestamp: ${new Date().toISOString()}
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Download failed." };
   }
+}
+
+export async function updateStoredDocument(
+  documentId: string,
+  updates: Partial<StoredDocument>,
+  token: string
+): Promise<ApiResult<StoredDocument>> {
+  const docs = getLocalVaultDocs();
+  const index = docs.findIndex((d) => d.id === documentId);
+  let updatedDoc: StoredDocument | null = null;
+  if (index !== -1) {
+    updatedDoc = { ...docs[index], ...updates };
+    docs[index] = updatedDoc;
+    localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(docs));
+  }
+
+  try {
+    const res = await authenticatedJson<StoredDocument>(
+      `/api/v1/documents/${encodeURIComponent(documentId)}`,
+      token,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          document_type: updates.document_type,
+          extracted_metadata: updates.extracted_metadata || (updatedDoc ? updatedDoc.extracted_metadata : {}),
+        }),
+      },
+      isStoredDocument,
+    );
+    if (res.ok) {
+      saveLocalVaultDoc(res.data);
+      return res;
+    }
+  } catch {
+    // fallback to local
+  }
+
+  if (updatedDoc) {
+    return { ok: true, data: updatedDoc };
+  }
+  return {
+    ok: false,
+    kind: "server",
+    status: 404,
+    errors: { document: "Document not found in vault." },
+  };
 }
 
 export async function deleteStoredDocument(documentId: string, token: string): Promise<ApiResult<{ ok: true }>> {

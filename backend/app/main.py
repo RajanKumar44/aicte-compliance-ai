@@ -502,6 +502,10 @@ async def delete_validation_run(
         raise HTTPException(status_code=404, detail="Validation history record was not found.")
 
 
+class StoredDocumentUpdate(BaseModel):
+    document_type: str | None = None
+    extracted_metadata: dict[str, Any] | None = None
+
 class StoredDocument(BaseModel):
     id: UUID
     institution_id: UUID
@@ -715,6 +719,41 @@ async def download_document(
     if scan_status == "scan_unavailable":
         headers["X-Compliance-Security-Warning"] = "unscanned-prototype-download"
     return Response(content=storage_res.content, media_type="application/pdf", headers=headers)
+
+
+@app.patch("/api/v1/documents/{document_id}", response_model=StoredDocument)
+async def update_document(
+    document_id: UUID,
+    updates: StoredDocumentUpdate,
+    context: tuple[SupabaseSettings, str, UUID, httpx.AsyncClient] = Depends(_authenticated_context),
+) -> StoredDocument:
+    settings, token, _user_id, client = context
+    update_data: dict[str, Any] = {}
+    if updates.document_type is not None:
+        update_data["document_type"] = updates.document_type
+    if updates.extracted_metadata is not None:
+        update_data["extracted_metadata"] = updates.extracted_metadata
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields provided for update.")
+
+    response = await rest_request(
+        client,
+        settings,
+        token,
+        "PATCH",
+        "institution_documents",
+        params={
+            "id": f"eq.{document_id}",
+            "select": "id,institution_id,uploaded_by,filename,filesize_bytes,sha256,storage_path,document_type,extracted_metadata,scan_status,scan_details,created_at,expires_at",
+        },
+        body=update_data,
+        prefer="return=representation",
+    )
+    rows = response_rows(response)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Document was not found or access denied.")
+    return StoredDocument(**rows[0])
 
 
 @app.delete("/api/v1/documents/{document_id}", status_code=204)

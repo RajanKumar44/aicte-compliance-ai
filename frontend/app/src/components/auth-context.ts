@@ -15,6 +15,7 @@ export type AuthContextValue = {
   sendSignInLink: (email: string) => Promise<string | null>;
   resetPasswordForEmail: (email: string) => Promise<string | null>;
   signOut: () => Promise<string | null>;
+  signInAsDemo?: (role?: "applicant" | "reviewer", institutionId?: string) => void;
 };
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
