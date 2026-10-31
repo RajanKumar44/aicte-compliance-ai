@@ -93,6 +93,7 @@ export const APH_CLAUSE_CATALOG: Record<string, APHClauseReference> = {
 export interface CadreNorms {
   program: string;
   standardFSR: number; // e.g. 15 or 20
+  isCadreApplicable?: boolean; // false for Polytechnic Diploma per APH Annexure 5
   professorRatio: number; // 1
   assocProfRatio: number; // 2
   asstProfRatio: number; // 6
@@ -107,14 +108,34 @@ export const CADRE_PROGRAM_NORMS: Record<string, CadreNorms> = {
   "engineering_ug": {
     program: "Engineering & Technology (UG - B.Tech / B.E.)",
     standardFSR: 20, // AICTE Tier 2 default, Tier 1 is 15
+    isCadreApplicable: true,
     professorRatio: 1,
     assocProfRatio: 2,
     asstProfRatio: 6,
     phdRequirement: { professor: 1.0, assocProf: 1.0, asstProf: 0.2 },
   },
+  "engineering_pg": {
+    program: "Engineering & Technology (PG - M.Tech / M.E.)",
+    standardFSR: 15,
+    isCadreApplicable: true,
+    professorRatio: 1,
+    assocProfRatio: 1,
+    asstProfRatio: 1,
+    phdRequirement: { professor: 1.0, assocProf: 1.0, asstProf: 1.0 },
+  },
+  "management_ug": {
+    program: "Management (UG - BBA / BMS)",
+    standardFSR: 25,
+    isCadreApplicable: true,
+    professorRatio: 1,
+    assocProfRatio: 2,
+    asstProfRatio: 6,
+    phdRequirement: { professor: 1.0, assocProf: 1.0, asstProf: 0.1 },
+  },
   "management_pg": {
-    program: "Management (MBA / PGDM)",
+    program: "Management (PG - MBA / PGDM)",
     standardFSR: 20,
+    isCadreApplicable: true,
     professorRatio: 1,
     assocProfRatio: 2,
     asstProfRatio: 6,
@@ -123,18 +144,38 @@ export const CADRE_PROGRAM_NORMS: Record<string, CadreNorms> = {
   "mca_pg": {
     program: "Computer Applications (MCA)",
     standardFSR: 20,
+    isCadreApplicable: true,
     professorRatio: 1,
     assocProfRatio: 2,
     asstProfRatio: 6,
     phdRequirement: { professor: 1.0, assocProf: 1.0, asstProf: 0.1 },
   },
-  "polytechnic_diploma": {
-    program: "Diploma in Engineering & Technology",
-    standardFSR: 25,
+  "hmct_pg": {
+    program: "Hotel Management & Catering Technology (PG - HMCT)",
+    standardFSR: 12,
+    isCadreApplicable: true,
     professorRatio: 1,
     assocProfRatio: 2,
     asstProfRatio: 6,
-    phdRequirement: { professor: 0.5, assocProf: 0.2, asstProf: 0.0 },
+    phdRequirement: { professor: 1.0, assocProf: 1.0, asstProf: 0.1 },
+  },
+  "architecture_ug": {
+    program: "Architecture & Planning (UG - B.Arch)",
+    standardFSR: 10,
+    isCadreApplicable: true,
+    professorRatio: 1,
+    assocProfRatio: 2,
+    asstProfRatio: 6,
+    phdRequirement: { professor: 1.0, assocProf: 1.0, asstProf: 0.2 },
+  },
+  "polytechnic_diploma": {
+    program: "Diploma in Engineering & Technology (Polytechnic)",
+    standardFSR: 25,
+    isCadreApplicable: false, // AICTE APH 2024-27 Annexure 5: Cadre ratio not applicable
+    professorRatio: 0,
+    assocProfRatio: 0,
+    asstProfRatio: 0,
+    phdRequirement: { professor: 0.0, assocProf: 0.0, asstProf: 0.0 },
   },
 };
 

@@ -1,0 +1,30 @@
+name: Backend tests
+
+on:
+  push:
+    branches:
+      - main
+      - research/grounded-foundation
+  pull_request:
+    branches:
+      - main
+      - research/grounded-foundation
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run checks
+        run: |
+          python -m pytest -q
+          python -m pytest -q ai/tests
+          python frontend/tools/verify_fixtures.py
+          python -m pytest -q backend/tests/test_ocr_engine_integration.py

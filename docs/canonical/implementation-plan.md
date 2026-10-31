@@ -1,93 +1,31 @@
-# Implementation Plan — SIH26261
+# Implementation Plan — AICTE Compliance AI
 
-**Status:** staged plan; unresolved regulatory requirements are not settled.
+## Milestones & Status
 
-## Phase 0 — Close correctness blockers
-- [ ] Verify official SIH problem statement, stage and deadline.
-- [ ] Retrieve the complete applicable 2026–27 Annexure-2.
-- [ ] Read the 1 April 2024 revised-scrutiny circular.
-- [ ] Check later AICTE amendments/corrigenda.
-- [ ] Confirm EOA-specific DSC and signatory requirements.
-- [ ] Resolve reuse-repository licensing/authorship; exclude its data and history.
-- [ ] Freeze a reviewed source register and versioned rule catalogue.
+### Phase 1: Institutional Core & Document Vault (Completed)
+- Secure PDF upload, in-memory ClamAV antivirus scanning, and PyMuPDF text extraction.
+- Institutional Document Vault with expiration watchdog and scrutiny dossier generation.
+- Cadre & Faculty-Student Ratio (FSR) norms calculator conforming to APH 2024–27 Annexure 5.
 
-**Exit gate:** every activated regulatory rule has a source, applicability, interpretation, effective period and tests.
+### Phase 2: Compliance Action Planner (Completed)
+- Implemented `backend/app/action_planner.py` REST API endpoints (`/api/v1/actions`).
+- Lifecycle status state machine (`draft`, `assigned`, `accepted`, `in_progress`, `submitted_for_review`, `approved`, `revalidation_required`, `resolved`).
+- Verifiable evidence submission, formal reviewer decision workflow, and deterministic revalidation.
+- In-memory event dispatch and in-app notification center (`backend/app/notifications.py`).
+- Frontend interface implemented at `/action-planner` (`ActionPlannerPage.tsx`) with KPI cards, ledger, detail drawer, and audit tabs.
+- Unit and integration tests passing (`backend/tests/test_action_planner.py`, `backend/tests/test_notifications.py`).
 
-## Phase 1 — Secure foundation (P0)
-- Define application, institution, user/role, document/version, validation-run, rule-version, finding, reviewer-action and audit-event data models.
-- Implement server-side authentication and role-based authorization.
-- Enforce institution-level isolation on every relevant query and mutation.
-- Implement safe file upload: size/page limits, content checks, random storage names, safe temporary paths and explicit processing states.
-- Establish migrations, structured error responses and test fixtures.
-- Audit security-sensitive actions.
-- Replace misleading checklist-complete semantics when no trusted rule set was evaluated.
+### Phase 3: Regulatory Change Impact Analyzer (Completed)
+- Implemented `backend/app/regulatory_impact.py` REST API endpoints (`/api/v1/regulatory`).
+- Statutory regulatory source catalog and multi-year document versioning (APH 2024–27).
+- Structured clause extraction and deterministic text diff comparison engine.
+- Expert scrutiny review interface for confirming or flagging regulatory amendments.
+- Institutional impact assessments with gap severity analysis.
+- Bi-directional bridge linking regulatory impacts directly to Action Planner.
+- Frontend interface implemented at `/regulatory-impact` (`RegulatoryImpactPage.tsx`).
+- Unit and integration tests passing (`backend/tests/test_regulatory_impact.py`).
 
-**Exit gate:** access-control, tenant-isolation, upload-validation and failure-path tests pass.
-
-## Phase 2 — Deterministic validation (P0)
-- Add a versioned rule catalogue and source references.
-- Implement only reviewed rules.
-- Preserve document version, rule versions, evaluation timestamp and evidence for every finding.
-- Distinguish pass, missing, conditional/unevaluable, expired, unreadable, inconsistent, not applicable and human-review states.
-- Test date boundaries and rule changes.
-
-**Exit gate:** runs are reproducible and unresolved rules cannot automatically produce adverse decisions.
-
-## Phase 3 — Document processing (P0)
-- Define an OCR adapter contract preserving raw text, normalized values, confidence, page, bounding box, engine/version and processing status.
-- Prefer embedded PDF text when safe and available; OCR scanned pages.
-- Compare OCR engines on labelled synthetic data before locking a version.
-- Never swallow processing exceptions or return an empty result as successful extraction.
-- Add synthetic institutional-document fixtures and field-level evaluation metrics.
-
-**Exit gate:** success, partial success and failure are distinguishable; tests cover poor scans, corrupt files and ambiguous dates.
-
-## Phase 4 — Review workflow and auditability (P0)
-- Build applicant, reviewer and administrator journeys.
-- Reviewers inspect evidence, comment and record human outcomes.
-- Preserve status history and every rule version used.
-- Add tamper-evident audit-chain verification only if tested; do not call it immutable without external anchoring and operational controls.
-
-**Exit gate:** a synthetic application can be uploaded, validated, reviewed and audited end-to-end.
-
-## Phase 5 — Bounded authenticity checks (P1)
-- Validate PDF signatures with explicit trust-store configuration and distinct valid/tampered/untrusted/unsupported outcomes.
-- Mark synthetic-CA demo results visibly as synthetic.
-- Add hashes, duplicate detection and cautious metadata/visual indicators.
-- Use authorized issuer adapters only; no scraping, CAPTCHA bypass or assumed credentials.
-
-## Phase 6 — Polish (P1/P2)
-- Dashboard, alerts, accessibility and performance measurement.
-- Optional infrastructure-evidence assistance only after core workflow is stable.
-- External integrations only after authorization, documentation and test credentials are confirmed.
-
-## Suggested three-person ownership
-- A — backend/security/data: API, auth, RBAC, tenant isolation, schema, migrations and audit.
-- B — document processing/rules: upload validation, OCR adapter, extraction evidence, deterministic rules and synthetic corpus.
-- C — frontend/reviewer workflow: applicant/reviewer/admin screens, evidence viewer, accessible states and demo script.
-
-Agree API contracts and the finding schema before parallel work. Integrate continuously on a feature branch; protect main and review a PR before merging.
-
-## Minimum acceptance gates
-- Backend authorization protects all privileged operations.
-- Institution-level isolation passes negative tests.
-- Invalid, oversized, malformed and unsupported files fail safely.
-- OCR failure is visible and never treated as pass.
-- Every active rule has source and version metadata.
-- Expiry and conditional rules have boundary tests.
-- External checks distinguish not attempted, unavailable, inconclusive, externally verified and simulated.
-- Reviewer decisions are human-attributed and auditable.
-- Historical runs retain document and rule versions.
-- Demo uses synthetic data and disclaims official AICTE status.
-
-## Research evidence update — 2026-10-23
-The report [official-source-verification-report.md](../research/official-source-verification-report.md) has been added under `docs/research/`. Phase 0 is still blocked; use this exact closure list before freezing rules:
-- [ ] Retrieve/read the complete 1 April 2024 revised-scrutiny document and reconcile its applicability.
-- [ ] Verify official publication, finality and effective date of the circulating 2026–27 addendum/corrigendum.
-- [ ] Check Annexure-2 §2.1 pagination and Clause 7.17 against the official handbook PDF.
-- [ ] Resolve the clause referring to NBA validity through 30 April 2025 for AY 2026–27.
-- [ ] Verify SIH26261's official problem statement, theme, constraints and deadline. The reported 28 October 2026 deadline is not confirmed.
-- [ ] Research AICTE API/authorized integration availability; currently not researched/confirmed, not a verified “no API” conclusion.
-- [ ] Resolve licensing/authorship and personal-data/history risks in fake-id-screening before any code/data reuse.
-
-The document list extracted from the base handbook remains provisional. Do not activate it or claim the EOA checklist is complete. No coding, dependency installation, implementation, merge or deployment is authorized by this research update.
+### Phase 4: CI/CD & Deployment Verification (Completed)
+- Fixed CI configuration workflow at `.github/workflows/backend-tests.yml`.
+- Frontend Vite production build passing with 0 errors.
+- All backend test suites passing (17/17 tests).

@@ -11,6 +11,8 @@ import {
   X,
   GraduationCap,
   Archive,
+  CheckSquare,
+  Scale,
 } from "lucide-react";
 import { Button } from "./Button";
 
@@ -19,6 +21,8 @@ const navItems = [
   { path: "/applications", label: "Applications", icon: ClipboardCheck },
   { path: "/validate", label: "Validate", icon: ClipboardCheck },
   { path: "/vault", label: "Document Vault", icon: Archive },
+  { path: "/action-planner", label: "Action Planner", icon: CheckSquare },
+  { path: "/regulatory-impact", label: "Regulatory Impact", icon: Scale },
   { path: "/cadre-calculator", label: "Cadre & FSR Norms", icon: GraduationCap },
   { path: "/history", label: "Audit History", icon: Clock3 },
   { path: "/about", label: "Compliance Guide", icon: Info },

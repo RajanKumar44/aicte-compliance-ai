@@ -17,6 +17,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
+from .action_planner import router as action_planner_router
 from .antivirus_scanner import is_download_permitted
 from .application_service import (
     build_checklist,
@@ -33,6 +34,8 @@ from .history_store import (
     rest_request,
     verify_user,
 )
+from .notifications import router as notifications_router
+from .regulatory_impact import router as regulatory_impact_router
 
 app = FastAPI(
     title="AICTE Compliance Assistant",
@@ -61,11 +64,15 @@ def _cors_origins() -> list[str]:
     return sorted(origins)
 
 
+app.include_router(action_planner_router)
+app.include_router(regulatory_impact_router)
+app.include_router(notifications_router)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
     allow_credentials=False,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 

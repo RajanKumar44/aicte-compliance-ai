@@ -3,6 +3,8 @@ import { Layout } from "./components/Layout";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ValidatePage } from "./pages/ValidatePage";
 import { DocumentVaultPage } from "./pages/DocumentVaultPage";
+import { ActionPlannerPage } from "./pages/ActionPlannerPage";
+import { RegulatoryImpactPage } from "./pages/RegulatoryImpactPage";
 import { AboutPage } from "./pages/AboutPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
 import { TermsPage } from "./pages/TermsPage";
@@ -20,6 +22,8 @@ export default function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/validate" element={<ValidatePage />} />
         <Route path="/vault" element={<DocumentVaultPage />} />
+        <Route path="/action-planner" element={<ActionPlannerPage />} />
+        <Route path="/regulatory-impact" element={<RegulatoryImpactPage />} />
         <Route path="/cadre-calculator" element={<CadreCalculatorPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />

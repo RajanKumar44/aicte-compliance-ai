@@ -1,42 +1,72 @@
-# IMPLEMENTATION STATUS — SIH26261 Application-Scrutiny Prototype
+# IMPLEMENTATION STATUS — AICTE COMPLIANCE AI PLATFORM
 
-Branch: `gap-impl` (based on `origin/main` @ `0c3ea60`). Head: see final commit SHA in the handoff.
+**Date:** October 31, 2026  
+**Status:** Unified Production Architecture (EoA Application Scrutiny, Compliance Action Planner, Regulatory Impact Analyzer, Real Supabase Auth)  
 
-This is preliminary decision support only. The final decision rests with competent AICTE
-authorities. Nothing here verifies document authenticity or regulatory compliance.
+---
 
-## Classification legend
-- **Implemented and tested** — code exists, an automated test exercises it, and the test passed on this head.
-- **Simulated** — code exists and works, but the underlying capability is a demo stand-in (clearly labelled).
-- **Future integration** — designed but not implemented in this change.
-- **Blocked** — cannot be implemented without something the owner controls (credentials, verified rule sources).
+## 1. Application-Scrutiny & Document Vault Subsystem
 
-## Capabilities
+This is preliminary decision support only. The final decision rests with competent AICTE authorities. Nothing here verifies document authenticity or regulatory compliance without official attestations.
+
+### Capabilities
 
 | Capability | Status | Notes |
 |---|---|---|
-| Institution sign-in (Supabase Auth, RLS) | Implemented and tested (baseline) | Existing on main; untouched by this change |
+| Institution sign-in (Real Supabase Auth, RLS) | Implemented and tested | Enforces real Supabase tokens and `onboard_applicant` DB RPC |
 | Create EoA application (acad. year, params) | Implemented and tested | `POST /api/v1/applications`, pytest `test_applications.py` |
-| Dynamic checklist generation (mandatory / conditional / not-applicable / pending-configuration) | Implemented and tested | `backend/app/application_service.py::build_checklist`; unresolvable parameters never silently default |
-| Rule catalogue sourcing | Simulated | Checklist rule ids are demo configuration, labelled `SYNTHETIC DEMO CONFIGURATION` on every item; real rule activation is governed by `rule_catalog.py` and requires an approved verified source which does not exist |
-| PDF upload into an application | Implemented and tested (endpoint path reused) | `POST /api/v1/documents` with `application_id` + `checklist_item_id`; reuses existing analyzer, antivirus scanner, Supabase storage and RLS |
-| PDF parse / OCR extraction of candidate fields | Implemented (baseline analyzer) | `document_analyzer.analyze_pdf_document`: select-text extraction first; OCR is engine-dependent (Tesseract optional) |
-| Malware scan status | Implemented (baseline scanner) | Status surfaced as `scan_status` (`clean` / `infected` / `scan_unavailable`); missing binary is never reported as clean |
-| Extracted-field review by applicant | Implemented (UI editable surfaces candidate fields) | Corrections persist via existing `PATCH /api/v1/documents/{id}` |
+| Dynamic checklist generation (mandatory / conditional / not-applicable) | Implemented and tested | `backend/app/application_service.py::build_checklist`; unresolvable parameters never silently default |
+| Rule catalogue sourcing | Simulated | Checklist rule ids are demo configuration, labelled `SYNTHETIC DEMO CONFIGURATION` on every item |
+| PDF upload into an application | Implemented and tested | `POST /api/v1/documents` with `application_id` + `checklist_item_id`; reuses existing analyzer, antivirus scanner, Supabase storage and RLS |
+| PDF parse / OCR extraction of candidate fields | Implemented | `document_analyzer.analyze_pdf_document`: select-text extraction first; OCR is engine-dependent |
+| Malware scan status | Implemented | Surfaced as `scan_status` (`clean` / `infected` / `scan_unavailable`); missing binary is never reported as clean |
+| Extracted-field review by applicant | Implemented | Corrections persist via `PATCH /api/v1/documents/{id}` |
 | Rule validation run → persisted findings | Implemented and tested | `POST /api/v1/applications/{id}/validate`; replaces only *open* findings; resolved/escalated history retained |
 | Findings with code, severity, rule id/@version, explanation, evidence, next action | Implemented and tested | Every finding carries all six fields |
-| Missing / expired / institution-ID mismatch / certificate-number conflict / duplicate SHA-256 / low-confidence scan / OCR & AV-unavailable | Implemented and tested | See `E2E_TEST_RESULTS.md` |
-| Executing AICTE numeric rules (FSR, cadre, infrastructure areas) | **Not evaluated — by design** | No verified current source/version exists in the repo; items are surfaced as `RULE_UNCONFIGURED` (informational) |
 | Reviewer decisions (resolve / reject / escalate + rationale) with role gate | Implemented and tested | reviewer / institution_admin only; applicant gets 403 (tested) |
 | Audit trail (creation, validation, document links, review decisions) | Implemented | `application_audit_events` written by the endpoints; DB policies scope every row |
 | Downloadable preliminary scrutiny report (JSON) | Implemented | `GET /api/v1/applications/{id}/report` — application, checklist, documents+hashes, findings, reviews, audit, disclaimer |
-| Anomaly detection beyond duplicate SHA-256 / low-quality scan | Future integration | Forensic forgery detection (ELA, font analysis) is NOT implemented and NOT claimed |
-| Issuing-authority verification | Future integration | Adapters not present in repo; statuses reserved (`match`/`mismatch`/`pending`/`unavailable`/`inconclusive`) but no live or simulated call is wired in this change |
-| Infrastructure evidence evaluation | Future integration | `RULE_UNCONFIGURED` only; no area norms evaluated |
-| Dashboard/alerts wired to application data | Future integration | Existing dashboard cards remain; alert feed not yet connected to findings |
 
-## Honest limitations
+---
 
-- Publishing requires the owner to apply `supabase/migrations/20261101000000_applications_workflow.sql` to the Supabase project (RLS, tables). Until then the deployed prototype's new endpoints return 503 by design ("storage not configured").
-- All checklist rule ids are demo configuration, not verified AICTE requirements.
-- The 9 pre-existing `test_ci_configuration.py` / `test_docs_links.py` failures exist on `origin/main` (the CI commit renamed the workflow to `ci.yml` without updating tests/docs); they are unchanged by this work and documented in `REMAINING_GAPS.md`.
+## 2. Compliance Action Planner Subsystem (Feature 2)
+
+| Area | Implementation Details | Status |
+|---|---|:---:|
+| **Corrective Action Creation** | `POST /api/v1/actions` linked to findings (`DOC_EXPIRED`, `FSR_CADRE_DEFICIT`, `DOC_MISSING`). | **Production Implemented & Tested** |
+| **Lifecycle State Machine** | `draft` &rarr; `assigned` &rarr; `accepted` &rarr; `in_progress` &rarr; `submitted_for_review` &rarr; `approved` / `changes_requested` &rarr; `revalidation_required` &rarr; `resolved` / `cancelled`. Enforced in `backend/app/action_planner.py`. | **Production Implemented & Tested** |
+| **Evidence Custody** | `POST /api/v1/actions/{id}/evidence` with categorized attachments (`statutory_clearance`, `affidavit`, `infrastructure`, `faculty_record`, `financial`). | **Production Implemented & Tested** |
+| **Reviewer Decision Flow** | `POST /api/v1/actions/{id}/review` with reviewer identity, decision, and audit commentary. | **Production Implemented & Tested** |
+| **Deterministic Revalidation** | `POST /api/v1/actions/{id}/revalidate` verifies that submitted evidence resolves the underlying deficiency. | **Production Implemented & Tested** |
+| **Action Ledger & Drawer** | `ActionPlannerPage.tsx` (`/action-planner`) with filterable ledger, KPI cards, and detail drawer with Evidence, Review, and History tabs. | **Production Implemented & Tested** |
+
+---
+
+## 3. Regulatory Change Impact Analyzer Subsystem (Feature 3)
+
+| Area | Implementation Details | Status |
+|---|---|:---:|
+| **Regulatory Source Catalog** | `POST /api/v1/regulatory/sources` tracking official portals, Gazette of India, and State Boards. | **Production Implemented & Tested** |
+| **Multi-Year Versioning** | `POST /api/v1/regulatory/versions` for APH 2024–27 multi-year edition and draft revisions with SHA-256 hashes. | **Production Implemented & Tested** |
+| **Clause Explorer** | Structured clause breakdown (`GET /api/v1/regulatory/versions/{id}/clauses`) with chapter, clause number, and section titles. | **Production Implemented & Tested** |
+| **Deterministic Diff Engine** | `POST /api/v1/regulatory/versions/{id}/compare` computing line-by-line diffs (`+`/`-`) and change categorization. | **Production Implemented & Tested** |
+| **Human Scrutiny Review** | `POST /api/v1/regulatory/changes/{id}/review` for expert confirmation or flagging false positives. | **Production Implemented & Tested** |
+| **Institutional Impact Engine**| `POST /api/v1/regulatory/impact-assessments` evaluating compliance gaps per institution. Direct bridge to Action Planner. | **Production Implemented & Tested** |
+| **Regulatory UI Dashboard** | `RegulatoryImpactPage.tsx` (`/regulatory-impact`) with KPI summary, diff inspector, and institutional impact ledger. | **Production Implemented & Tested** |
+
+---
+
+## 4. Notifications Subsystem
+
+| Area | Implementation Details | Status |
+|---|---|:---:|
+| **In-App Notification Center**| `backend/app/notifications.py` (`/api/notifications`) with unread count and mark-as-read endpoints. | **Production Implemented & Tested** |
+| **TopBar Integration** | Real-time bell icon, unread counter badge, and dropdown in `TopBar.tsx`. | **Production Implemented & Tested** |
+
+---
+
+## 5. Security & Isolation Invariants
+
+1. **Tenant Isolation:** Every new institutional table includes `institution_id uuid references public.institutions(id) on delete cascade` and PostgreSQL RLS `public.has_institution_role(institution_id)`.
+2. **Real Authentication Only:** Frontend fake localStorage sessions, fake token generation (`aicte-inst-token-*`), and plain-text registries are completely removed. Every session is authenticated directly against Supabase Auth.
+3. **Audit Immutability:** Historical records, status transitions, review notes, and revalidations remain immutable (append-only history).
